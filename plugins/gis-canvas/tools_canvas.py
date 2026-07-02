@@ -127,7 +127,15 @@ _CATALOG_HELP = (
     "data-table (bindings.source data handle e.g. 'mock://incidents'; optional props.title, "
     "props.columns as string[]). Grid: layout.cols (default 12); every TOP-LEVEL component "
     "requires area {col,colSpan,row,rowSpan} (1-based; col+colSpan-1 must fit cols). Nesting "
-    "depth max 3. NEVER inline data rows — bind data via bindings.source handles only."
+    "depth max 3. NEVER inline data rows — bind data via bindings.source handles only. "
+    "(Phase 2) select: {id, type:'select', area, props:{field:'<attr>', options:[...] }, "
+    "state:{value}, handlers:{onChange:<Handler>}}. props.options may be a string array OR "
+    "{label,value} objects. handlers (top-level on node, NOT inside props): map of eventName→Handler. "
+    "Handler kinds: {kind:'reactive', controls:'<targetId>.<key>.<subkey>'} (on event, writes value "
+    "to target's state client-side, no agent turn; for data-table filter: controls:'<dataTableId>.filter.<field>'); "
+    "{kind:'set', target:'<id>', key:'<stateKey>', value:<v>} (fixed value to state); "
+    "{kind:'agent', prompt:'<text>'} (new agent turn). data-table applies client-side filtering from "
+    "state.filter (map of field→value; 'all' or empty means no filter)."
 )
 
 RENDER_VIEW_SCHEMA = {
@@ -138,7 +146,13 @@ RENDER_VIEW_SCHEMA = {
         + _CATALOG_HELP +
         " Returns {ok, rev, doc} on success or {ok:false, errors} — fix the errors and retry. "
         "Example component: {id:'s1', type:'stat', area:{col:1,colSpan:3,row:1,rowSpan:1}, "
-        "props:{label:'High severity', value:42}}."
+        "props:{label:'High severity', value:42}}. "
+        "Example with select filtering data-table: select component {id:'sev', type:'select', "
+        "area:{col:1,colSpan:2,row:1,rowSpan:1}, props:{field:'severity', "
+        "options:[{label:'All',value:'all'},{label:'High',value:'high'}]}, state:{value:'all'}, "
+        "handlers:{onChange:{kind:'reactive', controls:'tbl1.filter.severity'}}} wired to data-table "
+        "{id:'tbl1', type:'data-table', ..., bindings:{source:'mock://incidents'}}. When user changes "
+        "select, handler writes value to tbl1's state.filter.severity client-side, filtering rows without agent turn."
     ),
     "parameters": {
         "type": "object",

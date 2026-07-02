@@ -40,5 +40,6 @@ def test_register_registers_three_tools(plugin):
 
 def test_tool_descriptions_teach_the_catalog(plugin):
     schema = plugin.tools_canvas.RENDER_VIEW_SCHEMA
-    for keyword in ("card", "stat", "data-table", "area", "bindings.source"):
+    for keyword in ("card", "stat", "data-table", "area", "bindings.source",
+                    "select", "handlers", "reactive", "controls", "filter"):
         assert keyword in schema["description"]
