@@ -353,3 +353,25 @@ Each phase is independently demoable and testable; none touches the agent core.
   `GeoJSONLayer` blob URL, Calcite `--calcite-color-*` theming, chart↔map selection sync.
 - shadcn/ui `/shadcn-ui/ui` — Data Table (`useReactTable` state), Form (TanStack Form / react-hook-form + zod).
 - Component catalog basis: https://ui.shadcn.com/docs/components.
+
+## 18. Phase 3 backlog (carried from Phase 2 final review — non-blocking polish)
+
+Fold these into the Phase 3 plan (they are small hardening/clarity items, none blocking):
+
+1. **Per-kind handler schema validation.** `canvas.schema.json` currently requires only `handlers.<event>.kind`.
+   Add JSON-Schema `if/then` per kind so `render_view` rejects malformed handlers with a structured,
+   agent-correctable error: `reactive` requires `controls` (string); `set` requires `target`+`key`;
+   `agent` requires `prompt`; `open` requires `overlay`. Prevents the current silent client-side no-op on a
+   malformed `controls` path (`handlers.ts` reactive branch).
+2. **`open` handler kind.** The schema enum already permits `open`, but there is no runtime path (overlays
+   are Phase 3). When Phase 3 lands the overlay layer, implement `open` in `runHandler` + the renderer;
+   until then either drop `open` from the enum or leave a `// reserved for Phase 3 overlays` marker so the
+   schema doesn't advertise a kind the client silently ignores.
+3. **Client/server `rev` divergence comment.** `useCanvasDoc` refreshes `doc` only on `tool.complete`;
+   `canvas.interaction` bumps the *server* rev without advancing the client `doc.rev` (by design — this is
+   why the `useEffect([doc?.rev])` override-reset does NOT wipe optimistic overlays on interaction). Add a
+   one-line comment at both sites so a future maintainer doesn't "fix" the mismatch and break the overlay
+   lifecycle.
+4. **`merge.ts` shared-state note.** An un-overridden node shares the server doc's `state` object by
+   reference (safe today — nothing mutates `node.state` in place). Add a one-line comment; if any future
+   molecule mutates state in place, switch to a defensive clone.
