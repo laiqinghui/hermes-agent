@@ -15,8 +15,11 @@ _SAFE = re.compile(r"[^a-zA-Z0-9_-]+")
 
 
 def resolve_session_key(kw: dict) -> str:
-    """Derive the store key from tool-handler kwargs (Hermes passes task_id)."""
-    return str(kw.get("task_id") or "default")
+    """Derive the store key. Prefer the stable gateway session_id (present in
+    tool kwargs, the pre_llm_call hook, and frontend canvas.interaction);
+    fall back to task_id, then a constant. task_id alone is per-turn and would
+    split one session's canvas across turns."""
+    return str(kw.get("session_id") or kw.get("task_id") or "default")
 
 
 class CanvasStore:

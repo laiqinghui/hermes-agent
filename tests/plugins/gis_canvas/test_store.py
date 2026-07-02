@@ -59,3 +59,15 @@ def test_resolve_session_key(plugin):
     assert plugin.store.resolve_session_key({"task_id": "abc123"}) == "abc123"
     assert plugin.store.resolve_session_key({}) == "default"
     assert plugin.store.resolve_session_key({"task_id": None}) == "default"
+
+
+def test_resolve_session_key_prefers_session_id(plugin):
+    assert plugin.store.resolve_session_key({"session_id": "9d368060", "task_id": "20260702_x"}) == "9d368060"
+
+
+def test_resolve_session_key_falls_back_to_task_id(plugin):
+    assert plugin.store.resolve_session_key({"task_id": "t1"}) == "t1"
+
+
+def test_resolve_session_key_default_when_empty(plugin):
+    assert plugin.store.resolve_session_key({"session_id": "", "task_id": ""}) == "default"
