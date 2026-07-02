@@ -8,9 +8,13 @@ PLUGIN_DIR = pathlib.Path(__file__).resolve().parents[3] / "plugins" / "gis-canv
 class FakeCtx:
     def __init__(self):
         self.tools = {}
+        self.hooks = {}
 
     def register_tool(self, name, toolset, schema, handler, **kwargs):
         self.tools[name] = {"toolset": toolset, "schema": schema, "handler": handler, **kwargs}
+
+    def register_hook(self, event, handler):
+        self.hooks.setdefault(event, []).append(handler)
 
 
 def test_manifest_declares_tools_and_kind():
