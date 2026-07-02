@@ -41,10 +41,15 @@
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$" },
-        "type": { "enum": ["card", "stat", "data-table", "select"] },
+        "type": { "enum": ["card", "stat", "data-table", "select", "esri:map", "esri:legend", "esri:feature-table"] },
         "area": { "$ref": "#/$defs/area" },
         "props": { "type": "object" },
-        "bindings": { "type": "object", "additionalProperties": { "type": "string" } },
+        "bindings": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [ { "type": "string" }, { "type": "array", "items": { "type": "string" } } ]
+          }
+        },
         "state": { "type": "object" },
         "children": { "type": "array", "items": { "$ref": "#/$defs/componentNode" } },
         "slots": {

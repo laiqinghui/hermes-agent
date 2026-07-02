@@ -22,7 +22,7 @@ def test_valid_minimal_doc_passes(plugin):
 
 def test_unknown_component_type_rejected(plugin):
     doc = _minimal_doc()
-    doc["components"][0]["type"] = "esri:map"  # not in Phase-1 catalog
+    doc["components"][0]["type"] = "unknown-type"  # not in catalog
     errors = plugin.validator.validate_doc(doc)
     assert errors and any("type" in e for e in errors)
 
@@ -134,3 +134,47 @@ def test_component_handlers_accepted(plugin):
         }
     })
     assert plugin.validator.validate_doc(doc) == []
+
+
+def test_esri_map_valid_with_layers_binding(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "map1", "type": "esri:map",
+        "area": {"col": 1, "colSpan": 8, "row": 2, "rowSpan": 4},
+        "bindings": {"layers": "mock://incidents"},   # single handle (string) OK
+        "props": {"basemap": "osm"},
+    })
+    assert plugin.validator.validate_doc(doc) == []
+
+
+def test_esri_map_valid_with_layers_array(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "map1", "type": "esri:map",
+        "area": {"col": 1, "colSpan": 8, "row": 2, "rowSpan": 4},
+        "bindings": {"layers": ["mock://incidents", "https://x/FeatureServer/0"]},  # array of handles OK
+    })
+    assert plugin.validator.validate_doc(doc) == []
+
+
+def test_esri_map_requires_layers_binding(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "map1", "type": "esri:map",
+        "area": {"col": 1, "colSpan": 8, "row": 2, "rowSpan": 4},
+    })
+    assert any("bindings.layers" in e for e in plugin.validator.validate_doc(doc))
+
+
+def test_esri_feature_table_requires_layer_binding(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "ft1", "type": "esri:feature-table",
+        "area": {"col": 9, "colSpan": 4, "row": 2, "rowSpan": 4},
+    })
+    assert any("bindings.layer" in e for e in plugin.validator.validate_doc(doc))
+
+
+def test_esri_state_keys(plugin):
+    assert plugin.validator.STATE_KEYS["esri:map"] >= {"selection", "extent"}
+    assert "selection" in plugin.validator.STATE_KEYS["esri:feature-table"]

@@ -41,6 +41,18 @@ CATALOG: dict[str, dict] = {
         "required_props": ["field", "options"],
         "required_bindings": [],
     },
+    "esri:map": {
+        "container": False, "slots": set(),
+        "required_props": [], "required_bindings": ["layers"],
+    },
+    "esri:legend": {
+        "container": False, "slots": set(),
+        "required_props": [], "required_bindings": [],
+    },
+    "esri:feature-table": {
+        "container": False, "slots": set(),
+        "required_props": [], "required_bindings": ["layer"],
+    },
 }
 
 # Allowed keys inside each component type's user-owned `state` object.
@@ -50,6 +62,9 @@ STATE_KEYS: dict[str, set[str]] = {
     "stat": set(),
     "data-table": {"rowSelection", "sort", "columnFilters", "columnVisibility", "page", "filter"},
     "select": {"value"},
+    "esri:map": {"selection", "extent"},
+    "esri:legend": set(),
+    "esri:feature-table": {"selection"},
 }
 
 _SCHEMA_PATH = pathlib.Path(__file__).resolve().parent / "schema" / "canvas.schema.json"
