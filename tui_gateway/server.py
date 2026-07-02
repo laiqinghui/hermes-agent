@@ -13770,3 +13770,17 @@ def _(rid, params: dict) -> dict:
         return _err(rid, 5002, "command timed out (30s)")
     except Exception as e:
         return _err(rid, 5003, str(e))
+# >>> gis-canvas (Phase 2): inbound canvas interaction. Delegates to the
+# gis-canvas plugin so all logic stays in plugins/gis-canvas/. Keep this
+# block fenced and minimal for conflict-free upstream merges. <<<
+@method("canvas.interaction")
+def _(rid, params: dict) -> dict:
+    try:
+        from plugins.gis_canvas.wire import handle_canvas_interaction
+    except Exception as exc:  # plugin absent/disabled — fail soft
+        return _err(rid, -32601, f"gis-canvas plugin unavailable: {exc}")
+    result = handle_canvas_interaction(params or {})
+    if not result.get("ok"):
+        return _err(rid, -32000, "; ".join(result.get("errors", ["canvas.interaction failed"])))
+    return _ok(rid, result)
+# <<< gis-canvas >>>
