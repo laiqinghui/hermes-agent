@@ -136,6 +136,13 @@ _CATALOG_HELP = (
     "{kind:'set', target:'<id>', key:'<stateKey>', value:<v>} (fixed value to state); "
     "{kind:'agent', prompt:'<text>'} (new agent turn). data-table applies client-side filtering from "
     "state.filter (map of field→value; 'all' or empty means no filter)."
+    " (Phase 3 GIS) esri:map (bindings.layers = a layer handle or array of handles; each handle is "
+    "either 'mock://<name>' for client-side data or a public ArcGIS FeatureServer URL like "
+    "'https://services.arcgis.com/.../FeatureServer/0'; optional props.basemap default 'osm', "
+    "props.center [lng,lat], props.zoom; state.selection/extent). esri:legend (bindings.mapRef = the "
+    "esri:map component id it describes). esri:feature-table (bindings.layer = a layer handle; "
+    "optional bindings.mapRef = an esri:map id to highlight selected rows on that map; state.selection). "
+    "Plot geospatial data on esri:map; use esri:feature-table for a spatial table of a layer."
 )
 
 RENDER_VIEW_SCHEMA = {
@@ -153,6 +160,9 @@ RENDER_VIEW_SCHEMA = {
         "handlers:{onChange:{kind:'reactive', controls:'tbl1.filter.severity'}}} wired to data-table "
         "{id:'tbl1', type:'data-table', ..., bindings:{source:'mock://incidents'}}. When user changes "
         "select, handler writes value to tbl1's state.filter.severity client-side, filtering rows without agent turn."
+        " GIS example: {id:'map1', type:'esri:map', area:{col:1,colSpan:8,row:2,rowSpan:4}, "
+        "props:{basemap:'osm'}, bindings:{layers:['mock://incidents']}} with a companion "
+        "{id:'lg1', type:'esri:legend', area:{...}, bindings:{mapRef:'map1'}}."
     ),
     "parameters": {
         "type": "object",

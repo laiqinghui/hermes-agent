@@ -43,3 +43,9 @@ def test_tool_descriptions_teach_the_catalog(plugin):
     for keyword in ("card", "stat", "data-table", "area", "bindings.source",
                     "select", "handlers", "reactive", "controls", "filter"):
         assert keyword in schema["description"]
+
+
+def test_tool_descriptions_teach_esri(plugin):
+    d = plugin.tools_canvas.RENDER_VIEW_SCHEMA["description"]
+    for kw in ("esri:map", "esri:legend", "esri:feature-table", "layers", "mock://", "FeatureServer"):
+        assert kw in d
