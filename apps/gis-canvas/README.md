@@ -6,7 +6,7 @@ This is a standalone workspace app (sibling to `apps/desktop`) that connects to 
 over the existing WebSocket + JSON-RPC transport. Canvas = session (single-user, single-client,
 reconnectable).
 
-Status: **scaffold only.** Design spec: `docs/superpowers/specs/*-gis-hermes-canvas-design.md`.
+Status: **scaffold only.** Design spec: `apps/gis-canvas/docs/2026-07-02-gis-hermes-canvas-design.md`.
 
 ## Fork discipline (READ BEFORE EDITING)
 

@@ -4,7 +4,7 @@ Backend for the generative GIS canvas, packaged as a **Hermes plugin** (`registe
 so it loads additively with **zero core-registration edits**. Pairs with the `apps/gis-canvas`
 frontend.
 
-Status: **scaffold only.** Design spec: `docs/superpowers/specs/*-gis-hermes-canvas-design.md`.
+Status: **scaffold only.** Design spec: `apps/gis-canvas/docs/2026-07-02-gis-hermes-canvas-design.md`.
 
 ## What this plugin will register (all additive via PluginContext)
 - **Tools** (`ctx.register_tool`): `render_view`, `update_view`, `canvas_get_state`, `data_query`
