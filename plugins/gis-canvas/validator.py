@@ -35,6 +35,21 @@ CATALOG: dict[str, dict] = {
         "required_props": [],
         "required_bindings": ["source"],
     },
+    "select": {
+        "container": False,
+        "slots": set(),
+        "required_props": ["field", "options"],
+        "required_bindings": [],
+    },
+}
+
+# Allowed keys inside each component type's user-owned `state` object.
+# Used to validate inbound interactions (interaction.py).
+STATE_KEYS: dict[str, set[str]] = {
+    "card": set(),
+    "stat": set(),
+    "data-table": {"rowSelection", "sort", "columnFilters", "columnVisibility", "page", "filter"},
+    "select": {"value"},
 }
 
 _SCHEMA_PATH = pathlib.Path(__file__).resolve().parent / "schema" / "canvas.schema.json"

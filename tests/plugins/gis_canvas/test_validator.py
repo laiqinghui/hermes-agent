@@ -89,3 +89,30 @@ def test_non_container_may_not_have_children_or_slots(plugin):
     doc["components"][0]["slots"] = {"content": []}
     errors = plugin.validator.validate_doc(doc)
     assert any("container" in e for e in errors)
+
+
+def test_select_is_a_valid_leaf_component(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "sev", "type": "select",
+        "area": {"col": 4, "colSpan": 3, "row": 1, "rowSpan": 1},
+        "props": {"field": "severity", "options": ["all", "high", "med", "low"]},
+    })
+    assert plugin.validator.validate_doc(doc) == []
+
+
+def test_select_requires_field_and_options(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "sev", "type": "select",
+        "area": {"col": 4, "colSpan": 3, "row": 1, "rowSpan": 1},
+        "props": {"field": "severity"},
+    })
+    errors = plugin.validator.validate_doc(doc)
+    assert any("options" in e for e in errors)
+
+
+def test_state_keys_registry_exposed(plugin):
+    assert "value" in plugin.validator.STATE_KEYS["select"]
+    assert "rowSelection" in plugin.validator.STATE_KEYS["data-table"]
+    assert "filter" in plugin.validator.STATE_KEYS["data-table"]
