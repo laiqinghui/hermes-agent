@@ -6,7 +6,15 @@ This is a standalone workspace app (sibling to `apps/desktop`) that connects to 
 over the existing WebSocket + JSON-RPC transport. Canvas = session (single-user, single-client,
 reconnectable).
 
-Status: **scaffold only.** Design spec: `apps/gis-canvas/docs/2026-07-02-gis-hermes-canvas-design.md`.
+Status: **Phase 1 (skeleton canvas) implemented.** Spec:
+`apps/gis-canvas/docs/2026-07-02-gis-hermes-canvas-design.md` · Plan:
+`apps/gis-canvas/docs/plans/2026-07-02-phase1-skeleton-canvas.md`
+
+Run it: `HERMES_DASHBOARD_SESSION_TOKEN=dev-gis-local hermes dashboard --no-open --port 9119`,
+then `cd apps/gis-canvas && VITE_HERMES_TOKEN=dev-gis-local npm run dev` → http://localhost:5173.
+Enable the plugin first: add `gis-canvas` to `plugins.enabled` in `~/.hermes/config.yaml`.
+Backend tests: `.venv/bin/pytest tests/plugins/gis_canvas` (or `uv run pytest tests/plugins/gis_canvas`).
+Frontend: `npm run -w @hermes/gis-canvas test`.
 
 ## Fork discipline (READ BEFORE EDITING)
 
