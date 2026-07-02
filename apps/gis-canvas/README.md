@@ -6,9 +6,7 @@ This is a standalone workspace app (sibling to `apps/desktop`) that connects to 
 over the existing WebSocket + JSON-RPC transport. Canvas = session (single-user, single-client,
 reconnectable).
 
-Status: **Phase 1 (skeleton canvas) implemented.** Spec:
-`apps/gis-canvas/docs/2026-07-02-gis-hermes-canvas-design.md` · Plan:
-`apps/gis-canvas/docs/plans/2026-07-02-phase1-skeleton-canvas.md`
+Status: **Phase 2 (interaction loop) implemented & verified live.** Phase 1 (declarative canvas) + Phase 2 (inbound canvas.interaction, pre_llm_call agent-awareness hook, reactive client-side filtering, select control + data-table row-selection). Spec: `apps/gis-canvas/docs/2026-07-02-gis-hermes-canvas-design.md` · Plans: `apps/gis-canvas/docs/plans/2026-07-02-phase1-skeleton-canvas.md`, `apps/gis-canvas/docs/plans/2026-07-02-phase2-interaction-loop.md`.
 
 Run it: `HERMES_DASHBOARD_SESSION_TOKEN=dev-gis-local hermes dashboard --no-open --port 9119`,
 then `cd apps/gis-canvas && VITE_HERMES_TOKEN=dev-gis-local npm run dev` → http://localhost:5173.
