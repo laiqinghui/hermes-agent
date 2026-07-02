@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hermes-gis-canvas/canvas/v1",
+  "title": "GIS Canvas Document v1",
+  "type": "object",
+  "required": ["canvasVersion", "layout", "components"],
+  "additionalProperties": false,
+  "properties": {
+    "canvasVersion": { "const": 1 },
+    "rev": { "type": "integer", "minimum": 0 },
+    "layout": {
+      "type": "object",
+      "required": ["type", "cols"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "grid" },
+        "cols": { "type": "integer", "minimum": 1, "maximum": 24 },
+        "rowHeight": { "type": "integer", "minimum": 20, "maximum": 400 },
+        "gap": { "type": "integer", "minimum": 0, "maximum": 64 }
+      }
+    },
+    "components": { "type": "array", "items": { "$ref": "#/$defs/componentNode" } },
+    "overlays": { "type": "array", "items": { "$ref": "#/$defs/componentNode" } },
+    "focus": { "type": "string" }
+  },
+  "$defs": {
+    "area": {
+      "type": "object",
+      "required": ["col", "colSpan", "row", "rowSpan"],
+      "additionalProperties": false,
+      "properties": {
+        "col": { "type": "integer", "minimum": 1 },
+        "colSpan": { "type": "integer", "minimum": 1 },
+        "row": { "type": "integer", "minimum": 1 },
+        "rowSpan": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "componentNode": {
+      "type": "object",
+      "required": ["id", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$" },
+        "type": { "enum": ["card", "stat", "data-table"] },
+        "area": { "$ref": "#/$defs/area" },
+        "props": { "type": "object" },
+        "bindings": { "type": "object", "additionalProperties": { "type": "string" } },
+        "state": { "type": "object" },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/componentNode" } },
+        "slots": {
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "$ref": "#/$defs/componentNode" } }
+        }
+      }
+    }
+  }
+}
