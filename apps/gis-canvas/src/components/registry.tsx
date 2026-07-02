@@ -3,6 +3,7 @@ import type { ComponentNode } from '../lib/types'
 import { CardMolecule } from './molecules/CardMolecule'
 import { StatMolecule } from './molecules/StatMolecule'
 import { DataTableMolecule } from './molecules/DataTableMolecule'
+import { SelectMolecule } from './molecules/SelectMolecule'
 
 export interface MoleculeProps {
   node: ComponentNode
@@ -12,7 +13,8 @@ export interface MoleculeProps {
 export const COMPONENT_REGISTRY: Record<string, ComponentType<MoleculeProps>> = {
   card: CardMolecule,
   stat: StatMolecule,
-  'data-table': DataTableMolecule
+  'data-table': DataTableMolecule,
+  select: SelectMolecule
 }
 
 export function UnknownTile({ node }: MoleculeProps) {

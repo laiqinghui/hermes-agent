@@ -1,6 +1,22 @@
 import { render, screen } from '@testing-library/react'
 import { CanvasGrid } from './CanvasGrid'
 import type { CanvasDoc } from '../lib/types'
+import { HandlerProvider } from './HandlerContext'
+import type { CanvasActions } from '../lib/handlers'
+
+function renderWithActions(d: CanvasDoc, actions: Partial<CanvasActions> = {}) {
+  const full: CanvasActions = {
+    setLocalState: () => {},
+    reportInteraction: () => {},
+    sendPrompt: () => {},
+    ...actions
+  }
+  return render(
+    <HandlerProvider actions={full}>
+      <CanvasGrid doc={d} />
+    </HandlerProvider>
+  )
+}
 
 function doc(): CanvasDoc {
   return {
@@ -68,4 +84,37 @@ test('top-level placement maps to grid CSS', () => {
   const cell = screen.getByTestId('cell-s1')
   expect(cell.style.gridColumn).toBe('1 / span 3')
   expect(cell.style.gridRow).toBe('1 / span 1')
+})
+
+test('select renders options and reports interaction on change', () => {
+  const reports: string[] = []
+  const d: CanvasDoc = {
+    canvasVersion: 1, rev: 1, layout: { type: 'grid', cols: 12 },
+    components: [
+      { id: 'sev', type: 'select', area: { col: 1, colSpan: 3, row: 1, rowSpan: 1 },
+        props: { field: 'severity', options: ['all', 'high', 'low'] }, state: { value: 'all' },
+        handlers: { onChange: { kind: 'reactive', controls: 'tbl1.filter.severity' } } }
+    ]
+  }
+  renderWithActions(d, { reportInteraction: (id, patch) => reports.push(`${id}:${JSON.stringify(patch)}`) })
+  const select = screen.getByRole('combobox')
+  select.dispatchEvent(new Event('change', { bubbles: true }))
+  // change to 'high'
+  ;(select as HTMLSelectElement).value = 'high'
+  select.dispatchEvent(new Event('change', { bubbles: true }))
+  expect(reports.some(r => r.includes('tbl1') && r.includes('severity'))).toBe(true)
+})
+
+test('data-table filters rows by state.filter', () => {
+  const d: CanvasDoc = {
+    canvasVersion: 1, rev: 1, layout: { type: 'grid', cols: 12 },
+    components: [
+      { id: 'tbl1', type: 'data-table', area: { col: 1, colSpan: 12, row: 1, rowSpan: 4 },
+        bindings: { source: 'mock://incidents' }, state: { filter: { severity: 'low' } } }
+    ]
+  }
+  renderWithActions(d)
+  // only 'low' severity rows: f_44, f_18 present; a 'high' row absent
+  expect(screen.getByText('f_44')).toBeInTheDocument()
+  expect(screen.queryByText('f_82')).not.toBeInTheDocument()
 })

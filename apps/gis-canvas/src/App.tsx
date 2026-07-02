@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CanvasGrid } from './components/CanvasGrid'
 import { Chat, type ActivityItem } from './components/Chat'
+import { HandlerProvider } from './components/HandlerContext'
 import { createGatewayClient, resolveWsUrl, type GatewayLike } from './lib/gateway'
 import { useCanvasDoc } from './lib/use-canvas-doc'
+import { mergeOverrides, type Overrides } from './lib/merge'
+import type { CanvasActions } from './lib/handlers'
 
 const LOGGED_EVENTS = new Set(['message.delta', 'message.complete', 'tool.start', 'tool.complete', 'error'])
 
@@ -78,11 +81,32 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     }
   }
 
+  const [overrides, setOverrides] = useState<Overrides>({})
+
+  const actions: CanvasActions = useMemo(() => ({
+    setLocalState: (id, patch) =>
+      setOverrides(prev => ({ ...prev, [id]: { ...(prev[id] ?? {}), ...patch } })),
+    reportInteraction: (id, patch) => {
+      setOverrides(prev => ({ ...prev, [id]: { ...(prev[id] ?? {}), ...patch } }))
+      const sid = sessionIdRef.current
+      if (sid) void client.request('canvas.interaction', { session_id: sid, target: id, state: patch }).catch(() => {})
+    },
+    sendPrompt: text => { void send(text) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [client])
+
+  // reset local overrides whenever the agent re-renders the canvas (new structure)
+  useEffect(() => { setOverrides({}) }, [doc?.rev])
+
+  const mergedDoc = doc ? mergeOverrides(doc, overrides) : null
+
   return (
     <div className="grid h-screen grid-cols-[1fr_360px] font-sans">
       <main className="overflow-auto bg-neutral-100 p-4">
-        {doc ? (
-          <CanvasGrid doc={doc} />
+        {mergedDoc ? (
+          <HandlerProvider actions={actions}>
+            <CanvasGrid doc={mergedDoc} />
+          </HandlerProvider>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-neutral-400">
             No canvas yet — ask the agent to build a dashboard.
