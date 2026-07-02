@@ -23,6 +23,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const [connected, setConnected] = useState(false)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const sessionIdRef = useRef<string | null>(null)
+  const canvasKeyRef = useRef<string | null>(null)
   const startedRef = useRef(false)
   const nextId = useRef(0)
 
@@ -56,8 +57,9 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
       void (async () => {
         try {
           await client.connect(url) // resolves only once the socket is OPEN
-          const created = await client.request<{ session_id: string }>('session.create', { cols: 96 })
+          const created = await client.request<{ session_id: string; stored_session_id?: string }>('session.create', { cols: 96 })
           sessionIdRef.current = created.session_id
+          canvasKeyRef.current = created.stored_session_id ?? created.session_id
           setConnected(true)
           log('system', `session ${created.session_id} ready`)
         } catch (err) {
@@ -88,8 +90,8 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
       setOverrides(prev => ({ ...prev, [id]: { ...(prev[id] ?? {}), ...patch } })),
     reportInteraction: (id, patch) => {
       setOverrides(prev => ({ ...prev, [id]: { ...(prev[id] ?? {}), ...patch } }))
-      const sid = sessionIdRef.current
-      if (sid) void client.request('canvas.interaction', { session_id: sid, target: id, state: patch }).catch(() => {})
+      const key = canvasKeyRef.current
+      if (key) void client.request('canvas.interaction', { session_id: key, target: id, state: patch }).catch(() => {})
     },
     sendPrompt: text => { void send(text) }
   }), [client, send])
