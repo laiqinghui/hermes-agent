@@ -215,9 +215,9 @@ two planes are identical regardless of which the Data Agent gave us:
 - The browser assembles fetched pages into the consuming molecule: a client-side
   `new FeatureLayer({ source: graphics, objectIdField, fields, geometryType, spatialReference })` /
   `new GeoJSONLayer({ url: blobUrl })` for the map, or `useReactTable` rows for `data-table`.
-- **Optional optimization:** for small result sets (below a row/byte threshold) the broker may attach
-  the first page to the outbound `tool.complete` so the frontend renders without a second round-trip.
-  This is a data-plane payload — it still never enters the agent context or the canvas document.
+- **v1 policy: always pull.** The frontend always fetches rows via `canvas.data_fetch`; no
+  first-page piggyback on `tool.complete`. (A small-result piggyback optimization is explicitly
+  deferred — revisit only if round-trip latency proves noticeable.)
 
 **Invariant:** rows/features appear **only** on the data plane — never in the canvas document or the
 agent context, which see only handles, schema, and a ≤3-row sample. This keeps the agent's reasoning
