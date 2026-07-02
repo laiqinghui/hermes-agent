@@ -13776,7 +13776,7 @@ def _(rid, params: dict) -> dict:
 @method("canvas.interaction")
 def _(rid, params: dict) -> dict:
     try:
-        from plugins.gis_canvas.wire import handle_canvas_interaction
+        from hermes_plugins.gis_canvas.wire import handle_canvas_interaction
     except Exception as exc:  # plugin absent/disabled — fail soft
         return _err(rid, -32601, f"gis-canvas plugin unavailable: {exc}")
     result = handle_canvas_interaction(params or {})
