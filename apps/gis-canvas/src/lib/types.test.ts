@@ -2,7 +2,7 @@ import { MOLECULE_TYPES } from './types'
 import type { CanvasDoc } from './types'
 
 test('phase-1 catalog matches the backend', () => {
-  expect([...MOLECULE_TYPES]).toEqual(['card', 'stat', 'data-table'])
+  expect([...MOLECULE_TYPES]).toEqual(['card', 'stat', 'data-table', 'select'])
 })
 
 test('a canonical doc typechecks', () => {

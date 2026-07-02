@@ -2,7 +2,7 @@
  * TypeScript mirror of plugins/gis-canvas/schema/canvas.schema.json (v1).
  * Keep in sync when the schema changes.
  */
-export const MOLECULE_TYPES = ['card', 'stat', 'data-table'] as const
+export const MOLECULE_TYPES = ['card', 'stat', 'data-table', 'select'] as const
 export type MoleculeType = (typeof MOLECULE_TYPES)[number]
 
 export interface Area {
@@ -11,6 +11,11 @@ export interface Area {
   row: number
   rowSpan: number
 }
+
+export type Handler =
+  | { kind: 'set'; target: string; key: string; value: unknown }
+  | { kind: 'reactive'; controls: string } // "targetId.key.subkey" path written from event value
+  | { kind: 'agent'; prompt: string }
 
 export interface ComponentNode {
   id: string
@@ -21,6 +26,7 @@ export interface ComponentNode {
   state?: Record<string, unknown>
   children?: ComponentNode[]
   slots?: Record<string, ComponentNode[]>
+  handlers?: Record<string, Handler>
 }
 
 export interface GridLayout {
