@@ -1,0 +1,11 @@
+name: gis-canvas
+version: 0.1.0
+description: >
+  Generative GIS canvas — the agent declaratively authors a dashboard
+  (grid of card/stat/data-table molecules) rendered by apps/gis-canvas.
+author: gis-canvas
+kind: standalone
+provides_tools:
+  - render_view
+  - update_view
+  - canvas_get_state
