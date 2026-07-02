@@ -116,3 +116,21 @@ def test_state_keys_registry_exposed(plugin):
     assert "value" in plugin.validator.STATE_KEYS["select"]
     assert "rowSelection" in plugin.validator.STATE_KEYS["data-table"]
     assert "filter" in plugin.validator.STATE_KEYS["data-table"]
+
+
+def test_component_handlers_accepted(plugin):
+    """Test that handlers field is accepted on components (RED before schema fix)."""
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "sev",
+        "type": "select",
+        "area": {"col": 4, "colSpan": 3, "row": 1, "rowSpan": 1},
+        "props": {"field": "severity", "options": ["all", "high", "med", "low"]},
+        "handlers": {
+            "onChange": {
+                "kind": "reactive",
+                "controls": "tbl1.filter.severity"
+            }
+        }
+    })
+    assert plugin.validator.validate_doc(doc) == []

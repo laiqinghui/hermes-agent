@@ -50,6 +50,14 @@
         "slots": {
           "type": "object",
           "additionalProperties": { "type": "array", "items": { "$ref": "#/$defs/componentNode" } }
+        },
+        "handlers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["kind"],
+            "properties": { "kind": { "enum": ["set", "reactive", "open", "agent"] } }
+          }
         }
       }
     }
