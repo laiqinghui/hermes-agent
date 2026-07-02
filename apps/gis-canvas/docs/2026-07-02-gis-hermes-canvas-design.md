@@ -181,17 +181,47 @@ that already passed validation. Agent→frontend delivery reuses the existing `t
 
 ## 8. Data broker & Data Agent integration
 
-- **`DataSource` interface** (`query() → DataHandle`), protocol-agnostic. A2A-native client tool vs.
-  an A2A↔MCP shim (reusing Hermes's MCP client) is an implementation choice **deferred**; the
-  interface isolates it. Note: A2A (Google Agent2Agent) ≠ Hermes's existing ACP/MCP.
-- `data_query(...)` runs server-side, normalizes results into a **`DataHandle`**, returns to the
-  agent only `{ handle, schema, rowCount, sample(≤3 rows) }` — **never bulk rows**.
-- **Two handle kinds** (Data Agent returns either, per dataset):
-  - `kind:"service"` → native ArcGIS FeatureServer/MapServer URL. Passthrough; the `esri:map`
-    binds it directly (`new FeatureLayer({ url })`); gateway proxies enterprise auth.
-  - `kind:"rows"` → tabular/GeoJSON cached server-side (TTL'd), paged. Frontend fetches by handle;
-    the map renders it via `new FeatureLayer({ source: graphics, objectIdField, fields, geometryType,
-    spatialReference })` or `new GeoJSONLayer({ url: blobUrl })`.
+**Three planes, cleanly separated** — the invariant that makes the system scale to arbitrary data
+volume:
+
+| Plane | Carries | Lives | Sees actual rows? |
+|-------|---------|-------|-------------------|
+| Agent context | reasoning + `{handle, schema, rowCount, sample≤3}` | LLM context / session | No — sample only |
+| Canvas document | structure + `data://handle` bindings + interaction state | session state → frontend | No — handle only |
+| **Data plane** | the actual rows / features | gateway broker ↔ browser (never the agent) | **Yes** |
+
+The Data Agent returns **either** form; the broker normalizes both into a `DataHandle`, so the upper
+two planes are identical regardless of which the Data Agent gave us:
+
+- **`DataSource` interface** (`query() → DataHandle`), protocol-agnostic (A2A-native tool vs. A2A↔MCP
+  shim, deferred). A2A (Google Agent2Agent) ≠ Hermes's ACP/MCP.
+- `data_query(...)` runs server-side and **always** returns to the agent only
+  `{ handle, schema, rowCount, sample(≤3 rows) }` — **never bulk rows**. **Sampling is uniform:**
+  - **service** case → broker samples by querying the service (`queryFeatures`, top-N);
+  - **rows** case → broker samples the rows it just received.
+  Either way the agent gets exactly the context it needs to formulate the spec, and nothing heavy.
+- **Handle kinds:**
+  - `kind:"service"` → native ArcGIS FeatureServer/MapServer URL. The `esri:map` binds it directly
+    (`new FeatureLayer({ url })`) and streams from the service; gateway proxies enterprise auth.
+  - `kind:"rows"` → the actual rows / GeoJSON the Data Agent returned, held in the broker cache
+    (TTL'd), addressed by handle.
+
+**Data plane — how the "actual rows" reach the frontend.** The canvas document only ever carries
+`data://handle`; rows travel on a dedicated channel, parallel to (never inside) the document:
+- Frontend **pulls** by handle: `canvas.data_fetch(handle, page, pageSize, filter?, fields?)` — an
+  inbound gateway RPC (additive, same path as `canvas.interaction`, §11). For `kind:"rows"` it serves
+  paged rows from the broker cache; for `kind:"service"` the ESRI SDK streams from the service (or
+  gateway-proxied).
+- The browser assembles fetched pages into the consuming molecule: a client-side
+  `new FeatureLayer({ source: graphics, objectIdField, fields, geometryType, spatialReference })` /
+  `new GeoJSONLayer({ url: blobUrl })` for the map, or `useReactTable` rows for `data-table`.
+- **Optional optimization:** for small result sets (below a row/byte threshold) the broker may attach
+  the first page to the outbound `tool.complete` so the frontend renders without a second round-trip.
+  This is a data-plane payload — it still never enters the agent context or the canvas document.
+
+**Invariant:** rows/features appear **only** on the data plane — never in the canvas document or the
+agent context, which see only handles, schema, and a ≤3-row sample. This keeps the agent's reasoning
+lean and the document small while the data plane moves arbitrary volume between broker and browser.
 
 ## 9. GIS layer (ESRI ArcGIS Maps SDK for JS, v5.x)
 
