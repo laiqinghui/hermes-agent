@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CanvasGrid } from './components/CanvasGrid'
 import { Chat, type ActivityItem } from './components/Chat'
 import { HandlerProvider } from './components/HandlerContext'
@@ -71,7 +71,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     }
   }, [client, injectedUrl])
 
-  const send = async (text: string) => {
+  const send = useCallback(async (text: string) => {
     if (!sessionIdRef.current) return
     log('you', text)
     try {
@@ -79,7 +79,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     } catch (err) {
       log('error', err instanceof Error ? err.message : String(err))
     }
-  }
+  }, [client])
 
   const [overrides, setOverrides] = useState<Overrides>({})
 
@@ -92,8 +92,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
       if (sid) void client.request('canvas.interaction', { session_id: sid, target: id, state: patch }).catch(() => {})
     },
     sendPrompt: text => { void send(text) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [client])
+  }), [client, send])
 
   // reset local overrides whenever the agent re-renders the canvas (new structure)
   useEffect(() => { setOverrides({}) }, [doc?.rev])

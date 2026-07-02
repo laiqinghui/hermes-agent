@@ -102,7 +102,7 @@ test('select renders options and reports interaction on change', () => {
   // change to 'high'
   ;(select as HTMLSelectElement).value = 'high'
   select.dispatchEvent(new Event('change', { bubbles: true }))
-  expect(reports.some(r => r.includes('tbl1') && r.includes('severity'))).toBe(true)
+  expect(reports).toContain('tbl1:{"filter":{"severity":"high"}}')
 })
 
 test('data-table filters rows by state.filter', () => {
