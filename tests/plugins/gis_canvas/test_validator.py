@@ -178,3 +178,21 @@ def test_esri_feature_table_requires_layer_binding(plugin):
 def test_esri_state_keys(plugin):
     assert plugin.validator.STATE_KEYS["esri:map"] >= {"selection", "extent"}
     assert "selection" in plugin.validator.STATE_KEYS["esri:feature-table"]
+
+
+def test_reactive_handler_requires_controls(plugin):
+    doc = _minimal_doc()
+    doc["components"][0]["handlers"] = {"onChange": {"kind": "reactive"}}  # missing controls
+    assert any("controls" in e for e in plugin.validator.validate_doc(doc))
+
+
+def test_agent_handler_requires_prompt(plugin):
+    doc = _minimal_doc()
+    doc["components"][0]["handlers"] = {"onClick": {"kind": "agent"}}  # missing prompt
+    assert any("prompt" in e for e in plugin.validator.validate_doc(doc))
+
+
+def test_wellformed_reactive_handler_passes(plugin):
+    doc = _minimal_doc()
+    doc["components"][0]["handlers"] = {"onChange": {"kind": "reactive", "controls": "tbl1.filter.severity"}}
+    assert plugin.validator.validate_doc(doc) == []

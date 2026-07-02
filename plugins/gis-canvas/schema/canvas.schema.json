@@ -61,7 +61,21 @@
           "additionalProperties": {
             "type": "object",
             "required": ["kind"],
-            "properties": { "kind": { "enum": ["set", "reactive", "open", "agent"] } }
+            "properties": {
+              "kind": { "enum": ["set", "reactive", "open", "agent"] },
+              "target": { "type": "string" },
+              "key": { "type": "string" },
+              "value": {},
+              "controls": { "type": "string" },
+              "overlay": { "type": "string" },
+              "prompt": { "type": "string" }
+            },
+            "allOf": [
+              { "if": { "properties": { "kind": { "const": "reactive" } } }, "then": { "required": ["controls"] } },
+              { "if": { "properties": { "kind": { "const": "set" } } }, "then": { "required": ["target", "key"] } },
+              { "if": { "properties": { "kind": { "const": "agent" } } }, "then": { "required": ["prompt"] } },
+              { "if": { "properties": { "kind": { "const": "open" } } }, "then": { "required": ["overlay"] } }
+            ]
           }
         }
       }
