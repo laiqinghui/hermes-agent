@@ -1,24 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CanvasGrid } from './components/CanvasGrid'
 import { Chat, type ActivityItem } from './components/Chat'
-import { createGatewayClient, resolveWsUrl } from './lib/gateway'
+import { createGatewayClient, resolveWsUrl, type GatewayLike } from './lib/gateway'
 import { useCanvasDoc } from './lib/use-canvas-doc'
 
 const LOGGED_EVENTS = new Set(['message.delta', 'message.complete', 'tool.start', 'tool.complete', 'error'])
 
-export default function App() {
-  const client = useMemo(() => createGatewayClient(), [])
+export interface AppProps {
+  client?: GatewayLike
+  wsUrl?: string
+}
+
+export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppProps = {}) {
+  const client = useMemo(
+    () => injectedClient ?? createGatewayClient(),
+    [injectedClient]
+  )
   const { doc, errors } = useCanvasDoc(client)
   const [connected, setConnected] = useState(false)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const sessionIdRef = useRef<string | null>(null)
+  const startedRef = useRef(false)
   const nextId = useRef(0)
 
-  useEffect(() => {
-    const log = (kind: string, text: string) =>
-      setActivity(prev => [...prev.slice(-199), { id: nextId.current++, kind, text }])
+  const log = (kind: string, text: string) =>
+    setActivity(prev => [...prev.slice(-199), { id: nextId.current++, kind, text }])
 
-    let cancelled = false
+  useEffect(() => {
+    // Subscribe to activity events. StrictMode double-invokes this effect;
+    // the subscription is added and torn down per invocation, netting one.
     const off = client.onAny((event: { type?: string; payload?: unknown }) => {
       const type = event?.type ?? ''
       if (!LOGGED_EVENTS.has(type)) return
@@ -31,32 +41,40 @@ export default function App() {
             : JSON.stringify(payload ?? {}).slice(0, 160)
       log(type, summary)
     })
-    ;(async () => {
-      try {
-        await client.connect(resolveWsUrl(import.meta.env as Record<string, string | undefined>))
-        const created = await client.request<{ session_id: string }>('session.create', { cols: 96 })
-        if (cancelled) return
-        sessionIdRef.current = created.session_id
-        setConnected(true)
-        log('system', `session ${created.session_id} ready`)
-      } catch (err) {
-        log('error', err instanceof Error ? err.message : String(err))
-      }
-    })()
+
+    // Connect + create the session exactly once per client. The ref guard is
+    // essential under StrictMode: without it, the second effect invocation
+    // calls connect() while the first is still 'connecting' (which returns
+    // immediately) and then fires session.create on a socket that isn't open
+    // yet → "gateway not connected".
+    if (!startedRef.current) {
+      startedRef.current = true
+      const url = injectedUrl ?? resolveWsUrl(import.meta.env as Record<string, string | undefined>)
+      void (async () => {
+        try {
+          await client.connect(url) // resolves only once the socket is OPEN
+          const created = await client.request<{ session_id: string }>('session.create', { cols: 96 })
+          sessionIdRef.current = created.session_id
+          setConnected(true)
+          log('system', `session ${created.session_id} ready`)
+        } catch (err) {
+          log('error', err instanceof Error ? err.message : String(err))
+        }
+      })()
+    }
+
     return () => {
-      cancelled = true
       if (typeof off === 'function') off()
     }
-  }, [client])
+  }, [client, injectedUrl])
 
   const send = async (text: string) => {
     if (!sessionIdRef.current) return
-    setActivity(prev => [...prev.slice(-199), { id: nextId.current++, kind: 'you', text }])
+    log('you', text)
     try {
       await client.request('prompt.submit', { session_id: sessionIdRef.current, text })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      setActivity(prev => [...prev.slice(-199), { id: nextId.current++, kind: 'error', text: msg }])
+      log('error', err instanceof Error ? err.message : String(err))
     }
   }
 
