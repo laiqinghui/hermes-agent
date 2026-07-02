@@ -4,10 +4,32 @@ import { runHandler } from '../../lib/handlers'
 import type { Handler } from '../../lib/types'
 import type { MoleculeProps } from '../registry'
 
+// Normalize option to {label, value} shape
+interface NormalizedOption {
+  label: string
+  value: string
+}
+
+function normalizeOption(opt: string | Record<string, unknown>): NormalizedOption {
+  if (typeof opt === 'string') {
+    return { label: opt, value: opt }
+  }
+  const obj = opt as Record<string, unknown>
+  const value = String(obj.value ?? '')
+  const label = obj.label !== undefined ? String(obj.label) : value
+  return { label, value }
+}
+
 export function SelectMolecule({ node }: MoleculeProps) {
   const actions = useCanvasActions()
-  const { field, options } = (node.props ?? {}) as { field?: string; options?: string[] }
-  const value = (node.state?.value as string | undefined) ?? (options?.[0] ?? '')
+  const { field, options } = (node.props ?? {}) as { field?: string; options?: (string | Record<string, unknown>)[] }
+
+  // Normalize options to {label, value} shape
+  const normalizedOptions = (options ?? []).map(normalizeOption)
+
+  // Use first normalized option's value as fallback
+  const fallbackValue = normalizedOptions[0]?.value ?? ''
+  const value = (node.state?.value as string | undefined) ?? fallbackValue
   const onChange = node.handlers?.onChange as Handler | undefined
 
   return (
@@ -23,9 +45,9 @@ export function SelectMolecule({ node }: MoleculeProps) {
           if (onChange) runHandler(onChange, node, actions, { value: v })
         }}
       >
-        {(options ?? []).map(o => (
-          <option key={o} value={o}>
-            {o}
+        {normalizedOptions.map(opt => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
           </option>
         ))}
       </select>
