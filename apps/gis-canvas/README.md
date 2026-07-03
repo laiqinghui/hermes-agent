@@ -6,13 +6,13 @@ This is a standalone workspace app (sibling to `apps/desktop`) that connects to 
 over the existing WebSocket + JSON-RPC transport. Canvas = session (single-user, single-client,
 reconnectable).
 
-Status: **Phase 2 (interaction loop) implemented & verified live.** Phase 1 (declarative canvas) + Phase 2 (inbound canvas.interaction, pre_llm_call agent-awareness hook, reactive client-side filtering, select control + data-table row-selection). Spec: `apps/gis-canvas/docs/2026-07-02-gis-hermes-canvas-design.md` · Plans: `apps/gis-canvas/docs/plans/2026-07-02-phase1-skeleton-canvas.md`, `apps/gis-canvas/docs/plans/2026-07-02-phase2-interaction-loop.md`.
+Status: **Phase 3 (ESRI GIS layer) implemented & verified.** Phase 1 (declarative canvas) + Phase 2 (interaction loop) + Phase 3 (ESRI `esri:map` / `esri:legend` / `esri:feature-table`; client-side FeatureLayer from mock geo rows + public FeatureServer service URL; keyless OpenStreetMap basemap by default, optional `VITE_ARCGIS_API_KEY` for premium basemaps; Calcite→shadcn theming). Spec: `apps/gis-canvas/docs/2026-07-02-gis-hermes-canvas-design.md` (see §9, §18, §19) · Plans under `apps/gis-canvas/docs/plans/`.
 
-Run it: `HERMES_DASHBOARD_SESSION_TOKEN=dev-gis-local hermes dashboard --no-open --port 9119`,
-then `cd apps/gis-canvas && VITE_HERMES_TOKEN=dev-gis-local npm run dev` → http://localhost:5173.
-Enable the plugin first: add `gis-canvas` to `plugins.enabled` in `~/.hermes/config.yaml`.
-Backend tests: `.venv/bin/pytest tests/plugins/gis_canvas` (or `uv run pytest tests/plugins/gis_canvas`).
-Frontend: `npm run -w @hermes/gis-canvas test`.
+Run it:
+- **Gateway**: `HERMES_DASHBOARD_SESSION_TOKEN=dev-gis-local hermes dashboard --no-open --port 9119` (enable `gis-canvas` plugin in `~/.hermes/config.yaml` under `plugins.enabled`).
+- **Frontend (map needs preview)**: `VITE_HERMES_TOKEN=dev-gis-local npm run -w @hermes/gis-canvas build && (cd apps/gis-canvas && npx vite preview --port 5174 --host 127.0.0.1)` → open http://localhost:5174.
+- **Note**: `npm run dev` still works for non-map components (Phases 1–2); only the ESRI map needs the preview build (see spec §19).
+- **Tests** — Backend: `.venv/bin/pytest tests/plugins/gis_canvas` (or `uv run pytest tests/plugins/gis_canvas`). Frontend: `npm run -w @hermes/gis-canvas test`.
 
 ## Fork discipline (READ BEFORE EDITING)
 

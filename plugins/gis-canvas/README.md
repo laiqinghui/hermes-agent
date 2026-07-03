@@ -4,7 +4,7 @@ Backend for the generative GIS canvas, packaged as a **Hermes plugin** (`registe
 so it loads additively with **zero core-registration edits**. Pairs with the `apps/gis-canvas`
 frontend.
 
-Status: **Phase 2 (interaction loop) implemented & verified live.** Phase 1 (declarative canvas) + Phase 2 (inbound canvas.interaction, pre_llm_call agent-awareness hook, reactive client-side filtering, select control + data-table row-selection). Spec: `apps/gis-canvas/docs/2026-07-02-gis-hermes-canvas-design.md` · Plans: `apps/gis-canvas/docs/plans/2026-07-02-phase1-skeleton-canvas.md`, `apps/gis-canvas/docs/plans/2026-07-02-phase2-interaction-loop.md`. Tests: `tests/plugins/gis_canvas/`. Enable: add `gis-canvas` to `plugins.enabled` in `~/.hermes/config.yaml`.
+Status: **Phase 3 (ESRI GIS layer) implemented & verified.** Phase 1 (declarative canvas) + Phase 2 (interaction loop) + Phase 3 (ESRI `esri:map` / `esri:legend` / `esri:feature-table`; client-side FeatureLayer from mock geo rows + public FeatureServer service URL; keyless OpenStreetMap basemap by default, optional `VITE_ARCGIS_API_KEY` for premium basemaps; Calcite→shadcn theming). Spec: `apps/gis-canvas/docs/2026-07-02-gis-hermes-canvas-design.md` (see §9, §18, §19) · Plans under `apps/gis-canvas/docs/plans/`. Tests: `tests/plugins/gis_canvas/`. Enable: add `gis-canvas` to `plugins.enabled` in `~/.hermes/config.yaml`.
 
 **Phase 2 note:** One fenced core edit — `@method("canvas.interaction")` in `tui_gateway/server.py` (delegates to `hermes_plugins.gis_canvas.wire`) — the only file outside `apps/gis-canvas` + `plugins/gis-canvas` that this project touches.
 
