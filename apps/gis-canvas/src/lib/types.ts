@@ -2,7 +2,7 @@
  * TypeScript mirror of plugins/gis-canvas/schema/canvas.schema.json (v1).
  * Keep in sync when the schema changes.
  */
-export const MOLECULE_TYPES = ['card', 'stat', 'data-table', 'select'] as const
+export const MOLECULE_TYPES = ['card', 'stat', 'data-table', 'select', 'esri:map', 'esri:legend', 'esri:feature-table'] as const
 export type MoleculeType = (typeof MOLECULE_TYPES)[number]
 
 export interface Area {
@@ -22,7 +22,7 @@ export interface ComponentNode {
   type: MoleculeType | (string & {}) // tolerate future types; renderer falls back to UnknownTile
   area?: Area
   props?: Record<string, unknown>
-  bindings?: Record<string, string>
+  bindings?: Record<string, string | string[]>
   state?: Record<string, unknown>
   children?: ComponentNode[]
   slots?: Record<string, ComponentNode[]>

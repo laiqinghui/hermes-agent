@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from 'react'
+import { lazy, Suspense, type ComponentType, type ReactNode } from 'react'
 import type { ComponentNode } from '../lib/types'
 import { CardMolecule } from './molecules/CardMolecule'
 import { StatMolecule } from './molecules/StatMolecule'
@@ -10,11 +10,21 @@ export interface MoleculeProps {
   renderChild: (node: ComponentNode) => ReactNode
 }
 
+const EsriMapLazy = lazy(() => import('./molecules/EsriMapMolecule').then(m => ({ default: m.EsriMapMolecule })))
+function EsriMap(props: MoleculeProps) {
+  return (
+    <Suspense fallback={<div className="p-2 text-xs text-neutral-400">Loading map…</div>}>
+      <EsriMapLazy {...props} />
+    </Suspense>
+  )
+}
+
 export const COMPONENT_REGISTRY: Record<string, ComponentType<MoleculeProps>> = {
   card: CardMolecule,
   stat: StatMolecule,
   'data-table': DataTableMolecule,
-  select: SelectMolecule
+  select: SelectMolecule,
+  'esri:map': EsriMap
 }
 
 export function UnknownTile({ node }: MoleculeProps) {

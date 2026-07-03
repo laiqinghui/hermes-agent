@@ -72,11 +72,11 @@ test('data-table respects props.columns subset', () => {
 test('unknown component type renders fallback tile, not a crash', () => {
   const d = doc()
   d.components.push({
-    id: 'x1', type: 'esri:map',
+    id: 'x1', type: 'future:widget',
     area: { col: 1, colSpan: 3, row: 2, rowSpan: 2 }
   })
   render(<CanvasGrid doc={d} />)
-  expect(screen.getByTestId('unknown-tile')).toHaveTextContent('esri:map')
+  expect(screen.getByTestId('unknown-tile')).toHaveTextContent('future:widget')
 })
 
 test('top-level placement maps to grid CSS', () => {

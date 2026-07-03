@@ -17,7 +17,7 @@ const helper = createColumnHelper<Row>()
 
 export function DataTableMolecule({ node }: MoleculeProps) {
   const actions = useCanvasActions()
-  const source = node.bindings?.source ?? ''
+  const source = (Array.isArray(node.bindings?.source) ? node.bindings!.source[0] : node.bindings?.source) ?? ''
   const data = resolveMockSource(source)
   const wanted = (node.props?.columns as string[] | undefined) ?? null
   const filter = (node.state?.filter as Record<string, string> | undefined) ?? {}

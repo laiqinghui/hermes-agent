@@ -1,8 +1,8 @@
 import { MOLECULE_TYPES } from './types'
 import type { CanvasDoc } from './types'
 
-test('phase-1 catalog matches the backend', () => {
-  expect([...MOLECULE_TYPES]).toEqual(['card', 'stat', 'data-table', 'select'])
+test('catalog includes all registered molecule types', () => {
+  expect([...MOLECULE_TYPES]).toEqual(['card', 'stat', 'data-table', 'select', 'esri:map', 'esri:legend', 'esri:feature-table'])
 })
 
 test('a canonical doc typechecks', () => {
