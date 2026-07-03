@@ -7,7 +7,7 @@ import type { MoleculeProps } from '../registry'
 export function EsriFeatureTableMolecule({ node }: MoleculeProps) {
   const actions = useCanvasActions()
   const ref = useRef<HTMLElement | null>(null)
-  const layerHandle = node.bindings?.layer as string | undefined
+  const layerHandle = Array.isArray(node.bindings?.layer) ? node.bindings!.layer[0] : node.bindings?.layer as string | undefined
   const mapRef = node.bindings?.mapRef as string | undefined
 
   useEffect(() => {

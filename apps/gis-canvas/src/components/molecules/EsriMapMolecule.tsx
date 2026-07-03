@@ -29,15 +29,18 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
       const esri = await loadEsri()
       if (cancelled) return
       const view = el.view as { map: { add(layer: unknown): void } } | undefined
+      if (!view) console.warn('esri:map view not ready; layers not added', node.id)
       for (const r of layerRefs) {
         try {
           const layer = buildLayer(r, esri)
-          view?.map.add(layer)
+          if (view) view.map.add(layer)
         } catch (e) { console.error('layer build failed', r, e) }
       }
       // selection: click → hitTest → write objectIds to state.selection (reactive interaction)
+      // arcgisViewClick is a CustomEvent; the screen point is in event.detail (not the event itself)
       clickHandle = esri.reactiveUtils.on(() => el, 'arcgisViewClick', async (event: unknown) => {
-        const hit = await (el as Record<string, unknown> & { hitTest?(e: unknown): Promise<{ results: unknown[] }> }).hitTest?.(event)
+        const detail = (event as Record<string, unknown>)?.['detail']
+        const hit = await (el as Record<string, unknown> & { hitTest?(e: unknown): Promise<{ results: unknown[] }> }).hitTest?.(detail)
         const ids = (hit?.results ?? [])
           .map((r: unknown) => (r as Record<string, unknown>)?.['graphic'] as Record<string, unknown>)
           .map((g) => (g?.['attributes'] as Record<string, unknown> | undefined)?.['__oid'] ?? (g?.['getObjectId'] as (() => unknown) | undefined)?.())
