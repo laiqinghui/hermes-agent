@@ -96,6 +96,9 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     sendPrompt: text => { void send(text) }
   }), [client, send])
 
+  // NOTE: client doc.rev advances only on agent tool.complete renders, NOT on canvas.interaction
+  // (interactions bump the SERVER rev but emit no event). This is intentional: the override-reset
+  // below keys on doc.rev so optimistic interaction overlays survive until a real agent re-render.
   // reset local overrides whenever the agent re-renders the canvas (new structure)
   useEffect(() => { setOverrides({}) }, [doc?.rev])
 

@@ -36,5 +36,9 @@ export function runHandler(
     case 'agent':
       actions.sendPrompt(handler.prompt)
       return
+    case 'open':
+      // Reserved for the overlay layer (Phase 3+ overlays). No runtime effect yet;
+      // schema permits it (validated to require `overlay`). Implement when overlays land.
+      return
   }
 }

@@ -11,6 +11,9 @@ export function useCanvasDoc(client: CanvasEventSource): { doc: CanvasDoc | null
   const [errors, setErrors] = useState<string[]>([])
 
   useEffect(() => {
+    // NOTE: client doc.rev advances only on agent tool.complete renders, NOT on canvas.interaction
+    // (interactions bump the SERVER rev but emit no event). This is intentional: the override-reset
+    // below keys on doc.rev so optimistic interaction overlays survive until a real agent re-render.
     const off = client.on('tool.complete', event => {
       const env = extractCanvasEnvelope(event)
       if (!env) return

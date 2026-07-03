@@ -35,3 +35,9 @@ test('agent handler sends the prompt', () => {
   runHandler(h, node, actions, { value: undefined })
   expect(calls).toContain('prompt:Summarize selection')
 })
+
+test('open handler is a safe no-op (reserved for overlays) and does not touch actions', () => {
+  const { actions, calls } = spyActions()
+  runHandler({ kind: 'open', overlay: 'dlg1' } as any, node, actions, { value: undefined })
+  expect(calls).toEqual([])
+})

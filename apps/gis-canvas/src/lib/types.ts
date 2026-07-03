@@ -16,6 +16,7 @@ export type Handler =
   | { kind: 'set'; target: string; key: string; value: unknown }
   | { kind: 'reactive'; controls: string } // "targetId.key.subkey" path written from event value
   | { kind: 'agent'; prompt: string }
+  | { kind: 'open'; overlay: string }
 
 export interface ComponentNode {
   id: string
