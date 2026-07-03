@@ -19,12 +19,32 @@ function EsriMap(props: MoleculeProps) {
   )
 }
 
+const EsriLegendLazy = lazy(() => import('./molecules/EsriLegendMolecule').then(m => ({ default: m.EsriLegendMolecule })))
+function EsriLegend(props: MoleculeProps) {
+  return (
+    <Suspense fallback={<div className="p-2 text-xs text-neutral-400">Loading legend…</div>}>
+      <EsriLegendLazy {...props} />
+    </Suspense>
+  )
+}
+
+const EsriFeatureTableLazy = lazy(() => import('./molecules/EsriFeatureTableMolecule').then(m => ({ default: m.EsriFeatureTableMolecule })))
+function EsriFeatureTable(props: MoleculeProps) {
+  return (
+    <Suspense fallback={<div className="p-2 text-xs text-neutral-400">Loading feature table…</div>}>
+      <EsriFeatureTableLazy {...props} />
+    </Suspense>
+  )
+}
+
 export const COMPONENT_REGISTRY: Record<string, ComponentType<MoleculeProps>> = {
   card: CardMolecule,
   stat: StatMolecule,
   'data-table': DataTableMolecule,
   select: SelectMolecule,
-  'esri:map': EsriMap
+  'esri:map': EsriMap,
+  'esri:legend': EsriLegend,
+  'esri:feature-table': EsriFeatureTable
 }
 
 export function UnknownTile({ node }: MoleculeProps) {
