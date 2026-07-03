@@ -1,5 +1,6 @@
 @import "@esri/calcite-components/calcite/calcite.css";
 @import "@arcgis/map-components/main.css";
+@import "tailwindcss";
 
 /* Calcite → shadcn token bridge (spec §9). Neutral shadcn-ish palette. */
 :root {
@@ -13,5 +14,3 @@
   --calcite-color-brand-hover: #6a9ef0;
   --calcite-color-brand-press: #5a8fe0;
 }
-
-@import "tailwindcss";
