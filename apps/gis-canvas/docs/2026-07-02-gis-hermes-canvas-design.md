@@ -375,3 +375,19 @@ Fold these into the Phase 3 plan (they are small hardening/clarity items, none b
 4. **`merge.ts` shared-state note.** An un-overridden node shares the server doc's `state` object by
    reference (safe today — nothing mutates `node.state` in place). Add a one-line comment; if any future
    molecule mutates state in place, switch to a defensive clone.
+
+## 19. Phase 3 run notes / known issues (ESRI + Vite dev)
+
+- **Map demo runs via a production preview, not the dev server.** `@arcgis/core`'s ESM trips Vite's
+  dev-server transform of its lazily-imported modules ("Unexpected token '(' " from `loadEsri()`;
+  reproduced cold, independent of `optimizeDeps include/exclude`). The **production build works
+  perfectly** (rollup handles it): map + OSM basemap + client-side incident layer + legend render with
+  zero console errors. Run the GIS canvas with:
+  `VITE_HERMES_TOKEN=dev-gis-local npm run -w @hermes/gis-canvas build && (cd apps/gis-canvas && npx vite preview --port 5174 --host 127.0.0.1)`.
+  Non-map components (Phases 1-2) still work under `npm run dev`.
+- **Phase 3 follow-up:** get `@arcgis/core` working under `npm run dev` (candidate approaches: a custom
+  esbuild dep-optimizer target, `@arcgis/create`'s Vite template config, or serving ESRI assets/workers
+  locally via `setAssetPath` to a copied `@arcgis/core/assets`). Non-blocking — the feature is verified
+  via preview.
+- **assetsPath:** `loadEsri()` sets `esriConfig.assetsPath` to the versioned ArcGIS CDN (keyless) so
+  client-side `FeatureLayer` feature-processing workers load. Bump the version on `@arcgis/core` upgrades.
