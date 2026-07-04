@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   createColumnHelper,
   flexRender,
@@ -8,7 +8,8 @@ import {
   useReactTable,
   type SortingState
 } from '@tanstack/react-table'
-import { resolveMockSource } from '../../lib/mock-data'
+import { resolveMockSource, type MockSource, type MockField } from '../../lib/mock-data'
+import { isDataHandle } from '../../lib/data-plane'
 import { useCanvasActions } from '../HandlerContext'
 import type { MoleculeProps } from '../registry'
 
@@ -18,7 +19,23 @@ const helper = createColumnHelper<Row>()
 export function DataTableMolecule({ node }: MoleculeProps) {
   const actions = useCanvasActions()
   const source = (Array.isArray(node.bindings?.source) ? node.bindings!.source[0] : node.bindings?.source) ?? ''
-  const data = resolveMockSource(source)
+
+  // data:// handles are pulled from the broker (data plane); mock:// resolves locally.
+  const [fetched, setFetched] = useState<MockSource | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    if (isDataHandle(source)) {
+      actions
+        .fetchData(source, { pageSize: 1000 })
+        .then(p => { if (!cancelled) setFetched({ schema: p.schema as MockField[], rows: p.rows as Array<Record<string, string | number>> }) })
+        .catch(() => { if (!cancelled) setFetched({ schema: [], rows: [] }) })
+    } else {
+      setFetched(null)
+    }
+    return () => { cancelled = true }
+  }, [source, actions])
+
+  const data = isDataHandle(source) ? fetched : resolveMockSource(source)
   const wanted = (node.props?.columns as string[] | undefined) ?? null
   const filter = (node.state?.filter as Record<string, string> | undefined) ?? {}
   const selected = (node.state?.rowSelection as string[] | undefined) ?? []
