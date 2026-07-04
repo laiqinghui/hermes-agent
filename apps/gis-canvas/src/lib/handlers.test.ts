@@ -7,7 +7,8 @@ function spyActions() {
   const actions: CanvasActions = {
     reportInteraction: (id, patch) => calls.push(`report:${id}:${JSON.stringify(patch)}`),
     setLocalState: (id, patch) => calls.push(`local:${id}:${JSON.stringify(patch)}`),
-    sendPrompt: text => calls.push(`prompt:${text}`)
+    sendPrompt: text => calls.push(`prompt:${text}`),
+    fetchData: async () => ({ ok: true, rows: [], schema: [], total: 0, page: 0, pageSize: 0 })
   }
   return { actions, calls }
 }

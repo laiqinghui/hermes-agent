@@ -5,6 +5,7 @@ import { HandlerProvider } from './components/HandlerContext'
 import { createGatewayClient, resolveWsUrl, type GatewayLike } from './lib/gateway'
 import { useCanvasDoc } from './lib/use-canvas-doc'
 import { mergeOverrides, type Overrides } from './lib/merge'
+import { fetchDataPage } from './lib/data-plane'
 import type { CanvasActions } from './lib/handlers'
 
 const LOGGED_EVENTS = new Set(['message.delta', 'message.complete', 'tool.start', 'tool.complete', 'error'])
@@ -93,7 +94,8 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
       const key = canvasKeyRef.current
       if (key) void client.request('canvas.interaction', { session_id: key, target: id, state: patch }).catch(() => {})
     },
-    sendPrompt: text => { void send(text) }
+    sendPrompt: text => { void send(text) },
+    fetchData: (handle, opts) => fetchDataPage(client, handle, opts)
   }), [client, send])
 
   // NOTE: client doc.rev advances only on agent tool.complete renders, NOT on canvas.interaction

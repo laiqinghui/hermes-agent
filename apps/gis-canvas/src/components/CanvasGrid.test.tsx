@@ -9,6 +9,7 @@ function renderWithActions(d: CanvasDoc, actions: Partial<CanvasActions> = {}) {
     setLocalState: () => {},
     reportInteraction: () => {},
     sendPrompt: () => {},
+    fetchData: async () => ({ ok: true, rows: [], schema: [], total: 0, page: 0, pageSize: 0 }),
     ...actions
   }
   return render(

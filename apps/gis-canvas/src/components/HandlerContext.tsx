@@ -5,7 +5,8 @@ import type { CanvasActions } from '../lib/handlers'
 const NOOP: CanvasActions = {
   setLocalState: () => {},
   reportInteraction: () => {},
-  sendPrompt: () => {}
+  sendPrompt: () => {},
+  fetchData: async () => ({ ok: false, rows: [], schema: [], total: 0, page: 0, pageSize: 0, errors: ['no gateway'] })
 }
 
 const Ctx = createContext<CanvasActions>(NOOP)

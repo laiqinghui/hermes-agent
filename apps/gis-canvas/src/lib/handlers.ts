@@ -1,5 +1,6 @@
 // apps/gis-canvas/src/lib/handlers.ts
 import type { ComponentNode, Handler } from './types'
+import type { DataPage } from './data-plane'
 
 export interface CanvasActions {
   /** Optimistic local state change (instant re-render). */
@@ -8,6 +9,8 @@ export interface CanvasActions {
   reportInteraction(id: string, patch: Record<string, unknown>): void
   /** Trigger an agent turn. */
   sendPrompt(text: string): void
+  /** Pull a page of rows from the data plane by handle (canvas.data_fetch). */
+  fetchData(handle: string, opts?: { page?: number; pageSize?: number; filter?: Record<string, string>; fields?: string[] }): Promise<DataPage>
 }
 
 export interface HandlerEvent {
