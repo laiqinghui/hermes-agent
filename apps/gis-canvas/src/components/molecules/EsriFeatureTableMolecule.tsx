@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { loadEsri } from '../../lib/esri/loader'
-import { buildLayer } from '../../lib/esri/layers'
+import { buildLayer, buildRowsLayer } from '../../lib/esri/layers'
+import { isDataHandle } from '../../lib/data-plane'
 import { useCanvasActions } from '../HandlerContext'
 import type { MoleculeProps } from '../registry'
 
@@ -17,7 +18,15 @@ export function EsriFeatureTableMolecule({ node }: MoleculeProps) {
     ;(async () => {
       const esri = await loadEsri()
       if (cancelled) return
-      try { el.layer = buildLayer(layerHandle, esri) } catch (e) { console.error('feature-table layer failed', e) }
+      try {
+        if (isDataHandle(layerHandle)) {
+          const page = await actions.fetchData(layerHandle, { pageSize: 5000 })
+          if (cancelled) return
+          el.layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, layerHandle)
+        } else {
+          el.layer = buildLayer(layerHandle, esri)
+        }
+      } catch (e) { console.error('feature-table layer failed', e) }
     })()
     const onSel = (e: any) => {
       const ids = (e?.detail?.added ?? []).map((f: any) => f?.attributes?.__oid ?? f?.getObjectId?.()).filter((x: unknown) => x != null)

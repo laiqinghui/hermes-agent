@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { loadEsri } from '../../lib/esri/loader'
-import { buildLayer } from '../../lib/esri/layers'
+import { buildLayer, buildRowsLayer } from '../../lib/esri/layers'
+import { isDataHandle } from '../../lib/data-plane'
 import { useCanvasActions } from '../HandlerContext'
 import type { MoleculeProps } from '../registry'
 
@@ -32,7 +33,14 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
       if (!view) console.warn('esri:map view not ready; layers not added', node.id)
       for (const r of layerRefs) {
         try {
-          const layer = buildLayer(r, esri)
+          let layer: unknown
+          if (isDataHandle(r)) {
+            const page = await actions.fetchData(r, { pageSize: 5000 })
+            if (cancelled) return
+            layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, r)
+          } else {
+            layer = buildLayer(r, esri)
+          }
           if (view) view.map.add(layer)
         } catch (e) { console.error('layer build failed', r, e) }
       }
