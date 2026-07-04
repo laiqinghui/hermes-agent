@@ -5,6 +5,7 @@ one core edit). Returns a plain result dict; the @method wraps it with _ok().
 """
 from __future__ import annotations
 
+from .broker import get_broker
 from .interaction import apply_interaction
 from .tools_canvas import get_store
 
@@ -24,3 +25,19 @@ def handle_canvas_interaction(params: dict) -> dict:
         return {"ok": False, "errors": errors, "rev": doc.get("rev")}
     stored = store.put(session_id, patched)
     return {"ok": True, "rev": stored.get("rev")}
+
+
+def handle_canvas_data_fetch(params: dict) -> dict:
+    """Inbound canvas.data_fetch: serve a page of rows from the broker cache by
+    handle. Bulk rows travel on this data plane only — never the agent context."""
+    p = params or {}
+    handle = str(p.get("handle") or "")
+    if not handle:
+        return {"ok": False, "errors": ["'handle' is required"]}
+    return get_broker().page(
+        handle,
+        page=int(p.get("page", 0) or 0),
+        page_size=int(p.get("pageSize", 100) or 100),
+        filter=p.get("filter"),
+        fields=p.get("fields"),
+    )

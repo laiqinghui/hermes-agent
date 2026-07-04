@@ -48,3 +48,18 @@ def test_pre_llm_call_injects_summary_for_that_session(plugin):
 
 def test_pre_llm_call_none_when_no_canvas(plugin):
     assert plugin.hooks.on_pre_llm_call(session_id="empty") is None
+
+
+def test_data_fetch_pages_from_broker(plugin, tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_GIS_DATA_DIR", str(tmp_path))
+    plugin.broker.reset_broker_for_tests()
+    h = plugin.broker.get_broker().put([{"id": "a"}, {"id": "b"}], [{"name": "id", "type": "string"}])
+    out = plugin.wire.handle_canvas_data_fetch({"handle": h, "page": 0, "pageSize": 1})
+    assert out["ok"] and out["total"] == 2 and out["rows"] == [{"id": "a"}]
+
+
+def test_data_fetch_missing_handle_errors(plugin, tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_GIS_DATA_DIR", str(tmp_path))
+    plugin.broker.reset_broker_for_tests()
+    out = plugin.wire.handle_canvas_data_fetch({"handle": "data://nope"})
+    assert out["ok"] is False and out["errors"]

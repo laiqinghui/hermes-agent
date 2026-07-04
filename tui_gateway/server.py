@@ -13783,4 +13783,14 @@ def _(rid, params: dict) -> dict:
     if not result.get("ok"):
         return _err(rid, -32000, "; ".join(result.get("errors", ["canvas.interaction failed"])))
     return _ok(rid, result)
+@method("canvas.data_fetch")
+def _(rid, params: dict) -> dict:
+    try:
+        from hermes_plugins.gis_canvas.wire import handle_canvas_data_fetch
+    except Exception as exc:  # plugin absent/disabled — fail soft
+        return _err(rid, -32601, f"gis-canvas plugin unavailable: {exc}")
+    result = handle_canvas_data_fetch(params or {})
+    if not result.get("ok"):
+        return _err(rid, -32000, "; ".join(result.get("errors", ["canvas.data_fetch failed"])))
+    return _ok(rid, result)
 # <<< gis-canvas >>>
