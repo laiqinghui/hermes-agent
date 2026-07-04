@@ -190,21 +190,44 @@ volume:
 | Canvas document | structure + `data://handle` bindings + interaction state | session state → frontend | No — handle only |
 | **Data plane** | the actual rows / features | gateway broker ↔ browser (never the agent) | **Yes** |
 
-The Data Agent returns **either** form; the broker normalizes both into a `DataHandle`, so the upper
-two planes are identical regardless of which the Data Agent gave us:
+**Real Data Agent contract (verified against the vendor docs + a live sandbox).** The Enterprise Data
+Agent is an **A2A (Google Agent2Agent) streaming server** (JSON-RPC 2.0 `message/stream` over HTTP,
+NDJSON response) that virtualizes Denodo SQL views. It returns **inline data only** — never a service
+URL, never GeoJSON:
+- `artifact-update` with a **`query_result` DataPart** → `{ columns, rows, row_count, vql }` (tabular).
+- `artifact-update` with a **`datasets` DataPart** → discovery metadata `[{ view_name, database_name,
+  description }]`.
+- plus `status-update` heartbeats (`submitted`/`working`/`input-required`/`auth-required`/`failed`)
+  and a terminal `task` event; substantive prose arrives as a `response` TextPart.
+It enforces **`Authorization: Bearer <token>` on every call** (`DATA_AGENT_REQUIRE_USER_AUTH=true`,
+no anonymous mode), is **stateful/multi-turn** via `contextId` (a LangGraph thread), may pause with
+`input-required` for clarification, and retrieves **one table per call (no cross-table JOINs)** —
+the planner must retrieve piecemeal. Skill selection (discovery vs retrieval vs clarification) is
+**automatic from the prompt** — there is no `skill_id`.
 
-- **`DataSource` interface** (`query() → DataHandle`), protocol-agnostic (A2A-native tool vs. A2A↔MCP
-  shim, deferred). A2A (Google Agent2Agent) ≠ Hermes's ACP/MCP.
-- `data_query(...)` runs server-side and **always** returns to the agent only
-  `{ handle, schema, rowCount, sample(≤3 rows) }` — **never bulk rows**. **Sampling is uniform:**
-  - **service** case → broker samples by querying the service (`queryFeatures`, top-N);
-  - **rows** case → broker samples the rows it just received.
-  Either way the agent gets exactly the context it needs to formulate the spec, and nothing heavy.
+**Two DataSources behind one interface** (not "either form from one agent"):
+- **`A2ADataSource`** → the Enterprise Data Agent. **Always yields `kind:"rows"`.** Denodo rows are
+  *tabular with no geometry*; the broker/molecule **synthesizes graphics client-side** from lng/lat
+  (or WKT) columns — exactly the Phase-3 `graphicsFromMockSource`/`fieldsFromSchema` path.
+- **`ServiceDataSource`** (separate, direct ArcGIS) → `kind:"service"`, a native FeatureServer/MapServer
+  URL the `esri:map` binds directly (`new FeatureLayer({ url })`) and streams from. This is the Phase-3
+  public-FeatureServer path; it is **not** fed by the Data Agent.
+
+- **`DataSource` interface** — `query(prompt, { authHeader, contextId? }) → DataHandle` (streaming A2A
+  adapter under the hood). The `authHeader` provider is injected from day one: `Bearer
+  sandbox-test-token` in Phase 4a, a real Keycloak token in Phase 4b — a drop-in, not a refactor.
+- **Two agent-facing tools** (split from the old single `data_query`):
+  - `data_discover(prompt)` → runs discovery, returns the `datasets` metadata to the agent context so it
+    can choose what to retrieve/render. Metadata only — no rows.
+  - `data_query(prompt)` → runs retrieval server-side and **always** returns to the agent only
+    `{ handle, schema, rowCount, sample(≤3 rows) }` — **never bulk rows**. Sampling: the broker takes
+    the first ≤3 of the rows it just received (`rowCount` = rows returned by *this* retrieval, not full
+    table cardinality). Gives the agent exactly enough to formulate the spec, nothing heavy.
 - **Handle kinds:**
-  - `kind:"service"` → native ArcGIS FeatureServer/MapServer URL. The `esri:map` binds it directly
-    (`new FeatureLayer({ url })`) and streams from the service; gateway proxies enterprise auth.
-  - `kind:"rows"` → the actual rows / GeoJSON the Data Agent returned, held in the broker cache
-    (TTL'd), addressed by handle.
+  - `kind:"rows"` → the tabular rows the Data Agent (or `MockDataSource`) returned, held in the broker
+    cache (TTL'd), addressed by handle. Geometry synthesized client-side on fetch.
+  - `kind:"service"` → native ArcGIS FeatureServer/MapServer URL (direct `ServiceDataSource`), streamed
+    by the ESRI SDK; gateway proxies enterprise auth.
 
 **Data plane — how the "actual rows" reach the frontend.** The canvas document only ever carries
 `data://handle`; rows travel on a dedicated channel, parallel to (never inside) the document:
@@ -265,7 +288,8 @@ re-verify token mappings on ArcGIS/Calcite upgrades.
 ## 11. Backend plugin (`plugins/gis-canvas`) & extension points
 
 Packaged as a Hermes plugin (`register(ctx)`), loaded additively:
-- **Tools** via `ctx.register_tool()` — `render_view`, `update_view`, `canvas_get_state`, `data_query`.
+- **Tools** via `ctx.register_tool()` — `render_view`, `update_view`, `canvas_get_state`, `data_discover`,
+  `data_query`.
 - **Hooks** via `ctx.register_hook()` — inject the `<canvas>` awareness summary each turn; handle
   inbound `canvas.interaction`.
 - **Data broker / DataSource / DataHandle cache** — plain modules inside the plugin.
@@ -308,7 +332,19 @@ merges `upstream/main` into a throwaway branch and runs tests as an early-warnin
    subscriptions.
 3. **GIS layer** — `esri:map` (lazy), `esri:feature-table`/`legend`/`layer-list`, Calcite theming,
    CSP/assets, API-key proxy.
-4. **Data broker** — `DataSource` + `DataHandle` + cache/paging; wire the real A2A/MCP Data Agent adapter.
+4. **Data broker** — split into two sub-phases (auth is a project in itself; it must not block the data flow):
+   - **4a — data flow (sandbox-backed, no auth):** `DataSource` interface + auth-header seam,
+     streaming `A2ADataSource` adapter (NDJSON dispatch, `contextId`, `input-required`, `auth-required`),
+     `MockDataSource` for the render path, `DataHandle` cache/paging, `canvas.data_fetch` RPC,
+     `data_discover`/`data_query` tools, rows→handle→map/table wiring. Tested against the **live sandbox**
+     (`DATA_AGENT_MODE=sandbox`, accepts any non-empty Bearer; ships `tests/test_sandbox.py` + docker-compose)
+     for protocol correctness, and `MockDataSource` for structured-rows rendering (**sandbox `retrieve`
+     emits `datasets` + text, not a `query_result` DataPart — verified live**, so it cannot drive the
+     render path alone).
+   - **4b — real auth + live Denodo (design now, validate when access lands):** OIDC BFF (Keycloak
+     Authorization Code + PKCE + confidential client + server-side session store + refresh rotation;
+     the vendor's ~150-line `caller_agent/main.py` is liftable), Bearer injection via the 4a auth-header
+     seam, `iss` DNS consistency + streaming reverse-proxy (`proxy_buffering off`) hardening.
 5. **Harden** — full catalog, validation edge cases, reconnect/rehydration + headless-render tests.
 
 Each phase is independently demoable and testable; none touches the agent core.
@@ -327,11 +363,16 @@ Each phase is independently demoable and testable; none touches the agent core.
 
 ## 15. Open / deferred decisions
 
-- A2A transport specifics (native A2A client tool vs A2A↔MCP shim) — decide in Phase 4 behind
-  `DataSource`.
-- `pre_gateway_dispatch` short-circuit capability + whether the gateway process loads plugins —
-  verify in Phase 2 (determines §11 preferred vs fallback).
-- Enterprise Data Agent's concrete A2A return contract (normalized to `DataHandle` regardless).
+- A2A transport specifics — **resolved:** manual JSON-RPC 2.0 `message/stream` over `httpx` (no A2A
+  SDK dependency required; the vendor's wire format is the whole contract). Kept behind `DataSource`.
+- Enterprise Data Agent's concrete A2A return contract — **resolved** (see §8): inline `query_result`
+  rows / `datasets` metadata only, Bearer-per-call, stateful `contextId`, one-table-per-retrieval.
+- `input-required` clarification surfacing — Phase 4a decision: does the Hermes agent relay the Data
+  Agent's clarification question to the user (natural, uses Hermes's own loop) or auto-resolve it?
+  Default lean: **relay** — the `data_query` tool returns the clarification text to the agent, which
+  asks the user, then re-queries on the same `contextId`.
+- Phase 4b auth ownership — who is the BFF (Hermes gateway/plugin vs a sidecar caller-agent). Design in
+  4b; the 4a auth-header seam makes either a drop-in.
 
 ## 16. Key Hermes files (verified)
 
@@ -391,3 +432,11 @@ Fold these into the Phase 3 plan (they are small hardening/clarity items, none b
   via preview.
 - **assetsPath:** `loadEsri()` sets `esriConfig.assetsPath` to the versioned ArcGIS CDN (keyless) so
   client-side `FeatureLayer` feature-processing workers load. Bump the version on `@arcgis/core` upgrades.
+- **Phase 4a data flow (sandbox).** Start the Data Agent sandbox (`docker compose up` or
+  `DATA_AGENT_MODE=sandbox uvicorn server:app --host 0.0.0.0 --port 2024`). The gateway defaults to
+  `GIS_DATA_SOURCE=mock` (structured geo rows → real map/table render, since sandbox `retrieve` emits
+  no `query_result` DataPart). Set `GIS_DATA_SOURCE=a2a` (+ `DATA_AGENT_URL`, `DATA_AGENT_AUTH_TOKEN`)
+  to route `data_discover`/`data_query` through the live A2A adapter. Agent flow: `data_discover` →
+  pick a dataset → `data_query` → bind the returned `data://` handle into a component. The browser
+  pulls rows via `canvas.data_fetch`; bulk rows never enter the agent context. Live adapter smoke test:
+  `.venv/bin/pytest tests/plugins/gis_canvas/test_a2a_sandbox.py` (skips if the sandbox is down).
