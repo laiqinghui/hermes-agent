@@ -9,3 +9,5 @@ provides_tools:
   - render_view
   - update_view
   - canvas_get_state
+  - data_discover
+  - data_query

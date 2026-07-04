@@ -9,9 +9,10 @@ Enable via ~/.hermes/config.yaml:
 
 def register(ctx):
     from .tools_canvas import TOOL_DEFS
+    from .tools_data import DATA_TOOL_DEFS
     from .hooks import on_pre_llm_call
 
-    for name, schema, handler, description, emoji in TOOL_DEFS:
+    for name, schema, handler, description, emoji in TOOL_DEFS + DATA_TOOL_DEFS:
         ctx.register_tool(
             name=name,
             toolset="gis-canvas",

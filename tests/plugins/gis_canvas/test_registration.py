@@ -21,16 +21,19 @@ def test_manifest_declares_tools_and_kind():
     manifest = yaml.safe_load((PLUGIN_DIR / "plugin.yaml").read_text())
     assert manifest["name"] == "gis-canvas"
     assert manifest["kind"] == "standalone"
-    assert set(manifest["provides_tools"]) == {"render_view", "update_view", "canvas_get_state"}
+    assert set(manifest["provides_tools"]) == {
+        "render_view", "update_view", "canvas_get_state", "data_discover", "data_query"}
 
 
-def test_register_registers_three_tools(plugin):
+def test_register_registers_all_tools(plugin):
     import sys
     _ = plugin.tools_canvas  # ensure submodule loaded before register() resolves it
+    _ = plugin.tools_data
     pkg = sys.modules["gis_canvas_plugin"]
     ctx = FakeCtx()
     pkg.register(ctx)
-    assert set(ctx.tools) == {"render_view", "update_view", "canvas_get_state"}
+    assert set(ctx.tools) == {
+        "render_view", "update_view", "canvas_get_state", "data_discover", "data_query"}
     for name, entry in ctx.tools.items():
         assert entry["toolset"] == "gis-canvas"
         assert entry["schema"]["name"] == name
