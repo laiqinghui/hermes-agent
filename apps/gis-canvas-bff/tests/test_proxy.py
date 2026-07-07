@@ -1,4 +1,5 @@
 import os
+import time
 
 import httpx
 import respx
@@ -22,10 +23,10 @@ _BODY = {"jsonrpc": "2.0", "id": "1", "method": "message/stream",
                                 "parts": [{"kind": "text", "text": "hi"}]}}}
 
 
-def _seed_bound(canvas="c1", expires_at=9e9) -> str:
+def _seed_bound(canvas="c1", expires_at=9e9, refresh_token="RT") -> str:
     bff.store._by_sid.clear()
     bff.store._canvas_to_sid.clear()
-    sid = bff.store.create(TokenRecord(access_token="AT", refresh_token="RT", id_token="IT",
+    sid = bff.store.create(TokenRecord(access_token="AT", refresh_token=refresh_token, id_token="IT",
                                        expires_at=expires_at, username="jsmith", roles=["selectdata"]))
     bff.store.bind(sid, [canvas])
     return sid
@@ -63,3 +64,21 @@ def test_proxy_forwards_bearer_and_streams_ndjson():
     assert r.status_code == 200
     assert captured["auth"] == "Bearer AT"
     assert '"kind":"task"' in r.text
+
+
+def test_proxy_propagates_upstream_error_status():
+    _seed_bound(canvas="c1")
+
+    with respx.mock:
+        respx.post("http://localhost:2024/").mock(
+            return_value=httpx.Response(500, text='{"error":"boom"}'))
+        r = TestClient(bff.app).post("/a2a/message", json=_BODY,
+                                     headers={"X-Proxy-Secret": "p" * 40, "X-Canvas-Session": "c1"})
+    assert r.status_code == 500
+
+
+def test_proxy_401_when_token_expired_and_no_refresh():
+    _seed_bound(canvas="c1", expires_at=time.time() - 10, refresh_token="")
+    r = TestClient(bff.app).post("/a2a/message", json=_BODY,
+                                 headers={"X-Proxy-Secret": "p" * 40, "X-Canvas-Session": "c1"})
+    assert r.status_code == 401

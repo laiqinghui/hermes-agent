@@ -5,12 +5,13 @@ id + the shared proxy secret."""
 from __future__ import annotations
 
 import asyncio
+import hmac
 import secrets
 import time
 from collections import defaultdict
 
 import httpx
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -126,28 +127,30 @@ async def _bearer_for(sid: str) -> str | None:
     async with _locks[sid]:
         if store.needs_refresh(sid, time.time()):
             rec = store.get(sid)
-            if rec and rec.refresh_token:
-                async with get_http_client() as client:
-                    meta = await _meta(client)
-                    try:
-                        td = await oidc.refresh_tokens(meta, settings, rec.refresh_token, client)
-                    except httpx.HTTPError:
-                        store.evict(sid)
-                        return None
-                store.update(sid, TokenRecord(
-                    access_token=td["access_token"],
-                    refresh_token=td.get("refresh_token", rec.refresh_token),
-                    id_token=rec.id_token,
-                    expires_at=time.time() + td.get("expires_in", 900),
-                    username=rec.username, roles=rec.roles,
-                ))
+            if not rec or not rec.refresh_token:
+                store.evict(sid)
+                return None
+            async with get_http_client() as client:
+                meta = await _meta(client)
+                try:
+                    td = await oidc.refresh_tokens(meta, settings, rec.refresh_token, client)
+                except httpx.HTTPError:
+                    store.evict(sid)
+                    return None
+            store.update(sid, TokenRecord(
+                access_token=td["access_token"],
+                refresh_token=td.get("refresh_token", rec.refresh_token),
+                id_token=rec.id_token,
+                expires_at=time.time() + td.get("expires_in", 900),
+                username=rec.username, roles=rec.roles,
+            ))
         rec = store.get(sid)
         return rec.access_token if rec else None
 
 
 @app.post("/a2a/message")
 async def a2a_message(request: Request):
-    if request.headers.get("X-Proxy-Secret") != settings.proxy_secret:
+    if not hmac.compare_digest(request.headers.get("X-Proxy-Secret", ""), settings.proxy_secret):
         return JSONResponse({"error": "forbidden"}, status_code=403)
     canvas = request.headers.get("X-Canvas-Session", "")
     sid = store.sid_for_canvas(canvas)
@@ -157,19 +160,28 @@ async def a2a_message(request: Request):
     if not bearer:
         return JSONResponse({"error": "session expired"}, status_code=401)
     body = await request.body()
+    client = get_http_client()
+    req = client.build_request(
+        "POST", settings.data_agent_url.rstrip("/") + "/", content=body,
+        headers={"Content-Type": "application/json",
+                 "Accept": "application/x-ndjson",
+                 "Authorization": f"Bearer {bearer}"},
+    )
+    upstream = await client.send(req, stream=True)
+    if upstream.status_code >= 400:
+        detail = (await upstream.aread()).decode(errors="replace")[:2000]
+        await upstream.aclose()
+        await client.aclose()
+        return JSONResponse({"error": "data agent error", "detail": detail},
+                            status_code=upstream.status_code)
 
     async def _stream():
-        client = get_http_client()
         try:
-            async with client.stream(
-                "POST", settings.data_agent_url.rstrip("/") + "/", content=body,
-                headers={"Content-Type": "application/json",
-                         "Accept": "application/x-ndjson",
-                         "Authorization": f"Bearer {bearer}"},
-            ) as resp:
-                async for chunk in resp.aiter_raw():
-                    yield chunk
+            async for chunk in upstream.aiter_raw():
+                yield chunk
         finally:
+            await upstream.aclose()
             await client.aclose()
 
-    return StreamingResponse(_stream(), media_type="application/x-ndjson")
+    return StreamingResponse(_stream(), status_code=upstream.status_code,
+                             media_type="application/x-ndjson")
