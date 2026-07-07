@@ -7,6 +7,7 @@ import { useCanvasDoc } from './lib/use-canvas-doc'
 import { mergeOverrides, type Overrides } from './lib/merge'
 import { fetchDataPage } from './lib/data-plane'
 import type { CanvasActions } from './lib/handlers'
+import { resolveBffUrl, authMe, loginUrl, bindSessions, logout, type AuthState } from './lib/auth'
 
 const LOGGED_EVENTS = new Set(['message.delta', 'message.complete', 'tool.start', 'tool.complete', 'error'])
 
@@ -27,9 +28,13 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const canvasKeyRef = useRef<string | null>(null)
   const startedRef = useRef(false)
   const nextId = useRef(0)
+  const [auth, setAuth] = useState<AuthState | null>(null)
+  const bffUrl = useMemo(() => resolveBffUrl(import.meta.env as Record<string, string | undefined>), [])
 
   const log = (kind: string, text: string) =>
     setActivity(prev => [...prev.slice(-199), { id: nextId.current++, kind, text }])
+
+  useEffect(() => { void authMe(bffUrl).then(setAuth) }, [bffUrl])
 
   useEffect(() => {
     // Subscribe to activity events. StrictMode double-invokes this effect;
@@ -52,7 +57,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     // calls connect() while the first is still 'connecting' (which returns
     // immediately) and then fires session.create on a socket that isn't open
     // yet → "gateway not connected".
-    if (!startedRef.current) {
+    if (!startedRef.current && auth?.authenticated) {
       startedRef.current = true
       const url = injectedUrl ?? resolveWsUrl(import.meta.env as Record<string, string | undefined>)
       void (async () => {
@@ -61,6 +66,8 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
           const created = await client.request<{ session_id: string; stored_session_id?: string }>('session.create', { cols: 96 })
           sessionIdRef.current = created.session_id
           canvasKeyRef.current = created.stored_session_id ?? created.session_id
+          const idsToBind = [...new Set([created.stored_session_id ?? created.session_id, created.session_id].filter(Boolean))] as string[]
+          void bindSessions(bffUrl, idsToBind)
           setConnected(true)
           log('system', `session ${created.session_id} ready`)
         } catch (err) {
@@ -72,7 +79,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     return () => {
       if (typeof off === 'function') off()
     }
-  }, [client, injectedUrl])
+  }, [client, injectedUrl, auth, bffUrl])
 
   const send = useCallback(async (text: string) => {
     if (!sessionIdRef.current) return
@@ -106,8 +113,26 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
 
   const mergedDoc = doc ? mergeOverrides(doc, overrides) : null
 
+  if (auth && !auth.authenticated) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <a href={loginUrl(bffUrl)} className="rounded bg-blue-600 px-4 py-2 text-white">Log in with Keycloak</a>
+      </div>
+    )
+  }
+
+  const handleLogout = () => {
+    void logout(bffUrl).then(u => { window.location.href = u })
+  }
+
   return (
     <div className="grid h-screen grid-cols-[1fr_360px] font-sans">
+      <button
+        onClick={handleLogout}
+        className="fixed right-2 top-2 z-10 rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-600"
+      >
+        Log out
+      </button>
       <main className="overflow-auto bg-neutral-100 p-4">
         {mergedDoc ? (
           <HandlerProvider actions={actions}>
