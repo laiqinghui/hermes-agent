@@ -1,13 +1,12 @@
-"""DataSource abstraction: A2ADataSource (Enterprise Data Agent, streaming) and
-MockDataSource (structured geo rows for the render path). The auth-header
-provider is injected so Phase 4b can swap sandbox-token -> real Keycloak token
-with no signature change."""
+"""DataSource abstraction: A2ADataSource (Enterprise Data Agent, streaming via the
+gis-canvas BFF proxy) and MockDataSource (structured geo rows for the render path).
+The BFF handles auth (Keycloak-backed session -> Data Agent token); the plugin only
+threads the caller's session_id through as a header."""
 from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Callable
 
 from . import a2a_client  # relative: resolves under the gis_canvas_plugin package loader
 
@@ -36,22 +35,27 @@ def rows_from_query_result(qr: dict) -> tuple[list[dict], list[dict]]:
 
 class DataSource(ABC):
     @abstractmethod
-    def discover(self, prompt: str) -> list[dict]: ...
+    def discover(self, prompt: str, session_id: str | None = None) -> list[dict]: ...
     @abstractmethod
-    def query(self, prompt: str, context_id: str | None = None) -> QueryResult: ...
+    def query(self, prompt: str, context_id: str | None = None,
+              session_id: str | None = None) -> QueryResult: ...
 
 
 class A2ADataSource(DataSource):
-    def __init__(self, url: str, auth_provider: Callable[[], str]):
-        self._url = url
-        self._auth = auth_provider
+    def __init__(self, bff_url: str, proxy_secret: str):
+        self._endpoint = bff_url.rstrip("/") + "/a2a/message"
+        self._proxy_secret = proxy_secret
 
-    def discover(self, prompt: str) -> list[dict]:
-        r = a2a_client.query(self._url, self._auth(), prompt)
+    def _headers(self, session_id: str | None) -> dict:
+        return {"X-Canvas-Session": session_id or "", "X-Proxy-Secret": self._proxy_secret}
+
+    def discover(self, prompt: str, session_id: str | None = None) -> list[dict]:
+        r = a2a_client.query(self._endpoint, prompt, headers=self._headers(session_id))
         return r.datasets or []
 
-    def query(self, prompt: str, context_id: str | None = None) -> QueryResult:
-        r = a2a_client.query(self._url, self._auth(), prompt, context_id)
+    def query(self, prompt: str, context_id: str | None = None,
+              session_id: str | None = None) -> QueryResult:
+        r = a2a_client.query(self._endpoint, prompt, context_id, headers=self._headers(session_id))
         if r.clarification:
             return QueryResult(rows=[], schema=[], row_count=0,
                                context_id=r.context_id, clarification=r.clarification)
@@ -93,11 +97,12 @@ class MockDataSource(DataSource):
     def __init__(self, catalog: dict | None = None):
         self._catalog = catalog or _DEFAULT_CATALOG
 
-    def discover(self, prompt: str) -> list[dict]:
+    def discover(self, prompt: str, session_id: str | None = None) -> list[dict]:
         return [{"view_name": name, "database_name": e["database_name"], "description": e["description"]}
                 for name, e in self._catalog.items()]
 
-    def query(self, prompt: str, context_id: str | None = None) -> QueryResult:
+    def query(self, prompt: str, context_id: str | None = None,
+              session_id: str | None = None) -> QueryResult:
         low = (prompt or "").lower()
         entry = next((e for n, e in self._catalog.items() if n in low), None)
         if entry is None:
@@ -106,15 +111,12 @@ class MockDataSource(DataSource):
                            row_count=len(entry["rows"]), context_id=context_id)
 
 
-def default_auth_provider() -> str:
-    return f"Bearer {os.environ.get('DATA_AGENT_AUTH_TOKEN', 'sandbox-test-token')}"
-
-
 def make_data_source() -> DataSource:
     kind = os.environ.get("GIS_DATA_SOURCE", "mock").lower()
     if kind == "a2a":
-        url = os.environ.get("DATA_AGENT_URL", "http://localhost:2024")
-        return A2ADataSource(url, default_auth_provider)
+        bff_url = os.environ.get("GIS_BFF_URL", "http://localhost:9109")
+        proxy_secret = os.environ.get("GIS_BFF_PROXY_SECRET", "")
+        return A2ADataSource(bff_url, proxy_secret)
     return MockDataSource()
 
 

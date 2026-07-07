@@ -31,13 +31,29 @@ def test_data_query_relays_clarification(plugin, tmp_path, monkeypatch):
     ds = plugin.datasource
 
     class Clar(ds.DataSource):
-        def discover(self, p): return []
-        def query(self, p, context_id=None):
+        def discover(self, p, session_id=None): return []
+        def query(self, p, context_id=None, session_id=None):
             return ds.QueryResult([], [], 0, context_id="cx", clarification="which dataset?")
 
     monkeypatch.setattr(plugin.tools_data, "get_data_source", lambda: Clar())
     out = json.loads(plugin.tools_data.data_query({"prompt": "ambiguous"}))
     assert out["needs_input"] and out["clarification"] == "which dataset?" and out["context_id"] == "cx"
+
+
+def test_data_query_forwards_session_id(plugin, tmp_path, monkeypatch):
+    _reset(plugin, tmp_path, monkeypatch)
+    ds = plugin.datasource
+    seen = {}
+
+    class Recorder(ds.DataSource):
+        def discover(self, p, session_id=None): return []
+        def query(self, p, context_id=None, session_id=None):
+            seen["session_id"] = session_id
+            return ds.QueryResult([], [], 0, context_id="cx")
+
+    monkeypatch.setattr(plugin.tools_data, "get_data_source", lambda: Recorder())
+    json.loads(plugin.tools_data.data_query({"prompt": "x"}, session_id="c1"))
+    assert seen["session_id"] == "c1"
 
 
 def test_registration_includes_data_tools(plugin):

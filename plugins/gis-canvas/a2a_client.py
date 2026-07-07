@@ -63,8 +63,8 @@ def collect(events: Iterable[dict]) -> A2AResult:
     return r
 
 
-def stream_events(url: str, auth_header: str | None, prompt: str,
-                  context_id: str | None = None, *, timeout: float = 180.0) -> Iterator[dict]:
+def stream_events(endpoint_url: str, prompt: str, context_id: str | None = None,
+                  *, headers: dict | None = None, timeout: float = 180.0) -> Iterator[dict]:
     import httpx  # local import: keep module importable without httpx for pure collect() tests
     message = {"messageId": str(uuid.uuid4()), "role": "user",
                "parts": [{"kind": "text", "text": prompt}]}
@@ -72,10 +72,10 @@ def stream_events(url: str, auth_header: str | None, prompt: str,
         message["contextId"] = context_id
     payload = {"jsonrpc": "2.0", "id": str(uuid.uuid4()), "method": "message/stream",
                "params": {"message": message}}
-    headers = {"Content-Type": "application/json", "Accept": "application/x-ndjson"}
-    if auth_header:
-        headers["Authorization"] = auth_header
-    with httpx.stream("POST", url.rstrip("/") + "/", json=payload, headers=headers, timeout=timeout) as resp:
+    h = {"Content-Type": "application/json", "Accept": "application/x-ndjson"}
+    if headers:
+        h.update(headers)
+    with httpx.stream("POST", endpoint_url, json=payload, headers=h, timeout=timeout) as resp:
         resp.raise_for_status()
         for line in resp.iter_lines():
             line = line.strip()
@@ -89,6 +89,6 @@ def stream_events(url: str, auth_header: str | None, prompt: str,
                 continue
 
 
-def query(url: str, auth_header: str | None, prompt: str,
-          context_id: str | None = None, *, timeout: float = 180.0) -> A2AResult:
-    return collect(stream_events(url, auth_header, prompt, context_id, timeout=timeout))
+def query(endpoint_url: str, prompt: str, context_id: str | None = None,
+          *, headers: dict | None = None, timeout: float = 180.0) -> A2AResult:
+    return collect(stream_events(endpoint_url, prompt, context_id, headers=headers, timeout=timeout))

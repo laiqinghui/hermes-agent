@@ -1,35 +1,27 @@
 import os
-
 import pytest
 
-URL = os.environ.get("DATA_AGENT_URL", "http://localhost:2024")
+BFF = os.environ.get("GIS_BFF_URL", "http://localhost:9109")
+SECRET = os.environ.get("GIS_BFF_PROXY_SECRET", "")
 
 
-def _sandbox_up() -> bool:
+def _bff_up() -> bool:
     try:
         import httpx
-        httpx.get(f"{URL}/.well-known/agent-card.json", timeout=3.0).raise_for_status()
-        return True
+        # /auth/me returns 401 (not connection error) when the BFF is running
+        return httpx.get(f"{BFF}/auth/me", timeout=3.0).status_code in (200, 401)
     except Exception:
         return False
 
 
-pytestmark = pytest.mark.skipif(not _sandbox_up(), reason="Data Agent sandbox not reachable")
+pytestmark = pytest.mark.skipif(not _bff_up(), reason="gis-canvas BFF not reachable")
 
 
-def _src(plugin):
-    ds = plugin.datasource
-    return ds.A2ADataSource(URL, ds.default_auth_provider)
-
-
-def test_live_discover_returns_datasets(plugin):
-    datasets = _src(plugin).discover("scenario:discover what datasets are available")
-    assert datasets and all("view_name" in d for d in datasets)
-
-
-def test_live_clarify_then_resume(plugin):
-    src = _src(plugin)
-    first = src.query("scenario:clarify I want some data")
-    assert first.clarification and first.context_id
-    resumed = src.query("vessel_traffic", context_id=first.context_id)
-    assert resumed.clarification is None  # conversation advanced past the interrupt
+def test_bff_proxy_requires_proxy_secret(plugin):
+    """Without X-Proxy-Secret the BFF rejects the proxy call (403)."""
+    import httpx
+    r = httpx.post(f"{BFF}/a2a/message", json={"jsonrpc": "2.0", "id": "1",
+                   "method": "message/stream", "params": {"message": {"messageId": "m",
+                   "role": "user", "parts": [{"kind": "text", "text": "hi"}]}}},
+                   headers={"X-Canvas-Session": "nobody"}, timeout=5.0)
+    assert r.status_code in (401, 403)

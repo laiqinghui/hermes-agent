@@ -15,7 +15,7 @@ def data_discover(args: dict, **kw) -> str:
     prompt = str(args.get("prompt") or "")
     if not prompt:
         return json.dumps({"ok": False, "errors": ["'prompt' is required"]})
-    datasets = get_data_source().discover(prompt)
+    datasets = get_data_source().discover(prompt, session_id=kw.get("session_id"))
     return json.dumps({"ok": True, "datasets": datasets}, ensure_ascii=False)
 
 
@@ -24,7 +24,7 @@ def data_query(args: dict, **kw) -> str:
     if not prompt:
         return json.dumps({"ok": False, "errors": ["'prompt' is required"]})
     context_id = args.get("context_id")
-    res = get_data_source().query(prompt, context_id)
+    res = get_data_source().query(prompt, context_id, session_id=kw.get("session_id"))
     if res.clarification:
         return json.dumps({"ok": True, "needs_input": True,
                            "clarification": res.clarification, "context_id": res.context_id},
