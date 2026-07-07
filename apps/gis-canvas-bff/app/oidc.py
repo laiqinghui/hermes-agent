@@ -9,7 +9,7 @@ import secrets
 from urllib.parse import urlencode
 
 import httpx
-from authlib.jose import JsonWebKey, jwt as authlib_jwt
+from authlib.jose import JsonWebKey, JsonWebToken
 
 from .config import Settings
 
@@ -80,7 +80,7 @@ async def refresh_tokens(meta: dict, s: Settings, refresh_token: str,
 async def validate_id_token(meta: dict, s: Settings, id_token: str,
                             client: httpx.AsyncClient) -> dict:
     jwks = await _jwks(meta, client)
-    claims = authlib_jwt.decode(id_token, JsonWebKey.import_key_set(jwks))
+    claims = JsonWebToken(["RS256"]).decode(id_token, JsonWebKey.import_key_set(jwks))
     claims.validate()  # exp/nbf/iat
     if claims.get("iss") != s.keycloak_issuer:
         raise ValueError("issuer mismatch")
