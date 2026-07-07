@@ -30,9 +30,11 @@ function makeFakeClient() {
   const openResolvers: Array<() => void> = []
   let armed = false
   let sessionCreateCalls = 0
+  let connectCalls = 0
 
   const client = {
     async connect() {
+      connectCalls++
       if (state === 'open' || state === 'connecting') return
       if (armed) {
         state = 'open'
@@ -65,6 +67,9 @@ function makeFakeClient() {
     },
     get sessionCreateCalls() {
       return sessionCreateCalls
+    },
+    get connectCalls() {
+      return connectCalls
     }
   }
   return client
@@ -93,4 +98,7 @@ test('shows login gate when unauthenticated and skips session.create', async () 
 
   expect(await screen.findByText(/log in with keycloak/i)).toBeInTheDocument()
   expect(client.sessionCreateCalls).toBe(0)
+  // Effect-level gate: the connect/session.create effect must not even attempt
+  // to connect when unauthenticated (not just fail to reach session.create).
+  expect(client.connectCalls).toBe(0)
 })

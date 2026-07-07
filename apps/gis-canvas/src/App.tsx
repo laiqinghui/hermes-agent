@@ -113,6 +113,14 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
 
   const mergedDoc = doc ? mergeOverrides(doc, overrides) : null
 
+  if (auth === null) {
+    return (
+      <div className="flex h-screen items-center justify-center text-sm text-neutral-400">
+        Checking session…
+      </div>
+    )
+  }
+
   if (auth && !auth.authenticated) {
     return (
       <div className="flex h-screen items-center justify-center">
