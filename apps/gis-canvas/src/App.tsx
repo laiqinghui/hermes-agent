@@ -34,7 +34,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const log = (kind: string, text: string) =>
     setActivity(prev => [...prev.slice(-199), { id: nextId.current++, kind, text }])
 
-  useEffect(() => { void authMe(bffUrl).then(setAuth) }, [bffUrl])
+  useEffect(() => { void authMe(bffUrl).then(setAuth).catch(() => setAuth({ authenticated: false })) }, [bffUrl])
 
   useEffect(() => {
     // Subscribe to activity events. StrictMode double-invokes this effect;

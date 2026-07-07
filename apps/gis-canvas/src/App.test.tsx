@@ -102,3 +102,13 @@ test('shows login gate when unauthenticated and skips session.create', async () 
   // to connect when unauthenticated (not just fail to reach session.create).
   expect(client.connectCalls).toBe(0)
 })
+
+test('shows login gate (not a permanent spinner) when the BFF is unreachable', async () => {
+  vi.mocked(authMe).mockRejectedValueOnce(new Error('Failed to fetch'))
+  const client = makeFakeClient()
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x" />)
+
+  expect(await screen.findByText(/log in with keycloak/i)).toBeInTheDocument()
+  expect(screen.queryByText(/checking session/i)).toBeNull()
+  expect(client.sessionCreateCalls).toBe(0)
+})
