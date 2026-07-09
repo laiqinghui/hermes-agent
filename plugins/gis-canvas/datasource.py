@@ -5,6 +5,7 @@ threads the caller's session_id through as a header."""
 from __future__ import annotations
 
 import os
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -31,6 +32,58 @@ def rows_from_query_result(qr: dict) -> tuple[list[dict], list[dict]]:
     sample = rows[0] if rows else {c: "" for c in cols}
     schema = [{"name": c, "type": _infer_type(sample.get(c))} for c in cols]
     return rows, schema
+
+
+def _split_markdown_row(line: str) -> list[str]:
+    s = line.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|"):
+        s = s[:-1]
+    return [cell.strip() for cell in s.split("|")]
+
+
+def _is_markdown_separator_row(cells: list[str]) -> bool:
+    return bool(cells) and all(re.fullmatch(r":?-+:?", c) for c in cells)
+
+
+def _coerce_markdown_cell(v: str):
+    if v == "":
+        return ""
+    if re.fullmatch(r"-?\d+", v):
+        return int(v)
+    try:
+        return float(v)
+    except ValueError:
+        return v
+
+
+def rows_from_markdown_table(text: str) -> tuple[list[dict], list[dict]] | None:
+    """Fallback parser: the real Data Agent returns retrieval rows as a GitHub-flavored
+    markdown table embedded in a text artifact rather than a structured query_result."""
+    lines = text.splitlines()
+    n = len(lines)
+    for i in range(n - 1):
+        header_line, sep_line = lines[i], lines[i + 1]
+        if "|" not in header_line or "|" not in sep_line:
+            continue
+        sep_cells = _split_markdown_row(sep_line)
+        if not _is_markdown_separator_row(sep_cells):
+            continue
+        header = _split_markdown_row(header_line)
+        ncols = len(header)
+        rows: list[dict] = []
+        j = i + 2
+        while j < n and "|" in lines[j]:
+            cells = _split_markdown_row(lines[j])
+            if len(cells) == ncols:
+                rows.append({col: _coerce_markdown_cell(val) for col, val in zip(header, cells)})
+            j += 1
+        if not rows:
+            return None
+        schema = [{"name": col, "type": _infer_type(rows[0][col])} for col in header]
+        return rows, schema
+    return None
 
 
 class DataSource(ABC):
@@ -62,6 +115,10 @@ class A2ADataSource(DataSource):
         rows, schema = ([], [])
         if r.query_result:
             rows, schema = rows_from_query_result(r.query_result)
+        elif r.response_text:
+            parsed = rows_from_markdown_table(r.response_text)
+            if parsed:
+                rows, schema = parsed
         return QueryResult(rows=rows, schema=schema, row_count=len(rows), context_id=r.context_id)
 
 
