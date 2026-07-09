@@ -13,16 +13,39 @@ productive and hands off to Claude Code.
 > `apps/gis-canvas/docs/plans/`. The prior machine's Claude memory does NOT travel — this doc + the
 > committed docs are the source of truth.
 
-## Current state (as of Phase 4a)
-- **Phases 1–4a are DONE, live-e2e-verified, final-reviewed clean.**
+## Current state (as of Phase 4b)
+- **Phases 1–4b are DONE, live-e2e-verified, final-reviewed clean.**
   - **P1 skeleton canvas**, **P2 interaction loop**, **P3 ESRI map + Calcite theming**,
-    **P4a data broker + A2A data flow** (sandbox-backed, no auth).
-- **Next: Phase 4b** — real OIDC/Keycloak auth (BFF) + live Denodo Data Agent. **Blocked on infra access**
-  (Keycloak + Denodo not available yet). The auth-header seam is already in place, so 4b drops in without a
-  refactor. **Until infra lands, all further functional iteration runs on mock/sandbox — 4b is the only
-  infra-blocked work.** Post-4b roadmap = Phase 5 (harden) + catalog/GIS-depth backlog (see design spec).
-- Tests green: **backend 92** (`tests/plugins/gis_canvas`), **frontend 49** (`@hermes/gis-canvas`).
-- Plans: `apps/gis-canvas/docs/plans/` — newest is `2026-07-04-phase4a-data-broker.md`.
+    **P4a data broker + A2A data flow**, **P4b real OIDC/Keycloak auth (BFF) + live Denodo**.
+- **P4b (done 2026-07-09):** a standalone **BFF sidecar** (`apps/gis-canvas-bff/`, FastAPI on `:9109`)
+  owns OIDC (Auth-Code + PKCE, realm `master`, client `gis-canvas-bff`) + a per-user token store +
+  an authenticated A2A **proxy**; the plugin's `A2ADataSource` now targets the BFF (`GIS_BFF_URL`) with
+  headers `X-Canvas-Session` + `X-Proxy-Secret` (no static token). SPA gained a login gate + session
+  bind. **Verified live** against the real Denodo stack (discover + retrieve → real vessel rows on
+  table **and** map). Design+plan: `apps/gis-canvas/docs/2026-07-06-phase4b-oidc-bff-design.md` (see §14
+  "Live verification") + `apps/gis-canvas/docs/plans/2026-07-07-phase4b-oidc-bff.md`.
+  - Two live-only integration fixes: retrieval arrives as a **markdown table** (not a `query_result`
+    DataPart) → `rows_from_markdown_table()` fallback in `datasource.py`; map geometry field names vary
+    (`Latitude`/`Longitude`, `latitudedegrees`/…) → `detectGeoFields()` alias detection in `esri/graphics.ts`.
+- **Next: Phase 5 (harden)** — backlog in the 4b design/plan: roles-from-id_token (map roles into the
+  id_token or decode the access token), §9 mid-stream-`401` recovery, OIDC `nonce`, cookie `secure`
+  toggle for non-localhost, JWKS cache TTL, multi-user proxy trust model, **turn Direct Access Grants
+  OFF** on the Keycloak client (left ON for dev password-grant testing). Plus catalog/GIS-depth backlog.
+- Tests green: **backend (plugin) 101** (`tests/plugins/gis_canvas`), **BFF 19** (`apps/gis-canvas-bff/tests`),
+  **frontend 62** (`@hermes/gis-canvas`).
+- Plans: `apps/gis-canvas/docs/plans/` — newest is `2026-07-07-phase4b-oidc-bff.md`.
+
+### Running the P4b a2a stack (real auth + live Denodo)
+1. **BFF** (`:9109`): fill `apps/gis-canvas-bff/.env` (client secret from Keycloak; generate `SESSION_SECRET`
+   + `GIS_BFF_PROXY_SECRET`), then `cd apps/gis-canvas-bff && .venv\Scripts\python -m uvicorn app.main:app
+   --host 127.0.0.1 --port 9109`.
+2. **Gateway** (a2a): launch with `GIS_DATA_SOURCE=a2a`, `GIS_BFF_URL=http://localhost:9109`, and
+   `GIS_BFF_PROXY_SECRET` = the SAME value as the BFF `.env`. On Windows launch via **PowerShell** (reliable
+   env propagation to the child `hermes` process — a bash-backgrounded `export` may not propagate, yielding
+   `403` on `/a2a/message`).
+3. **SPA** (`:5174`): build with `VITE_HERMES_TOKEN=dev-gis-local` **and** `VITE_BFF_URL=http://localhost:9109`,
+   then `npx vite preview --port 5174`. Open → "Log in with Keycloak" → authenticate → discover/retrieve.
+   `mock` remains the default `GIS_DATA_SOURCE`, so non-auth work never needs the BFF.
 
 ## Repo / branch / remotes
 - **`origin`** = `https://github.com/laiqinghui/hermes-agent` (your fork). **`upstream`** =

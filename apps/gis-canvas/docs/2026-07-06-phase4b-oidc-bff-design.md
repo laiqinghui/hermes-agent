@@ -248,9 +248,42 @@ prefix `gis:`.
 
 ## 13. Open risks
 
-- **Session-id equivalence** (§6) — the single live-verified assumption.
+- **Session-id equivalence** (§6) — the single live-verified assumption. **Verified live** (§14): the
+  post-login bind of `[stored_session_id, session_id]` resolves; the tool's `session_id` matches a bound
+  id and `/a2a/message` returns 200.
 - **BFF-on-data-path coupling** (§7) — accepted, with a documented decoupling switch.
 - **Token-at-rest**: none in 1a (tokens live only in BFF memory). If we later fall back to 1b, revisit
   (session-keyed token on disk is a security smell even in dev).
 - **Realm-role assignment** for the test user is external to this codebase; a misconfigured user yields
   empty `roles` and confusing "minimal data" symptoms rather than a hard failure.
+
+---
+
+## 14. Live verification (2026-07-09) — VERIFIED end-to-end
+
+Logged in as Keycloak realm-`master` user `dev2` (`aud=[denodo,account]`, `roles` incl. `selectdata`),
+drove the browser SPA against the **real** running stack (Keycloak `:8080`, BFF `:9109`, gateway a2a
+`:9119`, Data Agent `:2024`, Denodo). Confirmed via the BFF access log: `/auth/callback` 302 →
+`/auth/me` 200 → `/auth/bind` 200 → `/a2a/message` **200** (§6 binding holds). Discovery returned real
+Denodo datasets (`admin.vessel_positions`, shadow-fleet views, …); retrieval rendered **20 real vessel
+rows** in the data-table **and plotted them on the map**.
+
+Two **live-only integration bugs** surfaced (the exact class the onboarding warns unit tests miss) and
+were fixed on this branch, TDD:
+
+1. **Retrieval returns markdown, not a `query_result` DataPart.** The real Data Agent emits *discovery*
+   as a structured `datasets` DataPart but *retrieval* as a **markdown table inside a `text` artifact**
+   — no `query_result`. `A2AResult.response_text` already captured it; the fix adds
+   `rows_from_markdown_table()` in `datasource.py` as a fallback (structured `query_result` preferred
+   when present). Verified against the full 20-row real capture. *(Deferred/durable option: get the Data
+   Agent to emit a structured `query_result` DataPart; the fallback stays as a safety net.)*
+
+2. **Map geometry field names vary.** `graphics.ts` hardcoded `lat`/`lng`; real rows arrive as
+   `Latitude`/`Longitude` or `latitudedegrees`/`longitudedegrees`, so `Number(undefined)`→`NaN`→no
+   points. The fix adds `detectGeoFields()` — case-insensitive detection over common aliases
+   (`lat|latitude|latitudedegrees|y`, `lng|lon|long|longitude|longitudedegrees|x`) used by both
+   `graphicsFromMockSource` and `fieldsFromSchema`; mock `lat`/`lng` still works.
+
+Final suites green after both fixes: **BFF 19 · plugin 101 · frontend 62**. Phase 5 hardening backlog
+(empty-roles-from-id_token, §9 mid-stream-401 recovery, OIDC nonce, cookie `secure` toggle, JWKS TTL,
+multi-user proxy trust, Direct-Access-Grants off) is tracked in the plan/ledger.
