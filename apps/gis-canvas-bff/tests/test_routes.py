@@ -1,3 +1,5 @@
+import base64
+import json
 import os
 
 import httpx
@@ -158,3 +160,39 @@ def test_callback_accepts_matching_nonce(monkeypatch):
     c.cookies.set("_oidc_flow", flow)
     r = c.get("/auth/callback?code=c&state=s")
     assert r.status_code == 302
+
+
+def _jwt_shaped(payload: dict) -> str:
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
+    return f"header.{body}.sig"
+
+
+def test_me_roles_come_from_access_token(monkeypatch):
+    meta = {"authorization_endpoint": "http://dev.com:8080/realms/master/protocol/openid-connect/auth",
+            "token_endpoint": "http://kc/t", "jwks_uri": "http://kc/j",
+            "end_session_endpoint": "http://kc/logout"}
+    access_token = _jwt_shaped({"roles": ["selectdata"], "preferred_username": "jsmith"})
+
+    async def fake_fetch_metadata(issuer, client):
+        return meta
+
+    async def fake_exchange_code(meta, s, code, verifier, client):
+        return {"access_token": access_token, "refresh_token": "RT", "id_token": "IT", "expires_in": 900}
+
+    async def fake_validate_id_token(meta, s, id_token, client):
+        # Deliberately no "roles" key -- proves /auth/me does not fall back to id_token claims.
+        return {"preferred_username": "jsmith"}
+
+    monkeypatch.setattr(bff.oidc, "fetch_metadata", fake_fetch_metadata)
+    monkeypatch.setattr(bff.oidc, "exchange_code", fake_exchange_code)
+    monkeypatch.setattr(bff.oidc, "validate_id_token", fake_validate_id_token)
+
+    flow = bff._signer.dumps({"state": "s", "verifier": "v"})
+    c = _client()
+    c.cookies.set("_oidc_flow", flow)
+    r = c.get("/auth/callback?code=abc&state=s")
+    assert r.status_code == 302
+
+    me = c.get("/auth/me")
+    assert me.status_code == 200
+    assert me.json()["roles"] == ["selectdata"]

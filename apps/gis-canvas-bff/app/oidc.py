@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import secrets
 import time
 from urllib.parse import urlencode
@@ -92,6 +93,25 @@ async def validate_id_token(meta: dict, s: Settings, id_token: str,
     if s.client_id not in aud:
         raise ValueError("audience mismatch")
     return dict(claims)
+
+
+def roles_from_access_token(access_token: str) -> list[str]:
+    """Unverified decode of the access token's JWT payload -> claims["roles"].
+
+    The BFF trusts this token because it just received it directly from
+    Keycloak's token endpoint over TLS (or is about to send it straight back
+    upstream as a bearer token); this is not used for authn/authz decisions
+    that require signature verification (that's validate_id_token's job for
+    the id_token). Any parse error yields an empty role list rather than
+    raising, since this is best-effort UI/authorization metadata.
+    """
+    try:
+        payload_seg = access_token.split(".")[1]
+        padded = payload_seg + "=" * (-len(payload_seg) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(padded))
+        return claims.get("roles", [])
+    except Exception:
+        return []
 
 
 def reset_caches_for_tests() -> None:

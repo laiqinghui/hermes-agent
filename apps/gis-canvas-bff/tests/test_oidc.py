@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import hashlib
+import json
 
 import httpx
 import pytest
@@ -152,3 +153,14 @@ async def test_validate_id_token_rejects_non_rs256():
         async with httpx.AsyncClient() as client:
             with pytest.raises(Exception):
                 await oidc.validate_id_token(_META, s, token, client)
+
+
+def _jwt_shaped(payload: dict) -> str:
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
+    return f"header.{body}.sig"
+
+
+def test_roles_from_access_token():
+    token = _jwt_shaped({"roles": ["selectdata"], "preferred_username": "x"})
+    assert oidc.roles_from_access_token(token) == ["selectdata"]
+    assert oidc.roles_from_access_token("not-a-jwt-at-all") == []

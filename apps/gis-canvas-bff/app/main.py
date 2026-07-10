@@ -87,7 +87,7 @@ async def callback(code: str, state: str, request: Request):
         id_token=tokens["id_token"],
         expires_at=time.time() + tokens.get("expires_in", 900),
         username=claims.get("preferred_username", ""),
-        roles=claims.get("roles", []),
+        roles=oidc.roles_from_access_token(tokens["access_token"]),
     ))
     resp = RedirectResponse(settings.spa_origin, status_code=302)
     resp.set_cookie("sid", sid, httponly=True, secure=settings.cookie_secure, samesite="lax", path="/")
@@ -158,6 +158,35 @@ async def _bearer_for(sid: str) -> str | None:
         return rec.access_token if rec else None
 
 
+async def _force_refresh(sid: str) -> str | None:
+    """Unconditionally refresh the access token for sid, regardless of expiry.
+
+    Used when the Data Agent itself rejects the current token with HTTP 401
+    (e.g. revoked), which can happen even when our own expiry bookkeeping
+    thinks the token still has time left.
+    """
+    async with _locks[sid]:
+        rec = store.get(sid)
+        if not rec or not rec.refresh_token:
+            _evict(sid)
+            return None
+        async with get_http_client() as client:
+            meta = await _meta(client)
+            try:
+                td = await oidc.refresh_tokens(meta, settings, rec.refresh_token, client)
+            except httpx.HTTPError:
+                _evict(sid)
+                return None
+        store.update(sid, TokenRecord(
+            access_token=td["access_token"],
+            refresh_token=td.get("refresh_token", rec.refresh_token),
+            id_token=rec.id_token,
+            expires_at=time.time() + td.get("expires_in", 900),
+            username=rec.username, roles=rec.roles,
+        ))
+        return td["access_token"]
+
+
 @app.post("/a2a/message")
 async def a2a_message(request: Request):
     if not hmac.compare_digest(request.headers.get("X-Proxy-Secret", ""), settings.proxy_secret):
@@ -178,6 +207,24 @@ async def a2a_message(request: Request):
                  "Authorization": f"Bearer {bearer}"},
     )
     upstream = await client.send(req, stream=True)
+    if upstream.status_code == 401:
+        # Data Agent rejected the token (expired/revoked). Refresh once and retry.
+        # NOTE: only the HTTP-401 case is handled here; an `auth-required` event INSIDE
+        # the NDJSON stream is a plugin/frontend concern -- the BFF streams raw and does
+        # not parse events.
+        await upstream.aread()
+        await upstream.aclose()
+        new_bearer = await _force_refresh(sid)
+        if not new_bearer:
+            await client.aclose()
+            return JSONResponse({"error": "session expired"}, status_code=401)
+        req = client.build_request(
+            "POST", settings.data_agent_url.rstrip("/") + "/", content=body,
+            headers={"Content-Type": "application/json",
+                     "Accept": "application/x-ndjson",
+                     "Authorization": f"Bearer {new_bearer}"},
+        )
+        upstream = await client.send(req, stream=True)
     if upstream.status_code >= 400:
         detail = (await upstream.aread()).decode(errors="replace")[:2000]
         await upstream.aclose()

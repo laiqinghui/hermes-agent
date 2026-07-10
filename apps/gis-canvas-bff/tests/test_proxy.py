@@ -82,3 +82,54 @@ def test_proxy_401_when_token_expired_and_no_refresh():
     r = TestClient(bff.app).post("/a2a/message", json=_BODY,
                                  headers={"X-Proxy-Secret": "p" * 40, "X-Canvas-Session": "c1"})
     assert r.status_code == 401
+
+
+_META = {
+    "authorization_endpoint": "http://dev.com:8080/realms/master/protocol/openid-connect/auth",
+    "token_endpoint": "http://dev.com:8080/realms/master/protocol/openid-connect/token",
+    "end_session_endpoint": "http://dev.com:8080/realms/master/protocol/openid-connect/logout",
+    "jwks_uri": "http://dev.com:8080/realms/master/protocol/openid-connect/certs",
+}
+
+
+def test_proxy_refreshes_and_retries_on_upstream_401():
+    bff.oidc.reset_caches_for_tests()
+    _seed_bound(canvas="c1", expires_at=9e9, refresh_token="RT")
+    calls = {"n": 0}
+
+    def _agent(request):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(401, text='{"error":"unauthorized"}')
+        calls["second_auth"] = request.headers.get("authorization")
+        ndjson = '{"result":{"kind":"task","status":{"state":"completed"}}}\n'
+        return httpx.Response(200, text=ndjson)
+
+    with respx.mock:
+        respx.get("http://dev.com:8080/realms/master/.well-known/openid-configuration").mock(
+            return_value=httpx.Response(200, json=_META))
+        respx.post(_META["token_endpoint"]).mock(
+            return_value=httpx.Response(200, json={"access_token": "AT2", "expires_in": 900}))
+        respx.post("http://localhost:2024/").mock(side_effect=_agent)
+        r = TestClient(bff.app).post("/a2a/message", json=_BODY,
+                                     headers={"X-Proxy-Secret": "p" * 40, "X-Canvas-Session": "c1"})
+    assert r.status_code == 200
+    assert calls["n"] == 2
+    assert calls["second_auth"] == "Bearer AT2"
+
+
+def test_proxy_401_persists_after_failed_refresh():
+    bff.oidc.reset_caches_for_tests()
+    _seed_bound(canvas="c1", expires_at=9e9, refresh_token="RT")
+
+    with respx.mock:
+        respx.get("http://dev.com:8080/realms/master/.well-known/openid-configuration").mock(
+            return_value=httpx.Response(200, json=_META))
+        respx.post(_META["token_endpoint"]).mock(
+            return_value=httpx.Response(400, json={"error": "invalid_grant"}))
+        respx.post("http://localhost:2024/").mock(
+            return_value=httpx.Response(401, text='{"error":"unauthorized"}'))
+        r = TestClient(bff.app).post("/a2a/message", json=_BODY,
+                                     headers={"X-Proxy-Secret": "p" * 40, "X-Canvas-Session": "c1"})
+    assert r.status_code == 401
+    assert bff.store.sid_for_canvas("c1") is None
