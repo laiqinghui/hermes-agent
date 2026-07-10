@@ -45,6 +45,23 @@ def test_login_redirects_to_keycloak_and_sets_flow_cookie():
     assert "_oidc_flow" in r.cookies
 
 
+def test_login_sets_nonce_in_flow_cookie(monkeypatch):
+    meta = {"authorization_endpoint": "http://dev.com:8080/realms/master/protocol/openid-connect/auth",
+            "token_endpoint": "http://kc/t", "jwks_uri": "http://kc/j",
+            "end_session_endpoint": "http://kc/logout"}
+
+    async def fake_fetch_metadata(issuer, client):
+        return meta
+
+    monkeypatch.setattr(bff.oidc, "fetch_metadata", fake_fetch_metadata)
+    r = _client().get("/auth/login")
+    assert r.status_code == 302
+    assert "nonce=" in r.headers["location"]
+    flow_cookie = r.cookies["_oidc_flow"]
+    flow = bff._signer.loads(flow_cookie)
+    assert flow.get("nonce")
+
+
 def test_me_401_when_no_session():
     r = _client().get("/auth/me")
     assert r.status_code == 401
@@ -104,3 +121,40 @@ def test_sid_cookie_secure_flag_from_settings(monkeypatch):
     assert r2.status_code == 302
     sid_cookie2 = next(h for h in r2.headers.get_list("set-cookie") if h.startswith("sid="))
     assert "Secure" not in sid_cookie2
+
+
+def _mock_callback_deps(monkeypatch, claims_nonce):
+    meta = {"authorization_endpoint": "http://dev.com:8080/realms/master/protocol/openid-connect/auth",
+            "token_endpoint": "http://kc/t", "jwks_uri": "http://kc/j",
+            "end_session_endpoint": "http://kc/logout"}
+
+    async def fake_fetch_metadata(issuer, client):
+        return meta
+
+    async def fake_exchange_code(meta, s, code, verifier, client):
+        return {"access_token": "AT", "refresh_token": "RT", "id_token": "IT", "expires_in": 900}
+
+    async def fake_validate_id_token(meta, s, id_token, client):
+        return {"preferred_username": "jsmith", "roles": [], "nonce": claims_nonce}
+
+    monkeypatch.setattr(bff.oidc, "fetch_metadata", fake_fetch_metadata)
+    monkeypatch.setattr(bff.oidc, "exchange_code", fake_exchange_code)
+    monkeypatch.setattr(bff.oidc, "validate_id_token", fake_validate_id_token)
+
+
+def test_callback_rejects_nonce_mismatch(monkeypatch):
+    _mock_callback_deps(monkeypatch, claims_nonce="B")
+    flow = bff._signer.dumps({"state": "s", "verifier": "v", "nonce": "A"})
+    c = _client()
+    c.cookies.set("_oidc_flow", flow)
+    r = c.get("/auth/callback?code=c&state=s")
+    assert r.status_code == 400
+
+
+def test_callback_accepts_matching_nonce(monkeypatch):
+    _mock_callback_deps(monkeypatch, claims_nonce="A")
+    flow = bff._signer.dumps({"state": "s", "verifier": "v", "nonce": "A"})
+    c = _client()
+    c.cookies.set("_oidc_flow", flow)
+    r = c.get("/auth/callback?code=c&state=s")
+    assert r.status_code == 302

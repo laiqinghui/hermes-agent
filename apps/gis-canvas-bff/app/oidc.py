@@ -6,6 +6,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import secrets
+import time
 from urllib.parse import urlencode
 
 import httpx
@@ -13,8 +14,9 @@ from authlib.jose import JsonWebKey, JsonWebToken
 
 from .config import Settings
 
-_meta_cache: dict | None = None
-_jwks_cache: dict | None = None
+_CACHE_TTL: float = 300.0
+_meta_cache: tuple[dict, float] | None = None
+_jwks_cache: tuple[dict, float] | None = None
 
 
 def make_pkce() -> tuple[str, str]:
@@ -27,23 +29,23 @@ def make_pkce() -> tuple[str, str]:
 
 async def fetch_metadata(issuer: str, client: httpx.AsyncClient) -> dict:
     global _meta_cache
-    if _meta_cache is None:
+    if _meta_cache is None or time.time() - _meta_cache[1] > _CACHE_TTL:
         r = await client.get(f"{issuer}/.well-known/openid-configuration")
         r.raise_for_status()
-        _meta_cache = r.json()
-    return _meta_cache
+        _meta_cache = (r.json(), time.time())
+    return _meta_cache[0]
 
 
 async def _jwks(meta: dict, client: httpx.AsyncClient) -> dict:
     global _jwks_cache
-    if _jwks_cache is None:
+    if _jwks_cache is None or time.time() - _jwks_cache[1] > _CACHE_TTL:
         r = await client.get(meta["jwks_uri"])
         r.raise_for_status()
-        _jwks_cache = r.json()
-    return _jwks_cache
+        _jwks_cache = (r.json(), time.time())
+    return _jwks_cache[0]
 
 
-def build_authorize_url(meta: dict, s: Settings, state: str, challenge: str) -> str:
+def build_authorize_url(meta: dict, s: Settings, state: str, challenge: str, nonce: str) -> str:
     params = urlencode({
         "client_id": s.client_id,
         "redirect_uri": s.redirect_uri,
@@ -52,6 +54,7 @@ def build_authorize_url(meta: dict, s: Settings, state: str, challenge: str) -> 
         "state": state,
         "code_challenge": challenge,
         "code_challenge_method": "S256",
+        "nonce": nonce,
     })
     return f"{meta['authorization_endpoint']}?{params}"
 

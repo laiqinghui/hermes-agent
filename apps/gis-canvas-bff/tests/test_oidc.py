@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 
@@ -39,13 +40,20 @@ def test_make_pkce_challenge_is_s256_of_verifier():
 
 
 def test_build_authorize_url_has_pkce_and_state():
-    url = oidc.build_authorize_url(_META, _settings(), state="st8", challenge="chal")
+    url = oidc.build_authorize_url(_META, _settings(), state="st8", challenge="chal", nonce="non8")
     assert url.startswith(_META["authorization_endpoint"] + "?")
     assert "code_challenge=chal" in url
     assert "code_challenge_method=S256" in url
     assert "state=st8" in url
     assert "client_id=gis-canvas-bff" in url
     assert "redirect_uri=http%3A%2F%2Flocalhost%3A9109%2Fauth%2Fcallback" in url
+
+
+def test_build_authorize_url_includes_nonce():
+    url = oidc.build_authorize_url(_META, _settings(), "st", "chal", "nonce123")
+    assert "nonce=nonce123" in url
+    assert "state=st" in url
+    assert "code_challenge=chal" in url
 
 
 @pytest.mark.asyncio
@@ -65,6 +73,30 @@ async def test_exchange_code_posts_authorization_code_grant():
     assert "grant_type=authorization_code" in route_hit["body"]
     assert "code=the-code" in route_hit["body"]
     assert "code_verifier=the-verifier" in route_hit["body"]
+
+
+@pytest.mark.asyncio
+async def test_jwks_cache_refetches_after_ttl(monkeypatch):
+    oidc.reset_caches_for_tests()
+    monkeypatch.setattr(oidc, "_CACHE_TTL", 0)
+
+    first_set = {"keys": [{"kid": "k1"}]}
+    second_set = {"keys": [{"kid": "k2"}]}
+    responses = iter([
+        httpx.Response(200, json=first_set),
+        httpx.Response(200, json=second_set),
+    ])
+
+    with respx.mock:
+        respx.get(_META["jwks_uri"]).mock(side_effect=lambda request: next(responses))
+        async with httpx.AsyncClient() as client:
+            first = await oidc._jwks(_META, client)
+            await asyncio.sleep(0.01)  # ensure time.time() advances past the TTL=0 window
+            second = await oidc._jwks(_META, client)
+
+    assert first == first_set
+    assert second == second_set
+    assert first != second
 
 
 @pytest.mark.asyncio

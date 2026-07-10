@@ -55,10 +55,11 @@ async def _meta(client: httpx.AsyncClient) -> dict:
 async def login():
     state = secrets.token_urlsafe(32)
     verifier, challenge = oidc.make_pkce()
+    nonce = secrets.token_urlsafe(32)
     async with get_http_client() as client:
         meta = await _meta(client)
-    flow = _signer.dumps({"state": state, "verifier": verifier})
-    url = oidc.build_authorize_url(meta, settings, state, challenge)
+    flow = _signer.dumps({"state": state, "verifier": verifier, "nonce": nonce})
+    url = oidc.build_authorize_url(meta, settings, state, challenge, nonce)
     resp = RedirectResponse(url, status_code=302)
     resp.set_cookie("_oidc_flow", flow, httponly=True, secure=settings.cookie_secure,
                      samesite="lax", max_age=300, path="/auth")
@@ -78,6 +79,8 @@ async def callback(code: str, state: str, request: Request):
         meta = await _meta(client)
         tokens = await oidc.exchange_code(meta, settings, code, flow["verifier"], client)
         claims = await oidc.validate_id_token(meta, settings, tokens["id_token"], client)
+    if flow.get("nonce") and claims.get("nonce") != flow["nonce"]:
+        return JSONResponse({"error": "nonce mismatch"}, status_code=400)
     sid = store.create(TokenRecord(
         access_token=tokens["access_token"],
         refresh_token=tokens.get("refresh_token", ""),
