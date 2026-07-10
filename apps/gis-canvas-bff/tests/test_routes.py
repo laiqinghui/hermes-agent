@@ -67,3 +67,40 @@ def test_me_and_bind_when_session_present():
     assert b.status_code == 200
     assert bff.store.sid_for_canvas("stored-1") == sid
     assert bff.store.sid_for_canvas("live-1") == sid
+
+
+def test_sid_cookie_secure_flag_from_settings(monkeypatch):
+    meta = {"authorization_endpoint": "http://dev.com:8080/realms/master/protocol/openid-connect/auth",
+            "token_endpoint": "http://kc/t", "jwks_uri": "http://kc/j",
+            "end_session_endpoint": "http://kc/logout"}
+
+    async def fake_fetch_metadata(issuer, client):
+        return meta
+
+    async def fake_exchange_code(meta, s, code, verifier, client):
+        return {"access_token": "AT", "refresh_token": "RT", "id_token": "IT", "expires_in": 900}
+
+    async def fake_validate_id_token(meta, s, id_token, client):
+        return {"preferred_username": "jsmith", "roles": []}
+
+    monkeypatch.setattr(bff.oidc, "fetch_metadata", fake_fetch_metadata)
+    monkeypatch.setattr(bff.oidc, "exchange_code", fake_exchange_code)
+    monkeypatch.setattr(bff.oidc, "validate_id_token", fake_validate_id_token)
+
+    flow = bff._signer.dumps({"state": "s", "verifier": "v"})
+
+    monkeypatch.setattr(bff.settings, "cookie_secure", True)
+    c = _client()
+    c.cookies.set("_oidc_flow", flow)
+    r = c.get("/auth/callback?code=abc&state=s")
+    assert r.status_code == 302
+    sid_cookie = next(h for h in r.headers.get_list("set-cookie") if h.startswith("sid="))
+    assert "Secure" in sid_cookie
+
+    monkeypatch.setattr(bff.settings, "cookie_secure", False)
+    c2 = _client()
+    c2.cookies.set("_oidc_flow", flow)
+    r2 = c2.get("/auth/callback?code=abc&state=s")
+    assert r2.status_code == 302
+    sid_cookie2 = next(h for h in r2.headers.get_list("set-cookie") if h.startswith("sid="))
+    assert "Secure" not in sid_cookie2

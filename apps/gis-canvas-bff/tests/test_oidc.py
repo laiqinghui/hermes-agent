@@ -17,7 +17,7 @@ def _settings() -> Settings:
         spa_origin="http://localhost:5174",
         post_logout_redirect="http://localhost:5174/",
         session_secret="x" * 32, data_agent_url="http://localhost:2024",
-        proxy_secret="p" * 32,
+        proxy_secret="p" * 32, cookie_secure=False,
     )
 
 

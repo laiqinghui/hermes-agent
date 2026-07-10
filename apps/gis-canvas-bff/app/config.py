@@ -19,6 +19,7 @@ class Settings:
     session_secret: str
     data_agent_url: str
     proxy_secret: str
+    cookie_secure: bool
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -32,4 +33,5 @@ class Settings:
             session_secret=os.environ["SESSION_SECRET"],
             data_agent_url=os.environ.get("DATA_AGENT_URL", "http://localhost:2024"),
             proxy_secret=os.environ["GIS_BFF_PROXY_SECRET"],
+            cookie_secure=os.environ.get("BFF_COOKIE_SECURE", "false").lower() in ("1", "true", "yes", "on"),
         )

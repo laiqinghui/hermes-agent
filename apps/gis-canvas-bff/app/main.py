@@ -39,6 +39,12 @@ def get_http_client() -> httpx.AsyncClient:  # test seam
     return httpx.AsyncClient(timeout=180.0)
 
 
+def _evict(sid: str) -> TokenRecord | None:
+    rec = store.evict(sid)
+    _locks.pop(sid, None)
+    return rec
+
+
 async def _meta(client: httpx.AsyncClient) -> dict:
     return await oidc.fetch_metadata(settings.keycloak_issuer, client)
 
@@ -54,7 +60,8 @@ async def login():
     flow = _signer.dumps({"state": state, "verifier": verifier})
     url = oidc.build_authorize_url(meta, settings, state, challenge)
     resp = RedirectResponse(url, status_code=302)
-    resp.set_cookie("_oidc_flow", flow, httponly=True, samesite="lax", max_age=300, path="/auth")
+    resp.set_cookie("_oidc_flow", flow, httponly=True, secure=settings.cookie_secure,
+                     samesite="lax", max_age=300, path="/auth")
     return resp
 
 
@@ -80,7 +87,7 @@ async def callback(code: str, state: str, request: Request):
         roles=claims.get("roles", []),
     ))
     resp = RedirectResponse(settings.spa_origin, status_code=302)
-    resp.set_cookie("sid", sid, httponly=True, secure=False, samesite="lax", path="/")
+    resp.set_cookie("sid", sid, httponly=True, secure=settings.cookie_secure, samesite="lax", path="/")
     resp.delete_cookie("_oidc_flow", path="/auth")
     return resp
 
@@ -106,7 +113,7 @@ async def bind(request: Request):
 @app.post("/auth/logout")
 async def logout(request: Request):
     sid = request.cookies.get("sid", "")
-    rec = store.evict(sid)
+    rec = _evict(sid)
     logout_url = settings.post_logout_redirect
     if rec and rec.id_token:
         async with get_http_client() as client:
@@ -128,14 +135,14 @@ async def _bearer_for(sid: str) -> str | None:
         if store.needs_refresh(sid, time.time()):
             rec = store.get(sid)
             if not rec or not rec.refresh_token:
-                store.evict(sid)
+                _evict(sid)
                 return None
             async with get_http_client() as client:
                 meta = await _meta(client)
                 try:
                     td = await oidc.refresh_tokens(meta, settings, rec.refresh_token, client)
                 except httpx.HTTPError:
-                    store.evict(sid)
+                    _evict(sid)
                     return None
             store.update(sid, TokenRecord(
                 access_token=td["access_token"],

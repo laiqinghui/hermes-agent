@@ -15,6 +15,7 @@ os.environ["POST_LOGOUT_REDIRECT"] = "http://localhost:5174/"
 os.environ["SESSION_SECRET"] = "s" * 40
 os.environ["DATA_AGENT_URL"] = "http://localhost:2024"
 os.environ["GIS_BFF_PROXY_SECRET"] = "p" * 40
+os.environ["BFF_COOKIE_SECURE"] = "false"
 
 # Make `app` importable when running pytest from apps/gis-canvas-bff/
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
