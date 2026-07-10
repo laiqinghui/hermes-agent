@@ -152,7 +152,8 @@ async def _bearer_for(sid: str) -> str | None:
                 refresh_token=td.get("refresh_token", rec.refresh_token),
                 id_token=rec.id_token,
                 expires_at=time.time() + td.get("expires_in", 900),
-                username=rec.username, roles=rec.roles,
+                username=rec.username,
+                roles=oidc.roles_from_access_token(td["access_token"]),
             ))
         rec = store.get(sid)
         return rec.access_token if rec else None
@@ -170,21 +171,23 @@ async def _force_refresh(sid: str) -> str | None:
         if not rec or not rec.refresh_token:
             _evict(sid)
             return None
-        async with get_http_client() as client:
-            meta = await _meta(client)
-            try:
+        try:
+            async with get_http_client() as client:
+                meta = await _meta(client)
                 td = await oidc.refresh_tokens(meta, settings, rec.refresh_token, client)
-            except httpx.HTTPError:
-                _evict(sid)
-                return None
-        store.update(sid, TokenRecord(
-            access_token=td["access_token"],
-            refresh_token=td.get("refresh_token", rec.refresh_token),
-            id_token=rec.id_token,
-            expires_at=time.time() + td.get("expires_in", 900),
-            username=rec.username, roles=rec.roles,
-        ))
-        return td["access_token"]
+            new_access = td["access_token"]
+            store.update(sid, TokenRecord(
+                access_token=new_access,
+                refresh_token=td.get("refresh_token", rec.refresh_token),
+                id_token=rec.id_token,
+                expires_at=time.time() + td.get("expires_in", 900),
+                username=rec.username,
+                roles=oidc.roles_from_access_token(new_access),
+            ))
+            return new_access
+        except Exception:
+            _evict(sid)
+            return None
 
 
 @app.post("/a2a/message")

@@ -1,3 +1,5 @@
+import base64
+import json
 import os
 import time
 
@@ -133,3 +135,53 @@ def test_proxy_401_persists_after_failed_refresh():
                                      headers={"X-Proxy-Secret": "p" * 40, "X-Canvas-Session": "c1"})
     assert r.status_code == 401
     assert bff.store.sid_for_canvas("c1") is None
+
+
+def _jwt_shaped(payload: dict) -> str:
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
+    return f"header.{body}.sig"
+
+
+def test_proxy_401_evicts_on_malformed_refresh_response():
+    bff.oidc.reset_caches_for_tests()
+    _seed_bound(canvas="c1", expires_at=9e9, refresh_token="RT")
+
+    with respx.mock:
+        respx.get("http://dev.com:8080/realms/master/.well-known/openid-configuration").mock(
+            return_value=httpx.Response(200, json=_META))
+        respx.post(_META["token_endpoint"]).mock(
+            return_value=httpx.Response(200, json={"expires_in": 900}))
+        respx.post("http://localhost:2024/").mock(
+            return_value=httpx.Response(401, text='{"error":"unauthorized"}'))
+        r = TestClient(bff.app).post("/a2a/message", json=_BODY,
+                                     headers={"X-Proxy-Secret": "p" * 40, "X-Canvas-Session": "c1"})
+    assert r.status_code == 401
+    assert bff.store.sid_for_canvas("c1") is None
+
+
+def test_force_refresh_updates_roles_from_new_access_token():
+    bff.oidc.reset_caches_for_tests()
+    sid = _seed_bound(canvas="c1", expires_at=9e9, refresh_token="RT")
+    bff.store.update(sid, TokenRecord(
+        access_token="AT", refresh_token="RT", id_token="IT",
+        expires_at=9e9, username="jsmith", roles=["old"],
+    ))
+    new_access_token = _jwt_shaped({"roles": ["selectdata"]})
+    calls = {"n": 0}
+
+    def _agent(request):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(401, text='{"error":"unauthorized"}')
+        return httpx.Response(200, text='{"result":{"kind":"task","status":{"state":"completed"}}}\n')
+
+    with respx.mock:
+        respx.get("http://dev.com:8080/realms/master/.well-known/openid-configuration").mock(
+            return_value=httpx.Response(200, json=_META))
+        respx.post(_META["token_endpoint"]).mock(
+            return_value=httpx.Response(200, json={"access_token": new_access_token, "expires_in": 900}))
+        respx.post("http://localhost:2024/").mock(side_effect=_agent)
+        r = TestClient(bff.app).post("/a2a/message", json=_BODY,
+                                     headers={"X-Proxy-Secret": "p" * 40, "X-Canvas-Session": "c1"})
+    assert r.status_code == 200
+    assert bff.store.get(sid).roles == ["selectdata"]
