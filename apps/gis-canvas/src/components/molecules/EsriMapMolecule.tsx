@@ -3,6 +3,7 @@ import { loadEsri } from '../../lib/esri/loader'
 import { buildLayer, buildRowsLayer } from '../../lib/esri/layers'
 import { isDataHandle } from '../../lib/data-plane'
 import { useCanvasActions } from '../HandlerContext'
+import { EsriFrame } from './EsriFrame'
 import type { MoleculeProps } from '../registry'
 
 function asArray(v: unknown): string[] {
@@ -67,15 +68,28 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   }, [node.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const center = props.center ? `${props.center[0]}, ${props.center[1]}` : undefined
+  const selection = node.state?.selection as unknown[] | undefined
+  const selectionSummary = Array.isArray(selection) && selection.length
+    ? `${selection.length} selected`
+    : undefined
+
   return (
-    // @ts-expect-error — arcgis-map is a custom element (typed loosely for React)
-    <arcgis-map
-      ref={ref}
-      id={`esri-map-${node.id}`}
-      basemap={basemap}
-      {...(center ? { center } : {})}
-      {...(props.zoom != null ? { zoom: String(props.zoom) } : {})}
-      style={{ display: 'block', width: '100%', height: '100%' }}
-    />
+    <EsriFrame title={(node.props?.title as string | undefined) ?? 'Map'} meta={basemap} corners>
+      {/* @ts-expect-error — arcgis-map is a custom element (typed loosely for React) */}
+      <arcgis-map
+        ref={ref}
+        id={`esri-map-${node.id}`}
+        basemap={basemap}
+        {...(center ? { center } : {})}
+        {...(props.zoom != null ? { zoom: String(props.zoom) } : {})}
+        style={{ display: 'block', width: '100%', height: '100%' }}
+      />
+      {selectionSummary ? (
+        <div className="absolute bottom-2 left-2 z-6 flex flex-col gap-0.5 rounded-gc-sm border border-hairline bg-surface/80 px-2 py-1 backdrop-blur-sm">
+          <span className="font-mono text-[9px] uppercase tracking-wide text-tertiary">Selected</span>
+          <span className="font-mono text-[11px] font-medium text-accent">{selectionSummary}</span>
+        </div>
+      ) : null}
+    </EsriFrame>
   )
 }

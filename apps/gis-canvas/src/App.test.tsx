@@ -86,7 +86,7 @@ test('survives StrictMode double-invoke: no premature request, one session.creat
   // Socket opens shortly after mount (both effect invocations have run by now).
   client.openNow()
 
-  await waitFor(() => expect(screen.getByText(/● connected/)).toBeInTheDocument())
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
   expect(client.sessionCreateCalls).toBe(1)
   expect(screen.queryByText(/gateway not connected/)).toBeNull()
 })

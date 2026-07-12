@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-table'
 import { resolveMockSource, type MockSource, type MockField } from '../../lib/mock-data'
 import { isDataHandle } from '../../lib/data-plane'
+import { categoryColorVar } from '../../lib/category-color'
 import { useCanvasActions } from '../HandlerContext'
 import type { MoleculeProps } from '../registry'
 
@@ -51,10 +52,28 @@ export function DataTableMolecule({ node }: MoleculeProps) {
   }, [data, filter])
 
   const idField = data?.schema[0]?.name ?? 'id'
-  const columns = useMemo(() => {
-    const fields = (data?.schema ?? []).filter(f => !wanted || wanted.includes(f.name))
-    return fields.map(f => helper.accessor(row => row[f.name], { id: f.name, header: f.name }))
-  }, [data, wanted])
+  const fields = useMemo(
+    () => (data?.schema ?? []).filter(f => !wanted || wanted.includes(f.name)),
+    [data, wanted]
+  )
+  const columns = useMemo(
+    () => fields.map(f => helper.accessor(row => row[f.name], { id: f.name, header: f.name })),
+    [fields]
+  )
+
+  // Domain-agnostic categorical-column detection: a string field whose values repeat
+  // (not every row unique) within a small vocabulary reads as a category and gets a
+  // colored chip; a field with mostly-unique values (ids, free text, timestamps) does not.
+  // No schema change needed — this works for any agent-authored table.
+  const categoricalFields = useMemo(() => {
+    const set = new Set<string>()
+    for (const f of fields) {
+      if (f.type !== 'string' || rows.length < 2) continue
+      const distinct = new Set(rows.map(r => String(r[f.name])))
+      if (distinct.size > 1 && distinct.size <= 8 && distinct.size < rows.length) set.add(f.name)
+    }
+    return set
+  }, [fields, rows])
 
   const table = useReactTable({
     data: rows,
@@ -67,7 +86,7 @@ export function DataTableMolecule({ node }: MoleculeProps) {
   })
 
   if (!data) {
-    return <div className="p-2 text-sm text-red-600">Unknown data source: {source || '(none)'}</div>
+    return <div className="p-2 text-sm text-negative">Unknown data source: {source || '(none)'}</div>
   }
 
   const toggle = (rowId: string) => {
@@ -75,43 +94,93 @@ export function DataTableMolecule({ node }: MoleculeProps) {
     actions.reportInteraction(node.id, { rowSelection: next })
   }
 
+  const title = (node.props?.title as string | undefined) ?? (source || node.id)
+
   return (
-    <table className="w-full border-collapse text-sm">
-      <thead>
-        {table.getHeaderGroups().map(hg => (
-          <tr key={hg.id}>
-            <th className="w-6 border-b border-neutral-200 px-2 py-1" />
-            {hg.headers.map(h => (
-              <th
-                key={h.id}
-                onClick={h.column.getToggleSortingHandler()}
-                className="cursor-pointer border-b border-neutral-200 px-2 py-1 text-left font-semibold"
-              >
-                {flexRender(h.column.columnDef.header, h.getContext())}
-                {{ asc: ' ↑', desc: ' ↓' }[h.column.getIsSorted() as string] ?? ''}
-              </th>
+    <div className="flex h-full flex-col overflow-hidden rounded-gc-md border border-hairline bg-surface shadow-gc-raised">
+      <div className="flex shrink-0 items-center justify-between border-b border-hairline px-3 py-2">
+        <span className="truncate font-display text-sm font-semibold text-primary">{title}</span>
+        <span className="shrink-0 rounded-full bg-surface-raised px-2 py-0.5 font-mono text-[11px] text-tertiary">
+          {rows.length} row{rows.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead className="sticky top-0 z-10 bg-surface-raised">
+            {table.getHeaderGroups().map(hg => (
+              <tr key={hg.id}>
+                <th className="w-6 border-b border-hairline-strong px-2 py-1.5" />
+                {hg.headers.map(h => {
+                  const field = fields.find(f => f.name === h.column.id)
+                  return (
+                    <th
+                      key={h.id}
+                      onClick={h.column.getToggleSortingHandler()}
+                      className={`cursor-pointer select-none border-b border-hairline-strong px-2 py-1.5 font-mono text-[11px] font-medium uppercase tracking-wide text-tertiary hover:text-primary ${field?.type === 'number' ? 'text-right' : 'text-left'}`}
+                    >
+                      {flexRender(h.column.columnDef.header, h.getContext())}
+                      {{ asc: ' ↑', desc: ' ↓' }[h.column.getIsSorted() as string] ?? ''}
+                    </th>
+                  )
+                })}
+              </tr>
             ))}
-          </tr>
-        ))}
-      </thead>
-      <tbody>
-        {table.getRowModel().rows.map(row => {
-          const rid = String(row.original[idField])
-          const isSel = selected.includes(rid)
-          return (
-            <tr key={row.id} className={isSel ? 'bg-blue-50' : undefined}>
-              <td className="border-b border-neutral-100 px-2 py-1">
-                <input type="checkbox" checked={isSel} onChange={() => toggle(rid)} aria-label={`select ${rid}`} />
-              </td>
-              {row.getVisibleCells().map(cell => (
-                <td key={cell.id} className="border-b border-neutral-100 px-2 py-1">
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </td>
-              ))}
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
+          </thead>
+          <tbody>
+            {table.getRowModel().rows.map((row, i) => {
+              const rid = String(row.original[idField])
+              const isSel = selected.includes(rid)
+              return (
+                <tr
+                  key={row.id}
+                  className={`border-l-2 transition-colors hover:bg-accent/5 ${
+                    isSel ? 'border-l-accent bg-accent/10' : `border-l-transparent ${i % 2 ? 'bg-surface-raised/40' : ''}`
+                  }`}
+                >
+                  <td className="border-b border-hairline px-2 py-1">
+                    <input
+                      type="checkbox"
+                      checked={isSel}
+                      onChange={() => toggle(rid)}
+                      aria-label={`select ${rid}`}
+                      className="accent-accent"
+                    />
+                  </td>
+                  {row.getVisibleCells().map(cell => {
+                    const field = fields.find(f => f.name === cell.column.id)
+                    const value = cell.getValue()
+                    if (field?.type === 'number') {
+                      return (
+                        <td key={cell.id} className="border-b border-hairline px-2 py-1 text-right font-mono tabular-nums text-primary">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      )
+                    }
+                    if (categoricalFields.has(cell.column.id)) {
+                      const colorVar = categoryColorVar(value as string)
+                      return (
+                        <td key={cell.id} className="border-b border-hairline px-2 py-1">
+                          <span
+                            style={{ '--chip': colorVar } as React.CSSProperties}
+                            className="rounded-full border border-(--chip) bg-(--chip)/15 px-1.5 py-0.5 font-mono text-[11px] text-(--chip)"
+                          >
+                            {String(value)}
+                          </span>
+                        </td>
+                      )
+                    }
+                    return (
+                      <td key={cell.id} className="border-b border-hairline px-2 py-1 text-primary">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }

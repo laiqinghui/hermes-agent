@@ -2,11 +2,20 @@ import type { MoleculeProps } from '../registry'
 
 export function StatMolecule({ node }: MoleculeProps) {
   const { label, value, trend } = (node.props ?? {}) as { label?: string; value?: unknown; trend?: string }
+  const sign = trend?.trim().startsWith('+') ? 'positive' : trend?.trim().startsWith('-') ? 'negative' : 'neutral'
+  const barClass = sign === 'positive' ? 'bg-positive' : sign === 'negative' ? 'bg-negative' : 'bg-accent'
+  const trendClass = sign === 'positive' ? 'text-positive' : sign === 'negative' ? 'text-negative' : 'text-tertiary'
+
   return (
-    <div className="flex h-full flex-col justify-center rounded-lg border border-neutral-200 bg-white p-3">
-      <span className="text-2xl font-bold">{String(value ?? '—')}</span>
-      <span className="text-xs uppercase tracking-wide text-neutral-500">{label ?? node.id}</span>
-      {trend ? <span className="text-xs text-neutral-400">{trend}</span> : null}
+    <div className="flex h-full items-stretch overflow-hidden rounded-gc-md border border-hairline bg-surface shadow-gc-raised">
+      <span aria-hidden className={`w-[3px] shrink-0 ${barClass}`} />
+      <div className="flex flex-1 flex-col justify-center gap-1 px-3 py-2">
+        <span className="font-mono text-[11px] uppercase tracking-wide text-tertiary">{label ?? node.id}</span>
+        <span className="font-display text-[28px] font-semibold leading-none tabular-nums text-primary">
+          {String(value ?? '—')}
+        </span>
+        {trend ? <span className={`font-mono text-xs ${trendClass}`}>{trend}</span> : null}
+      </div>
     </div>
   )
 }

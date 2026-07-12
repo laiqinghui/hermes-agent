@@ -3,6 +3,7 @@ import { loadEsri } from '../../lib/esri/loader'
 import { buildLayer, buildRowsLayer } from '../../lib/esri/layers'
 import { isDataHandle } from '../../lib/data-plane'
 import { useCanvasActions } from '../HandlerContext'
+import { EsriFrame } from './EsriFrame'
 import type { MoleculeProps } from '../registry'
 
 export function EsriFeatureTableMolecule({ node }: MoleculeProps) {
@@ -38,7 +39,9 @@ export function EsriFeatureTableMolecule({ node }: MoleculeProps) {
 
   const refEl = mapRef ? `#esri-map-${mapRef}` : undefined
   return (
-    // @ts-expect-error custom element
-    <arcgis-feature-table ref={ref} {...(refEl ? { 'reference-element': refEl } : {})} style={{ display: 'block', width: '100%', height: '100%' }} />
+    <EsriFrame title="Features">
+      {/* @ts-expect-error custom element */}
+      <arcgis-feature-table ref={ref} {...(refEl ? { 'reference-element': refEl } : {})} style={{ display: 'block', width: '100%', height: '100%' }} />
+    </EsriFrame>
   )
 }

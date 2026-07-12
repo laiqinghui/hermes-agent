@@ -1,16 +1,133 @@
+@import "@fontsource/chakra-petch/500.css";
+@import "@fontsource/chakra-petch/600.css";
+@import "@fontsource/chakra-petch/700.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
 @import "@esri/calcite-components/calcite/calcite.css";
 @import "@arcgis/map-components/main.css";
 @import "tailwindcss";
 
-/* Calcite → shadcn token bridge (spec §9). Neutral shadcn-ish palette. */
+html, body { margin: 0; padding: 0; }
+* { box-sizing: border-box; }
+
+@theme {
+  --font-display: "Chakra Petch", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-canvas: #EEF1F4;
+  --color-canvas-alt: #DCE2E8;
+  --color-surface: #FFFFFF;
+  --color-surface-raised: #FFFFFF;
+  --color-hairline: #DCE2E8;
+  --color-hairline-strong: #C3CBD3;
+  --color-primary: #151B22;
+  --color-secondary: #4B5563;
+  --color-tertiary: #7A8590;
+  --color-rail: #FFFFFF;
+
+  --color-accent: #0D8C82;
+  --color-accent-fg: #FFFFFF;
+  --color-alert: #DC2626;
+  --color-alert-fg: #FFFFFF;
+  --color-positive: #16A34A;
+  --color-negative: #DC2626;
+
+  --color-cat-1: #3B6FE0;
+  --color-cat-2: #C2831A;
+  --color-cat-3: #C22E4C;
+  --color-cat-4: #6B4FCB;
+  --color-cat-5: #1F9E7A;
+  --color-cat-6: #B5490F;
+
+  --radius-gc-sm: 6px;
+  --radius-gc-md: 10px;
+  --radius-gc-lg: 14px;
+
+  --shadow-gc-raised: 0 1px 2px rgb(0 0 0 / 0.06), 0 1px 1px rgb(0 0 0 / 0.04);
+  --shadow-gc-overlay: 0 16px 40px -12px rgb(0 0 0 / 0.35), 0 4px 12px rgb(0 0 0 / 0.15);
+}
+
+:root.dark {
+  --color-canvas: #0A0E13;
+  --color-canvas-alt: #131A22;
+  --color-surface: #111820;
+  --color-surface-raised: #16202A;
+  --color-hairline: #212B36;
+  --color-hairline-strong: #2E3B49;
+  --color-primary: #E9EEF3;
+  --color-secondary: #A9B4BF;
+  --color-tertiary: #6B7684;
+  --color-rail: #0D131A;
+
+  --color-accent: #22E3C8;
+  --color-accent-fg: #06231F;
+  --color-alert: #FF5C5C;
+  --color-alert-fg: #2B0A0A;
+  --color-positive: #4ADE80;
+  --color-negative: #FF7A45;
+
+  --color-cat-1: #5B8DEF;
+  --color-cat-2: #F5A623;
+  --color-cat-3: #FF5C5C;
+  --color-cat-4: #A78BFA;
+  --color-cat-5: #34D399;
+  --color-cat-6: #FB923C;
+
+  --shadow-gc-raised: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-gc-overlay: 0 20px 48px -12px rgb(0 0 0 / 0.6), 0 4px 16px rgb(0 0 0 / 0.35);
+}
+
+/* Calcite bridge (spec §9): reference our own accent token so Calcite's brand
+   color tracks the theme automatically — var(--color-accent) already resolves
+   differently once :root.dark applies, so no duplicate dark-mode block needed. */
 :root {
-  --calcite-color-brand: #4f8cff;
-  --calcite-color-brand-hover: #3f7ae6;
-  --calcite-color-brand-press: #356bd0;
+  --calcite-color-brand: var(--color-accent);
+  --calcite-color-brand-hover: color-mix(in oklab, var(--color-accent) 85%, black);
+  --calcite-color-brand-press: color-mix(in oklab, var(--color-accent) 70%, black);
   --calcite-border-radius: 8px;
 }
-.calcite-mode-dark, :root.dark {
-  --calcite-color-brand: #7fb0ff;
-  --calcite-color-brand-hover: #6a9ef0;
-  --calcite-color-brand-press: #5a8fe0;
+
+@layer utilities {
+  .gc-canvas-grid-bg {
+    background-color: var(--color-canvas);
+    background-image:
+      repeating-linear-gradient(to right, var(--color-canvas-alt) 0 1px, transparent 1px 48px),
+      repeating-linear-gradient(to bottom, var(--color-canvas-alt) 0 1px, transparent 1px 48px);
+  }
+}
+
+@keyframes gc-materialize {
+  0%   { opacity: 0; transform: translateY(6px) scale(.98); filter: blur(4px); }
+  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes gc-scan-sweep {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  15%  { opacity: 1; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+.gc-tile-enter { animation: gc-materialize 0.62s cubic-bezier(.16,1,.3,1) both; }
+.gc-tile-enter::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--color-accent) 35%, transparent), transparent);
+  animation: gc-scan-sweep 0.62s ease-out both;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gc-tile-enter, .gc-tile-enter::after { animation: none; }
+}
+
+@keyframes gc-pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes gc-dock-in { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.96); } 100% { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+@keyframes gc-panel-in { 0% { opacity: 0; transform: translate(-50%, 16px) scale(.97); } 100% { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+@keyframes gc-scrim-in { 0% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes gc-toast-in { 0% { opacity: 0; transform: translate(-50%, -8px); } 100% { opacity: 1; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) {
+  .gc-anim-dock, .gc-anim-panel, .gc-anim-scrim, .gc-anim-toast, .gc-anim-pulse { animation: none !important; }
 }

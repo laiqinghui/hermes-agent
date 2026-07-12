@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CanvasGrid } from './components/CanvasGrid'
-import { Chat, type ActivityItem } from './components/Chat'
+import { CommandDock } from './components/CommandDock'
+import { AgentPanel } from './components/AgentPanel'
+import { BuildToast } from './components/BuildToast'
 import { HandlerProvider } from './components/HandlerContext'
+import { TopBar } from './components/TopBar'
+import { CanvasHeader } from './components/CanvasHeader'
+import { useTheme } from './lib/use-theme'
+import { useOverlayShortcut } from './lib/use-overlay-shortcut'
+import { deriveActivity, type ActivityItem } from './lib/activity'
 import { createGatewayClient, resolveWsUrl, type GatewayLike } from './lib/gateway'
 import { useCanvasDoc } from './lib/use-canvas-doc'
 import { mergeOverrides, type Overrides } from './lib/merge'
@@ -30,9 +37,11 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const nextId = useRef(0)
   const [auth, setAuth] = useState<AuthState | null>(null)
   const bffUrl = useMemo(() => resolveBffUrl(import.meta.env as Record<string, string | undefined>), [])
+  const [theme, toggleTheme] = useTheme()
+  const [overlayOpen, setOverlayOpen] = useOverlayShortcut()
 
-  const log = (kind: string, text: string) =>
-    setActivity(prev => [...prev.slice(-199), { id: nextId.current++, kind, text }])
+  const log = (kind: string, text: string, toolId?: string) =>
+    setActivity(prev => [...prev.slice(-199), { id: nextId.current++, kind, text, toolId }])
 
   useEffect(() => { void authMe(bffUrl).then(setAuth).catch(() => setAuth({ authenticated: false })) }, [bffUrl])
 
@@ -49,7 +58,8 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
           : typeof payload?.name === 'string'
             ? String(payload.name)
             : JSON.stringify(payload ?? {}).slice(0, 160)
-      log(type, summary)
+      const toolId = typeof payload?.tool_id === 'string' ? payload.tool_id : undefined
+      log(type, summary, toolId)
     })
 
     // Connect + create the session exactly once per client. The ref guard is
@@ -112,10 +122,11 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   useEffect(() => { setOverrides({}) }, [doc?.rev])
 
   const mergedDoc = doc ? mergeOverrides(doc, overrides) : null
+  const { messages, trace, isBusy } = useMemo(() => deriveActivity(activity), [activity])
 
   if (auth === null) {
     return (
-      <div className="flex h-screen items-center justify-center text-sm text-neutral-400">
+      <div className="flex h-screen items-center justify-center bg-canvas font-sans text-sm text-tertiary">
         Checking session…
       </div>
     )
@@ -123,8 +134,10 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
 
   if (auth && !auth.authenticated) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <a href={loginUrl(bffUrl)} className="rounded bg-blue-600 px-4 py-2 text-white">Log in with Keycloak</a>
+      <div className="flex h-screen items-center justify-center bg-canvas font-sans">
+        <a href={loginUrl(bffUrl)} className="rounded-gc-sm bg-accent px-4 py-2 font-sans text-accent-fg">
+          Log in with Keycloak
+        </a>
       </div>
     )
   }
@@ -134,25 +147,31 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   }
 
   return (
-    <div className="grid h-screen grid-cols-[1fr_360px] font-sans">
-      <button
-        onClick={handleLogout}
-        className="fixed right-2 top-2 z-10 rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-600"
-      >
-        Log out
-      </button>
-      <main className="overflow-auto bg-neutral-100 p-4">
+    <div className="flex h-screen flex-col bg-canvas font-sans text-primary">
+      <TopBar theme={theme} onToggleTheme={toggleTheme} connected={connected} isBusy={isBusy} onLogout={handleLogout} />
+      <main className="relative min-h-0 flex-1 overflow-auto gc-canvas-grid-bg p-4">
+        <CanvasHeader rev={mergedDoc?.rev} isBusy={isBusy} />
         {mergedDoc ? (
           <HandlerProvider actions={actions}>
             <CanvasGrid doc={mergedDoc} />
           </HandlerProvider>
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-neutral-400">
+          <div className="flex h-full items-center justify-center text-sm text-tertiary">
             No canvas yet — ask the agent to build a dashboard.
           </div>
         )}
       </main>
-      <Chat activity={activity} errors={errors} onSend={send} connected={connected} />
+      <BuildToast show={isBusy} step={trace.at(-1)} />
+      {!overlayOpen && <CommandDock latest={messages.at(-1)} onOpen={() => setOverlayOpen(true)} />}
+      <AgentPanel
+        open={overlayOpen}
+        onClose={() => setOverlayOpen(false)}
+        messages={messages}
+        trace={trace}
+        errors={errors}
+        connected={connected}
+        onSend={send}
+      />
     </div>
   )
 }
