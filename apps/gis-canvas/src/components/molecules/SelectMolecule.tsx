@@ -33,8 +33,8 @@ export function SelectMolecule({ node }: MoleculeProps) {
   const onChange = node.handlers?.onChange as Handler | undefined
 
   return (
-    <div className="flex h-full items-center gap-2 rounded-gc-md border border-hairline bg-surface px-3">
-      <label className="font-mono text-[11px] uppercase tracking-wide text-tertiary">{field ?? node.id}</label>
+    <div className="flex min-w-0 h-full items-center gap-2 rounded-gc-md border border-hairline bg-surface px-3">
+      <label className="truncate font-mono text-[11px] uppercase tracking-wide text-tertiary">{field ?? node.id}</label>
       <select
         className="flex-1 rounded-gc-sm border border-hairline-strong bg-surface-raised px-2 py-1 text-sm text-primary outline-none focus:ring-2 focus:ring-accent"
         style={{ colorScheme: 'light dark' }}

@@ -7,14 +7,20 @@ export function StatMolecule({ node }: MoleculeProps) {
   const trendClass = sign === 'positive' ? 'text-positive' : sign === 'negative' ? 'text-negative' : 'text-tertiary'
 
   return (
-    <div className="flex h-full items-stretch overflow-hidden rounded-gc-md border border-hairline bg-surface shadow-gc-raised">
+    <div
+      data-molecule="stat"
+      className="@container flex h-full items-stretch overflow-hidden rounded-gc-md border border-hairline bg-surface shadow-gc-raised"
+    >
       <span aria-hidden className={`w-[3px] shrink-0 ${barClass}`} />
-      <div className="flex flex-1 flex-col justify-center gap-1 px-3 py-2">
-        <span className="font-mono text-[11px] uppercase tracking-wide text-tertiary">{label ?? node.id}</span>
-        <span className="font-display text-[28px] font-semibold leading-none tabular-nums text-primary">
+      <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 px-3 py-2">
+        <span className="truncate font-mono text-[11px] uppercase tracking-wide text-tertiary">{label ?? node.id}</span>
+        <span
+          className="truncate font-display font-semibold leading-none tabular-nums text-primary [font-size:clamp(1rem,7cqi,1.75rem)]"
+          title={String(value ?? '')}
+        >
           {String(value ?? '—')}
         </span>
-        {trend ? <span className={`font-mono text-xs ${trendClass}`}>{trend}</span> : null}
+        {trend ? <span className={`truncate font-mono text-xs ${trendClass}`}>{trend}</span> : null}
       </div>
     </div>
   )
