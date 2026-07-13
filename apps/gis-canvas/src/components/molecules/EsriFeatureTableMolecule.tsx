@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { loadEsri } from '../../lib/esri/loader'
+import { loadEsri, loadFeatureTable } from '../../lib/esri/loader'
 import { buildLayer, buildRowsLayer } from '../../lib/esri/layers'
 import { isDataHandle } from '../../lib/data-plane'
 import { useCanvasActions } from '../HandlerContext'
@@ -17,7 +17,7 @@ export function EsriFeatureTableMolecule({ node }: MoleculeProps) {
     const el = ref.current as (HTMLElement & Record<string, any>) | null
     if (!el || !layerHandle) return
     ;(async () => {
-      const esri = await loadEsri()
+      const [esri] = await Promise.all([loadEsri(), loadFeatureTable()])
       if (cancelled) return
       try {
         if (isDataHandle(layerHandle)) {
