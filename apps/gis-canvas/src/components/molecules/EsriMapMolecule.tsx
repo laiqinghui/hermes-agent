@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { loadEsri } from '../../lib/esri/loader'
 import { buildLayer, buildRowsLayer } from '../../lib/esri/layers'
 import { isDataHandle } from '../../lib/data-plane'
 import { useCanvasActions } from '../HandlerContext'
 import { EsriFrame } from './EsriFrame'
+import { Skeleton } from '../atoms/Skeleton'
 import type { MoleculeProps } from '../registry'
 
 function asArray(v: unknown): string[] {
@@ -14,6 +15,7 @@ function asArray(v: unknown): string[] {
 export function EsriMapMolecule({ node }: MoleculeProps) {
   const actions = useCanvasActions()
   const ref = useRef<HTMLElement | null>(null)
+  const [ready, setReady] = useState(false)
   const layerRefs = asArray(node.bindings?.layers)
   const props = (node.props ?? {}) as { basemap?: string; center?: [number, number]; zoom?: number }
   const basemap = props.basemap ?? 'osm'
@@ -45,6 +47,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
           if (view) view.map.add(layer)
         } catch (e) { console.error('layer build failed', r, e) }
       }
+      if (!cancelled) setReady(true)
       // selection: click → hitTest → write objectIds to state.selection (reactive interaction)
       // arcgisViewClick is a CustomEvent; the screen point is in event.detail (not the event itself)
       clickHandle = esri.reactiveUtils.on(() => el, 'arcgisViewClick', async (event: unknown) => {
@@ -84,6 +87,11 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
         {...(props.zoom != null ? { zoom: String(props.zoom) } : {})}
         style={{ display: 'block', width: '100%', height: '100%' }}
       />
+      {!ready ? (
+        <div data-testid="map-skeleton" className="absolute inset-0 z-10 transition-opacity duration-300">
+          <Skeleton className="h-full w-full" />
+        </div>
+      ) : null}
       {selectionSummary ? (
         <div className="absolute bottom-2 left-2 z-6 flex flex-col gap-0.5 rounded-gc-sm border border-hairline bg-surface/80 px-2 py-1 backdrop-blur-sm">
           <span className="font-mono text-[9px] uppercase tracking-wide text-tertiary">Selected</span>
