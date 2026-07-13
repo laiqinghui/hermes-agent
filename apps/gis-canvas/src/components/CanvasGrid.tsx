@@ -60,7 +60,7 @@ export function CanvasGrid({ doc }: { doc: CanvasDoc }) {
             key={node.id}
             data-testid={`cell-${node.id}`}
             className={`relative overflow-hidden${isNew ? ' gc-tile-enter' : ''}`}
-            onAnimationEnd={isNew ? () => clearEntering(node.id) : undefined}
+            onAnimationEnd={isNew ? (e) => { if (e.target === e.currentTarget) clearEntering(node.id) } : undefined}
             style={{
               gridColumn: `${area.col} / span ${area.colSpan}`,
               gridRow: `${area.row} / span ${area.rowSpan}`,
