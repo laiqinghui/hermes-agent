@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { CanvasDoc, ComponentNode } from '../lib/types'
 import { COMPONENT_REGISTRY, UnknownTile } from './registry'
 
@@ -10,13 +10,37 @@ function renderNode(node: ComponentNode): ReactNode {
 export function CanvasGrid({ doc }: { doc: CanvasDoc }) {
   const { cols, rowHeight = 80, gap = 8 } = doc.layout
 
-  // Tiles whose ids weren't present on the previous render get a one-time
+  // Tiles whose ids weren't present on a previous render get a one-time
   // materialize/scan-sweep entrance animation ("components render live" per
   // the redesign brief) — driven by real doc changes, not a scripted timer.
-  const prevIdsRef = useRef<Set<string>>(new Set())
-  const currentIds = new Set(doc.components.map(n => n.id))
-  const newIds = new Set([...currentIds].filter(id => !prevIdsRef.current.has(id)))
-  useEffect(() => { prevIdsRef.current = currentIds }) // eslint-disable-line react-hooks/exhaustive-deps
+  //
+  // The entering ids MUST live in state (not a per-render diff): the canvas
+  // re-renders many times right after a tile mounts (async data loads, override
+  // resets, StrictMode), and a per-render diff would drop the class on the very
+  // next render — cancelling the animation before it can play. Instead we mark
+  // a tile "entering" once and only clear it on animationend, so the class
+  // survives intervening re-renders.
+  const seenRef = useRef<Set<string>>(new Set())
+  const [entering, setEntering] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    const fresh = doc.components.map(n => n.id).filter(id => !seenRef.current.has(id))
+    if (!fresh.length) return
+    fresh.forEach(id => seenRef.current.add(id))
+    setEntering(prev => {
+      const next = new Set(prev)
+      fresh.forEach(id => next.add(id))
+      return next
+    })
+  }, [doc])
+
+  const clearEntering = (id: string) =>
+    setEntering(prev => {
+      if (!prev.has(id)) return prev
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
 
   return (
     <div
@@ -30,17 +54,18 @@ export function CanvasGrid({ doc }: { doc: CanvasDoc }) {
     >
       {doc.components.map((node, i) => {
         const area = node.area ?? { col: 1, colSpan: cols, row: 1, rowSpan: 1 }
-        const isNew = newIds.has(node.id)
+        const isNew = entering.has(node.id)
         return (
           <div
             key={node.id}
             data-testid={`cell-${node.id}`}
             className={`relative overflow-hidden${isNew ? ' gc-tile-enter' : ''}`}
+            onAnimationEnd={isNew ? () => clearEntering(node.id) : undefined}
             style={{
               gridColumn: `${area.col} / span ${area.colSpan}`,
               gridRow: `${area.row} / span ${area.rowSpan}`,
               minHeight: 0,
-              animationDelay: isNew ? `${Math.min(i, 8) * 40}ms` : undefined
+              animationDelay: isNew ? `${Math.min(i, 10) * 70}ms` : undefined
             }}
           >
             {renderNode(node)}

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { CanvasGrid } from './CanvasGrid'
 import type { CanvasDoc } from '../lib/types'
 import { HandlerProvider } from './HandlerContext'
@@ -118,4 +118,19 @@ test('data-table filters rows by state.filter', () => {
   // only 'low' severity rows: f_44, f_18 present; a 'high' row absent
   expect(screen.getByText('f_44')).toBeInTheDocument()
   expect(screen.queryByText('f_82')).not.toBeInTheDocument()
+})
+
+test('marks a freshly-rendered tile with the entrance class', async () => {
+  // Regression guard for the entering-state fix: the entrance class must
+  // survive intervening re-renders (it's cleared only on animationend, not
+  // on a per-render diff), so this asserts it's present via waitFor.
+  const d: CanvasDoc = {
+    canvasVersion: 1, rev: 1,
+    layout: { type: 'grid', cols: 12, rowHeight: 80, gap: 8 },
+    components: [
+      { id: 'e1', type: 'stat', area: { col: 1, colSpan: 4, row: 1, rowSpan: 1 }, props: { label: 'x', value: 1 } }
+    ]
+  }
+  render(<CanvasGrid doc={d} />)
+  await waitFor(() => expect(screen.getByTestId('cell-e1').className).toContain('gc-tile-enter'))
 })
