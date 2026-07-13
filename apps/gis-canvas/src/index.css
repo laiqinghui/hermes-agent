@@ -110,13 +110,13 @@ html, body { margin: 0; padding: 0; }
   15%  { opacity: 1; }
   100% { transform: translateY(100%); opacity: 0; }
 }
-.gc-tile-enter { animation: gc-materialize 0.62s cubic-bezier(.16,1,.3,1) both; }
+.gc-tile-enter { animation: gc-materialize 0.85s cubic-bezier(.16,1,.3,1) both; }
 .gc-tile-enter::after {
   content: '';
   position: absolute;
   inset: 0;
   background: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--color-accent) 35%, transparent), transparent);
-  animation: gc-scan-sweep 0.62s ease-out both;
+  animation: gc-scan-sweep 0.85s ease-out both;
   pointer-events: none;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -124,10 +124,10 @@ html, body { margin: 0; padding: 0; }
 }
 
 @keyframes gc-pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-@keyframes gc-dock-in { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.96); } 100% { opacity: 1; transform: translate(-50%, 0) scale(1); } }
-@keyframes gc-panel-in { 0% { opacity: 0; transform: translate(-50%, 16px) scale(.97); } 100% { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+@keyframes gc-dock-in { 0% { opacity: 0; transform: translateY(10px) scale(.96); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes gc-panel-in { 0% { opacity: 0; transform: translateY(16px) scale(.97); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes gc-scrim-in { 0% { opacity: 0; } 100% { opacity: 1; } }
-@keyframes gc-toast-in { 0% { opacity: 0; transform: translate(-50%, -8px); } 100% { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes gc-toast-in { 0% { opacity: 0; transform: translateY(-8px); } 100% { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) {
   .gc-anim-dock, .gc-anim-panel, .gc-anim-scrim, .gc-anim-toast, .gc-anim-pulse { animation: none !important; }
 }
