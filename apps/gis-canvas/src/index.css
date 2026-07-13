@@ -131,3 +131,15 @@ html, body { margin: 0; padding: 0; }
 @media (prefers-reduced-motion: reduce) {
   .gc-anim-dock, .gc-anim-panel, .gc-anim-scrim, .gc-anim-toast, .gc-anim-pulse { animation: none !important; }
 }
+
+.gc-skeleton { position: relative; overflow: hidden; background: var(--color-surface-raised); }
+.gc-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--color-hairline-strong) 55%, transparent), transparent);
+  animation: gc-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes gc-shimmer { 100% { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .gc-skeleton::after { animation: none; } }
