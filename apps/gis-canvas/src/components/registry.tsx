@@ -28,13 +28,13 @@ function EsriLegend(props: MoleculeProps) {
   )
 }
 
-const EsriFeatureTableLazy = lazy(() => import('./molecules/EsriFeatureTableMolecule').then(m => ({ default: m.EsriFeatureTableMolecule })))
-function EsriFeatureTable(props: MoleculeProps) {
-  return (
-    <Suspense fallback={<div className="p-2 text-xs text-neutral-400">Loading feature table…</div>}>
-      <EsriFeatureTableLazy {...props} />
-    </Suspense>
-  )
+// The native ESRI feature-table pulls a Vaadin/Polymer subtree Vite mis-bundles,
+// and duplicates the DataTable for the same data. Render feature-table nodes as a
+// DataTable over their layer handle instead (bindings.layer -> source).
+function FeatureTableAsDataTable({ node, renderChild }: MoleculeProps) {
+  const layer = Array.isArray(node.bindings?.layer) ? node.bindings!.layer[0] : (node.bindings?.layer as string | undefined)
+  const adapted: ComponentNode = { ...node, type: 'data-table', bindings: { ...node.bindings, source: layer || '' } }
+  return <DataTableMolecule node={adapted} renderChild={renderChild} />
 }
 
 export const COMPONENT_REGISTRY: Record<string, ComponentType<MoleculeProps>> = {
@@ -44,7 +44,7 @@ export const COMPONENT_REGISTRY: Record<string, ComponentType<MoleculeProps>> = 
   select: SelectMolecule,
   'esri:map': EsriMap,
   'esri:legend': EsriLegend,
-  'esri:feature-table': EsriFeatureTable
+  'esri:feature-table': FeatureTableAsDataTable
 }
 
 export function UnknownTile({ node }: MoleculeProps) {
