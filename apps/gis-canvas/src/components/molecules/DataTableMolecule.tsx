@@ -12,6 +12,7 @@ import { resolveMockSource, type MockSource, type MockField } from '../../lib/mo
 import { isDataHandle } from '../../lib/data-plane'
 import { categoryColorVar } from '../../lib/category-color'
 import { useCanvasActions } from '../HandlerContext'
+import { Skeleton } from '../atoms/Skeleton'
 import type { MoleculeProps } from '../registry'
 
 type Row = Record<string, string | number>
@@ -86,6 +87,21 @@ export function DataTableMolecule({ node }: MoleculeProps) {
   })
 
   if (!data) {
+    // A data:// handle that hasn't resolved yet is loading, not unknown.
+    if (isDataHandle(source)) {
+      return (
+        <div className="flex h-full flex-col overflow-hidden rounded-gc-md border border-hairline bg-surface shadow-gc-raised">
+          <div className="flex shrink-0 items-center justify-between border-b border-hairline px-3 py-2">
+            <span className="truncate font-display text-sm font-semibold text-primary">
+              {(node.props?.title as string | undefined) ?? source}
+            </span>
+          </div>
+          <div className="min-h-0 flex-1 p-3">
+            <Skeleton rows={8} />
+          </div>
+        </div>
+      )
+    }
     return <div className="p-2 text-sm text-negative">Unknown data source: {source || '(none)'}</div>
   }
 

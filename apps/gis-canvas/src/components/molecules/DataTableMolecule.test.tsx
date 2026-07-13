@@ -38,4 +38,11 @@ describe('DataTableMolecule data:// handle', () => {
     await waitFor(() => expect(screen.getByText('f_82')).toBeInTheDocument())
     expect(fetchData).not.toHaveBeenCalled()
   })
+
+  it('shows a skeleton (not an error) while a data:// handle is pending', () => {
+    const fetchData = vi.fn(() => new Promise<never>(() => {})) // never resolves
+    renderWith({ id: 't3', type: 'data-table', bindings: { source: 'data://pending' } }, fetchData as any)
+    expect(screen.getByTestId('skeleton')).toBeInTheDocument()
+    expect(screen.queryByText(/Unknown data source/)).not.toBeInTheDocument()
+  })
 })
