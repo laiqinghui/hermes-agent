@@ -33,7 +33,14 @@ function EsriLegend(props: MoleculeProps) {
 // DataTable over their layer handle instead (bindings.layer -> source).
 function FeatureTableAsDataTable({ node, renderChild }: MoleculeProps) {
   const layer = Array.isArray(node.bindings?.layer) ? node.bindings!.layer[0] : (node.bindings?.layer as string | undefined)
-  const adapted: ComponentNode = { ...node, type: 'data-table', bindings: { ...node.bindings, source: layer || '' } }
+  if (!layer) {
+    return (
+      <div className="flex h-full items-center justify-center rounded-gc-md border border-hairline bg-surface p-2 text-center font-sans text-xs text-tertiary">
+        feature table unavailable
+      </div>
+    )
+  }
+  const adapted: ComponentNode = { ...node, type: 'data-table', bindings: { ...node.bindings, source: layer } }
   return <DataTableMolecule node={adapted} renderChild={renderChild} />
 }
 

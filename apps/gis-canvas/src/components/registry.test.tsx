@@ -11,9 +11,27 @@ const page = {
 }
 
 describe('registry', () => {
-  it('does not register a native ESRI feature-table widget', () => {
-    // esri:feature-table is handled by the DataTable alias, not the broken widget.
-    expect(COMPONENT_REGISTRY['esri:feature-table']).toBeDefined()
+  it('renders esri:feature-table as a data table, not the native ESRI widget', async () => {
+    const fetchData = vi.fn().mockResolvedValue(page)
+    const actions: CanvasActions = { setLocalState() {}, reportInteraction: vi.fn(), sendPrompt() {}, fetchData }
+    const Alias = COMPONENT_REGISTRY['esri:feature-table']
+    const { container } = render(
+      <HandlerProvider actions={actions}>
+        <Alias node={{ id: 'ft0', type: 'esri:feature-table', bindings: { layer: 'data://ft0' } } as any} renderChild={() => null} />
+      </HandlerProvider>
+    )
+    expect(container.querySelector('arcgis-feature-table')).toBeNull()
+  })
+
+  it('shows a quiet unavailable tile when an esri:feature-table node has no layer binding', () => {
+    const actions: CanvasActions = { setLocalState() {}, reportInteraction: vi.fn(), sendPrompt() {}, fetchData: vi.fn() }
+    const Alias = COMPONENT_REGISTRY['esri:feature-table']
+    render(
+      <HandlerProvider actions={actions}>
+        <Alias node={{ id: 'ft-empty', type: 'esri:feature-table', bindings: {} } as any} renderChild={() => null} />
+      </HandlerProvider>
+    )
+    expect(screen.getByText(/unavailable/i)).toBeInTheDocument()
   })
 
   it('renders an esri:feature-table node as a data table over its layer handle', async () => {

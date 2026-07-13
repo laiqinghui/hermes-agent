@@ -16,7 +16,7 @@ export function StatMolecule({ node }: MoleculeProps) {
         <span className="truncate font-mono text-[11px] uppercase tracking-wide text-tertiary">{label ?? node.id}</span>
         <span
           className="truncate font-display font-semibold leading-none tabular-nums text-primary [font-size:clamp(1rem,7cqi,1.75rem)]"
-          title={String(value ?? '')}
+          title={String(value ?? '—')}
         >
           {String(value ?? '—')}
         </span>
