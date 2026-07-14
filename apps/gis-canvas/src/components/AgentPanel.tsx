@@ -30,7 +30,7 @@ export function AgentPanel({
   const [text, setText] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [inspector, setInspector] = useState(false)
-  const [showThinking, setShowThinking] = useState(true)
+  const [showThinking, setShowThinking] = useState(false)
 
   useEffect(() => {
     if (open) requestAnimationFrame(() => inputRef.current?.focus())

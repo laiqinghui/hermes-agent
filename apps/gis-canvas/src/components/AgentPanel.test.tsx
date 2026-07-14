@@ -16,6 +16,7 @@ function renderPanel() {
 describe('AgentPanel', () => {
   it('exposes reasoning via a thinking disclosure', () => {
     renderPanel()
+    fireEvent.click(screen.getByRole('button', { name: /thinking/i }))
     expect(screen.getByText(/my plan/)).toBeInTheDocument()
   })
   it('toggles to the inspector timeline', () => {
