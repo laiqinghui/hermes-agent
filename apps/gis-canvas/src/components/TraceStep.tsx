@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import type { BuildStep } from '../lib/activity'
-import { formatValue } from '../lib/format-value'
+import { humanizeLabel } from '../lib/humanize'
+import { fieldCount } from '../lib/summarize-value'
+import { StructuredValue } from './StructuredValue'
 
 export function TraceStep({ step }: { step: BuildStep }) {
   const [open, setOpen] = useState(false)
+  const payload = step.result ?? step.args
+  const count = fieldCount(payload)
   const hasDetail = step.args !== undefined || step.result !== undefined || !!step.summary
   return (
     <div className="border-b border-hairline last:border-b-0 py-1">
@@ -18,7 +22,8 @@ export function TraceStep({ step }: { step: BuildStep }) {
             ? <span className="text-[10px] text-accent">✓</span>
             : <span aria-hidden className="h-[7px] w-[7px] rounded-full bg-accent" style={{ animation: 'gc-pulse-dot .9s ease-in-out infinite' }} />}
         </span>
-        <span className="font-mono text-[11.5px] text-primary">{step.label}</span>
+        <span className="shrink-0 font-mono text-[11.5px] text-primary">{humanizeLabel(step.label)}</span>
+        {count ? <span className="shrink-0 font-mono text-[10px] text-tertiary">{count} items</span> : null}
         {step.context ? <span className="min-w-0 flex-1 truncate font-sans text-[11px] text-tertiary">{step.context}</span> : <span className="flex-1" />}
         {step.durationS != null ? <span className="shrink-0 font-mono text-[10px] text-tertiary">{step.durationS.toFixed(1)}s</span> : null}
         {hasDetail ? <span aria-hidden className="shrink-0 font-mono text-[10px] text-tertiary">{open ? '▾' : '▸'}</span> : null}
@@ -29,13 +34,13 @@ export function TraceStep({ step }: { step: BuildStep }) {
           {step.args !== undefined ? (
             <div>
               <div className="font-mono text-[9.5px] uppercase tracking-wide text-tertiary">args</div>
-              <pre className="overflow-x-auto rounded-gc-sm bg-surface-raised p-2 font-mono text-[10.5px] text-primary">{formatValue(step.args)}</pre>
+              <StructuredValue value={step.args} />
             </div>
           ) : null}
           {step.result !== undefined ? (
             <div>
               <div className="font-mono text-[9.5px] uppercase tracking-wide text-tertiary">result</div>
-              <pre className="overflow-x-auto rounded-gc-sm bg-surface-raised p-2 font-mono text-[10.5px] text-primary">{formatValue(step.result)}</pre>
+              <StructuredValue value={step.result} />
             </div>
           ) : null}
         </div>

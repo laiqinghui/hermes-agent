@@ -1,19 +1,27 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { TraceStep } from './TraceStep'
+import type { BuildStep } from '../lib/activity'
+
+const step: BuildStep = {
+  id: 1, label: 'data_query', status: 'done', context: 'From admin.vessel_positions',
+  args: { sql: 'SELECT 1' }, result: { RowCount: 20, Handle: 'data://x' }, durationS: 1.2
+}
 
 describe('TraceStep', () => {
-  const step = { id: 1, label: 'query', status: 'done' as const, context: 'running vql', args: { sql: 'SELECT 1' }, result: { rows: 3 }, durationS: 1.2 }
-  it('shows the name and context collapsed, hides args/result until expanded', () => {
+  it('shows a humanized name, field count, and context collapsed', () => {
     render(<TraceStep step={step} />)
-    expect(screen.getByText('query')).toBeInTheDocument()
-    expect(screen.getByText(/running vql/)).toBeInTheDocument()
-    expect(screen.queryByText(/SELECT 1/)).not.toBeInTheDocument()
+    expect(screen.getByText('Data Query')).toBeInTheDocument()
+    expect(screen.getByText('2 items')).toBeInTheDocument()
+    expect(screen.getByText(/From admin.vessel_positions/)).toBeInTheDocument()
+    expect(screen.queryByText('RowCount')).not.toBeInTheDocument()
   })
-  it('reveals args and result on click', () => {
+  it('reveals structured rows (not a JSON blob) on click', () => {
     render(<TraceStep step={step} />)
-    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getAllByRole('button')[0])
+    expect(screen.getByText('RowCount')).toBeInTheDocument()
+    expect(screen.getByText('20')).toBeInTheDocument()
     expect(screen.getByText(/SELECT 1/)).toBeInTheDocument()
-    expect(screen.getByText(/"rows": 3/)).toBeInTheDocument()
+    expect(screen.queryByText(/"RowCount": 20/)).not.toBeInTheDocument()
   })
 })
