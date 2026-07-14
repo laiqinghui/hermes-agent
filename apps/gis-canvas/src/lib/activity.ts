@@ -44,7 +44,8 @@ export interface DerivedActivity {
 export function activityItemFromEvent(kind: string, payload: Record<string, unknown> | undefined): Omit<ActivityItem, 'id'> {
   const p = payload ?? {}
   const name = typeof p.name === 'string' ? p.name : undefined
-  const text = typeof p.text === 'string' ? p.text : (name ?? JSON.stringify(p).slice(0, 160))
+  const safeFallback = () => { try { return JSON.stringify(p).slice(0, 160) } catch { return String(p).slice(0, 160) } }
+  const text = typeof p.text === 'string' ? p.text : (name ?? safeFallback())
   const item: Omit<ActivityItem, 'id'> = { kind, text }
   if (typeof p.tool_id === 'string') item.toolId = p.tool_id
   if (name) item.name = name
@@ -95,6 +96,8 @@ export function deriveActivity(items: ActivityItem[]): DerivedActivity {
           const idx = openByName.findIndex(s => s.label === label)
           if (idx !== -1) { step = openByName[idx]; openByName.splice(idx, 1) }
         }
+        // Unmatched completion (its tool.start was evicted from the buffer or never seen):
+        // nothing to enrich, so drop it silently.
         if (step) {
           step.status = 'done'
           step.args = item.args

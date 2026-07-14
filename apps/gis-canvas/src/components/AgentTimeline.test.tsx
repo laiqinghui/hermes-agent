@@ -19,4 +19,13 @@ describe('AgentTimeline', () => {
     render(<AgentTimeline timeline={[]} />)
     expect(screen.getByText(/no activity yet/i)).toBeInTheDocument()
   })
+  it('renders an error card', () => {
+    render(<AgentTimeline timeline={[{ id: 1, kind: 'error', text: 'boom' }]} />)
+    expect(screen.getByText(/boom/)).toBeInTheDocument()
+  })
+  it('right-aligns a user-role message bubble', () => {
+    const { container } = render(<AgentTimeline timeline={[{ id: 1, kind: 'message', role: 'user', text: 'hey' }]} />)
+    expect(screen.getByText('hey')).toBeInTheDocument()
+    expect(container.querySelector('.justify-end')).not.toBeNull()
+  })
 })

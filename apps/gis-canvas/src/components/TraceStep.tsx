@@ -10,6 +10,7 @@ export function TraceStep({ step }: { step: BuildStep }) {
       <button
         type="button"
         onClick={() => hasDetail && setOpen(o => !o)}
+        aria-expanded={hasDetail ? open : undefined}
         className="flex w-full items-center gap-2 text-left"
       >
         <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${step.status === 'done' ? 'border-accent bg-accent/15' : 'border-hairline-strong'}`}>
@@ -20,7 +21,7 @@ export function TraceStep({ step }: { step: BuildStep }) {
         <span className="font-mono text-[11.5px] text-primary">{step.label}</span>
         {step.context ? <span className="min-w-0 flex-1 truncate font-sans text-[11px] text-tertiary">{step.context}</span> : <span className="flex-1" />}
         {step.durationS != null ? <span className="shrink-0 font-mono text-[10px] text-tertiary">{step.durationS.toFixed(1)}s</span> : null}
-        {hasDetail ? <span className="shrink-0 font-mono text-[10px] text-tertiary">{open ? '▾' : '▸'}</span> : null}
+        {hasDetail ? <span aria-hidden className="shrink-0 font-mono text-[10px] text-tertiary">{open ? '▾' : '▸'}</span> : null}
       </button>
       {open ? (
         <div className="mt-1 flex flex-col gap-1.5 pl-6">

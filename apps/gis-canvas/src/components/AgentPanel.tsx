@@ -115,10 +115,11 @@ export function AgentPanel({
                   <button
                     type="button"
                     onClick={() => setShowThinking(s => !s)}
+                    aria-expanded={showThinking}
                     className="flex w-full items-center justify-between px-3 py-1.5 font-mono text-[9.5px] uppercase tracking-wide text-tertiary"
                   >
                     <span>Thinking ({reasoning.length})</span>
-                    <span>{showThinking ? '▾' : '▸'}</span>
+                    <span aria-hidden>{showThinking ? '▾' : '▸'}</span>
                   </button>
                   {showThinking ? (
                     <div className="flex flex-col gap-2 px-3 pb-2.5">

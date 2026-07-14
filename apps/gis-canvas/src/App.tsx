@@ -16,7 +16,7 @@ import { fetchDataPage } from './lib/data-plane'
 import type { CanvasActions } from './lib/handlers'
 import { resolveBffUrl, authMe, loginUrl, bindSessions, logout, type AuthState } from './lib/auth'
 
-const LOGGED_EVENTS = new Set(['message.delta', 'message.complete', 'tool.start', 'tool.complete', 'reasoning.available', 'error'])
+const LOGGED_EVENTS = new Set(['message.complete', 'tool.start', 'tool.complete', 'reasoning.available', 'error'])
 
 export interface AppProps {
   client?: GatewayLike
