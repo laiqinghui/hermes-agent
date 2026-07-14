@@ -798,3 +798,21 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - **Placeholder scan:** no TBD/TODO; every code step shows real code. The two dependent-test edits in Task 6 Step 6 and the AgentPanel fixture change in Task 7 Step 1 are described against the exact current assertions.
 - **Type consistency:** `BuildStep.children`/`depth` optional (Task 4) so WS-A component test literals compile; `humanizeLabel` (Task 1) consumed by Task 2 `toRows` and Task 6 header; `summarizeValue`/`toRows`/`isExpandable`/`fieldCount` (Task 2) consumed by Task 5 + Task 6; `StructuredValue` (Task 5) consumed by Task 6; `deriveHeading` (Task 3) consumed by Task 7. `TraceStep({ step })` signature unchanged, so `AgentTimeline`/`AgentPanel` call sites are untouched.
 - **Green at each task:** Tasks 1–3 add new leaf modules; Task 4 makes additive-optional `BuildStep` changes + a behavior-preserving derivation (flat cases unchanged); Task 5 adds a new component; Task 6 rewrites TraceStep and updates the two dependent tests in the same commit (label humanization propagates through them); Task 7 adds headings and fixes the one now-duplicated `my plan` assertion. Typecheck + full suite verified at Tasks 4, 6, 7 (the shared-file tasks).
+
+---
+
+## Amendment (2026-07-15): nesting dropped — render flat
+
+**Task 4 is DROPPED.** During execution, the open-tool-stack nesting was found to misclassify
+*concurrent* tools as *nested*: the gateway emits no parent/child signal on ordinary `tool.start`/
+`tool.complete` events (only `subagent.*` delegation events carry `parent_id`/`depth`, which the SPA
+doesn't capture and the observed data flow doesn't use). The existing WS-A tests correctly treat two
+simultaneously-open tools as flat siblings, which the bracketing heuristic violated. Real observed
+streams are flat. Decision (user-approved): render flat, no nesting reconstruction.
+
+Consequences for the remaining tasks:
+- **Task 4:** skipped entirely. `BuildStep` keeps its WS-A shape — **no `children`/`depth` fields**.
+- **Task 6:** `TraceStep` renders **no children block** (there are none). Drop the "renders nested
+  children steps" test case; keep the humanized-name / `N items` / structured-rows / drop-format-value
+  changes. `payload = step.result ?? step.args` still drives the `N items` count.
+- Tasks 1, 2, 3, 5, 7 are unaffected.
