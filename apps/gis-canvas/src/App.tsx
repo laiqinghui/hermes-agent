@@ -8,7 +8,7 @@ import { TopBar } from './components/TopBar'
 import { CanvasHeader } from './components/CanvasHeader'
 import { useTheme } from './lib/use-theme'
 import { useOverlayShortcut } from './lib/use-overlay-shortcut'
-import { deriveActivity, type ActivityItem } from './lib/activity'
+import { deriveActivity, activityItemFromEvent, type ActivityItem } from './lib/activity'
 import { createGatewayClient, resolveWsUrl, type GatewayLike } from './lib/gateway'
 import { useCanvasDoc } from './lib/use-canvas-doc'
 import { mergeOverrides, type Overrides } from './lib/merge'
@@ -16,7 +16,7 @@ import { fetchDataPage } from './lib/data-plane'
 import type { CanvasActions } from './lib/handlers'
 import { resolveBffUrl, authMe, loginUrl, bindSessions, logout, type AuthState } from './lib/auth'
 
-const LOGGED_EVENTS = new Set(['message.delta', 'message.complete', 'tool.start', 'tool.complete', 'error'])
+const LOGGED_EVENTS = new Set(['message.delta', 'message.complete', 'tool.start', 'tool.complete', 'reasoning.available', 'error'])
 
 export interface AppProps {
   client?: GatewayLike
@@ -40,8 +40,8 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const [theme, toggleTheme] = useTheme()
   const [overlayOpen, setOverlayOpen] = useOverlayShortcut()
 
-  const log = (kind: string, text: string, toolId?: string) =>
-    setActivity(prev => [...prev.slice(-199), { id: nextId.current++, kind, text, toolId }])
+  const log = (item: Omit<ActivityItem, 'id'>) =>
+    setActivity(prev => [...prev.slice(-199), { id: nextId.current++, ...item }])
 
   useEffect(() => { void authMe(bffUrl).then(setAuth).catch(() => setAuth({ authenticated: false })) }, [bffUrl])
 
@@ -51,15 +51,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     const off = client.onAny((event: { type?: string; payload?: unknown }) => {
       const type = event?.type ?? ''
       if (!LOGGED_EVENTS.has(type)) return
-      const payload = event.payload as Record<string, unknown> | undefined
-      const summary =
-        typeof payload?.text === 'string'
-          ? payload.text
-          : typeof payload?.name === 'string'
-            ? String(payload.name)
-            : JSON.stringify(payload ?? {}).slice(0, 160)
-      const toolId = typeof payload?.tool_id === 'string' ? payload.tool_id : undefined
-      log(type, summary, toolId)
+      log(activityItemFromEvent(type, event.payload as Record<string, unknown> | undefined))
     })
 
     // Connect + create the session exactly once per client. The ref guard is
@@ -79,9 +71,9 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
           const idsToBind = [...new Set([created.stored_session_id ?? created.session_id, created.session_id].filter(Boolean))] as string[]
           void bindSessions(bffUrl, idsToBind)
           setConnected(true)
-          log('system', `session ${created.session_id} ready`)
+          log({ kind: 'system', text: `session ${created.session_id} ready` })
         } catch (err) {
-          log('error', err instanceof Error ? err.message : String(err))
+          log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
         }
       })()
     }
@@ -93,11 +85,11 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
 
   const send = useCallback(async (text: string) => {
     if (!sessionIdRef.current) return
-    log('you', text)
+    log({ kind: 'you', text })
     try {
       await client.request('prompt.submit', { session_id: sessionIdRef.current, text })
     } catch (err) {
-      log('error', err instanceof Error ? err.message : String(err))
+      log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
   }, [client])
 
@@ -122,7 +114,8 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   useEffect(() => { setOverrides({}) }, [doc?.rev])
 
   const mergedDoc = doc ? mergeOverrides(doc, overrides) : null
-  const { messages, trace, isBusy } = useMemo(() => deriveActivity(activity), [activity])
+  const derived = useMemo(() => deriveActivity(activity), [activity])
+  const { messages, trace, isBusy } = derived
 
   if (auth === null) {
     return (
@@ -168,6 +161,8 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         onClose={() => setOverlayOpen(false)}
         messages={messages}
         trace={trace}
+        reasoning={derived.reasoning}
+        timeline={derived.timeline}
         errors={errors}
         connected={connected}
         onSend={send}
