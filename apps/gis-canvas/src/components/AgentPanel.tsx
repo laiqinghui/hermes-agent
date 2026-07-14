@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { BuildStep, ChatMessage, ReasoningItem, TimelineEvent } from '../lib/activity'
 import { TraceStep } from './TraceStep'
 import { AgentTimeline } from './AgentTimeline'
+import { deriveHeading } from '../lib/derive-heading'
 
 // Domain-neutral defaults — this panel is shared chrome, not tied to any one dataset.
 const SUGGESTED_PROMPTS = ['Build a dashboard', 'Summarize the data', 'Add a map']
@@ -123,9 +124,15 @@ export function AgentPanel({
                   </button>
                   {showThinking ? (
                     <div className="flex flex-col gap-2 px-3 pb-2.5">
-                      {reasoning.map(r => (
-                        <div key={r.id} className="whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-secondary">{r.text}</div>
-                      ))}
+                      {reasoning.map(r => {
+                        const heading = deriveHeading(r.text)
+                        return (
+                          <div key={r.id}>
+                            {heading ? <div className="font-sans text-[12px] font-semibold text-primary">{heading}</div> : null}
+                            <div className="whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-secondary">{r.text}</div>
+                          </div>
+                        )
+                      })}
                     </div>
                   ) : null}
                 </div>

@@ -11,7 +11,7 @@ describe('AgentTimeline', () => {
       { id: 3, kind: 'message', role: 'agent', text: 'here you go' }
     ]
     render(<AgentTimeline timeline={timeline} />)
-    expect(screen.getByText(/thinking about it/)).toBeInTheDocument()
+    expect(screen.getAllByText(/thinking about it/).length).toBeGreaterThan(0)
     expect(screen.getByText('Data Query')).toBeInTheDocument()
     expect(screen.getByText(/here you go/)).toBeInTheDocument()
   })
@@ -27,5 +27,11 @@ describe('AgentTimeline', () => {
     const { container } = render(<AgentTimeline timeline={[{ id: 1, kind: 'message', role: 'user', text: 'hey' }]} />)
     expect(screen.getByText('hey')).toBeInTheDocument()
     expect(container.querySelector('.justify-end')).not.toBeNull()
+  })
+  it('shows a derived heading on a reasoning card', () => {
+    const long = 'I need to show the last 20 positions, and first, I should discover the dataset for these vessel positions.'
+    render(<AgentTimeline timeline={[{ id: 1, kind: 'reasoning', text: long }]} />)
+    // the truncated heading (…-terminated) is distinct from the full body
+    expect(screen.getByText(/^I need to show.*…$/)).toBeInTheDocument()
   })
 })

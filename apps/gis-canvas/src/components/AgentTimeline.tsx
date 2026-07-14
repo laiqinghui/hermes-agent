@@ -1,5 +1,6 @@
 import type { TimelineEvent } from '../lib/activity'
 import { TraceStep } from './TraceStep'
+import { deriveHeading } from '../lib/derive-heading'
 
 export function AgentTimeline({ timeline }: { timeline: TimelineEvent[] }) {
   if (!timeline.length) {
@@ -9,9 +10,11 @@ export function AgentTimeline({ timeline }: { timeline: TimelineEvent[] }) {
     <div className="flex flex-col gap-2">
       {timeline.map(ev => {
         if (ev.kind === 'reasoning') {
+          const heading = deriveHeading(ev.text)
           return (
             <div key={ev.id} className="rounded-gc-md border border-hairline bg-surface-raised/50 p-2.5">
               <div className="mb-1 font-mono text-[9.5px] uppercase tracking-wide text-tertiary">thinking</div>
+              {heading ? <div className="mb-0.5 font-sans text-[12px] font-semibold text-primary">{heading}</div> : null}
               <div className="whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-secondary">{ev.text}</div>
             </div>
           )
