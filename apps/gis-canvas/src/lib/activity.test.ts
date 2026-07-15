@@ -97,3 +97,32 @@ describe('deriveActivity reasoning + timeline', () => {
     expect(toolEvent.kind === 'tool' && toolEvent.step.result).toEqual({ rows: 1 })
   })
 })
+
+describe('deriveActivity turns', () => {
+  const mk = (kind: string, payload: Record<string, unknown>, id: number): ActivityItem => ({ id, ...activityItemFromEvent(kind, payload) })
+  it('segments activity into one turn per user prompt', () => {
+    const items: ActivityItem[] = [
+      { id: 1, kind: 'you', text: 'q1' },
+      mk('reasoning.available', { text: 'thinking 1' }, 2),
+      mk('tool.start', { tool_id: 'a', name: 'skill_view' }, 3),
+      mk('tool.complete', { tool_id: 'a', name: 'skill_view' }, 4),
+      mk('message.complete', { text: 'answer 1' }, 5),
+      { id: 6, kind: 'you', text: 'q2' },
+      mk('tool.start', { tool_id: 'b', name: 'data_query' }, 7)
+    ]
+    const d = deriveActivity(items)
+    expect(d.turns.length).toBe(2)
+    expect(d.turns[0].prompt).toBe('q1')
+    expect(d.turns[0].reasoning.map(r => r.text)).toEqual(['thinking 1'])
+    expect(d.turns[0].trace.map(s => s.label)).toEqual(['skill_view'])
+    expect(d.turns[0].answers).toEqual(['answer 1'])
+    expect(d.turns[0].isBusy).toBe(false)
+    expect(d.turns[1].prompt).toBe('q2')
+    expect(d.turns[1].trace.map(s => s.label)).toEqual(['data_query'])
+    expect(d.turns[1].reasoning).toEqual([])
+    expect(d.turns[1].isBusy).toBe(true)
+  })
+  it('has no turns for an empty log', () => {
+    expect(deriveActivity([]).turns).toEqual([])
+  })
+})

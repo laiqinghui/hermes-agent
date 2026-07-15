@@ -31,11 +31,22 @@ export type TimelineEvent =
   | { id: number; kind: 'tool'; step: BuildStep }
   | { id: number; kind: 'message'; role: 'user' | 'agent'; text: string }
   | { id: number; kind: 'error'; text: string }
+// One conversation turn: a user prompt and the reasoning, tool steps, and
+// answer(s) that followed it, so the panel can show a fresh trace per turn.
+export interface Turn {
+  id: number
+  prompt?: string
+  reasoning: ReasoningItem[]
+  trace: BuildStep[]
+  answers: string[]
+  isBusy: boolean
+}
 export interface DerivedActivity {
   messages: ChatMessage[]
   trace: BuildStep[]
   reasoning: ReasoningItem[]
   timeline: TimelineEvent[]
+  turns: Turn[]
   isBusy: boolean
 }
 
@@ -62,26 +73,44 @@ export function deriveActivity(items: ActivityItem[]): DerivedActivity {
   const reasoning: ReasoningItem[] = []
   const trace: BuildStep[] = []
   const timeline: TimelineEvent[] = []
+  const turns: Turn[] = []
   const openById = new Map<string, BuildStep>()
   const openByName: BuildStep[] = []
+
+  // The current turn accumulates activity until the next user prompt starts a
+  // fresh one. Steps pushed here share their object with the global `trace`, so
+  // a later tool.complete enriches both.
+  let cur: Turn = { id: -1, reasoning: [], trace: [], answers: [], isBusy: false }
+  const flush = () => {
+    if (cur.prompt !== undefined || cur.reasoning.length || cur.trace.length || cur.answers.length) {
+      turns.push(cur)
+    }
+  }
 
   for (const item of items) {
     switch (item.kind) {
       case 'you':
+        flush()
+        cur = { id: item.id, prompt: item.text, reasoning: [], trace: [], answers: [], isBusy: false }
         messages.push({ id: item.id, role: 'user', text: item.text })
         timeline.push({ id: item.id, kind: 'message', role: 'user', text: item.text })
         break
       case 'message.complete':
         messages.push({ id: item.id, role: 'agent', text: item.text })
+        cur.answers.push(item.text)
         timeline.push({ id: item.id, kind: 'message', role: 'agent', text: item.text })
         break
-      case 'reasoning.available':
-        reasoning.push({ id: item.id, text: item.text })
+      case 'reasoning.available': {
+        const r = { id: item.id, text: item.text }
+        reasoning.push(r)
+        cur.reasoning.push(r)
         timeline.push({ id: item.id, kind: 'reasoning', text: item.text })
         break
+      }
       case 'tool.start': {
         const step: BuildStep = { id: item.id, label: item.name ?? item.text, status: 'running', context: item.context }
         trace.push(step)
+        cur.trace.push(step)
         timeline.push({ id: item.id, kind: 'tool', step })
         if (item.toolId) openById.set(item.toolId, step)
         else openByName.push(step)
@@ -113,6 +142,8 @@ export function deriveActivity(items: ActivityItem[]): DerivedActivity {
         break
     }
   }
+  flush()
+  for (const t of turns) t.isBusy = t.trace.some(s => s.status === 'running')
 
-  return { messages, trace: trace.slice(-8), reasoning, timeline, isBusy: trace.some(s => s.status === 'running') }
+  return { messages, trace: trace.slice(-8), reasoning, timeline, turns, isBusy: trace.some(s => s.status === 'running') }
 }
