@@ -159,9 +159,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
       <AgentPanel
         open={overlayOpen}
         onClose={() => setOverlayOpen(false)}
-        messages={messages}
-        trace={trace}
-        reasoning={derived.reasoning}
+        turns={derived.turns}
         timeline={derived.timeline}
         errors={errors}
         connected={connected}

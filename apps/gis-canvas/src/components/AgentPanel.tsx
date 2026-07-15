@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import type { BuildStep, ChatMessage, ReasoningItem, TimelineEvent } from '../lib/activity'
-import { TraceStep } from './TraceStep'
+import type { TimelineEvent, Turn } from '../lib/activity'
 import { AgentTimeline } from './AgentTimeline'
-import { deriveHeading } from '../lib/derive-heading'
+import { TurnView } from './TurnView'
 
 // Domain-neutral defaults — this panel is shared chrome, not tied to any one dataset.
 const SUGGESTED_PROMPTS = ['Build a dashboard', 'Summarize the data', 'Add a map']
@@ -10,9 +9,7 @@ const SUGGESTED_PROMPTS = ['Build a dashboard', 'Summarize the data', 'Add a map
 export function AgentPanel({
   open,
   onClose,
-  messages,
-  trace,
-  reasoning = [],
+  turns,
   timeline = [],
   errors,
   connected,
@@ -20,9 +17,7 @@ export function AgentPanel({
 }: {
   open: boolean
   onClose: () => void
-  messages: ChatMessage[]
-  trace: BuildStep[]
-  reasoning?: ReasoningItem[]
+  turns: Turn[]
   timeline?: TimelineEvent[]
   errors: string[]
   connected: boolean
@@ -31,7 +26,6 @@ export function AgentPanel({
   const [text, setText] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [inspector, setInspector] = useState(false)
-  const [showThinking, setShowThinking] = useState(false)
 
   useEffect(() => {
     if (open) requestAnimationFrame(() => inputRef.current?.focus())
@@ -92,58 +86,7 @@ export function AgentPanel({
             <AgentTimeline timeline={timeline} />
           ) : (
             <>
-              {messages.map(m => (
-                <div key={m.id} className={m.role === 'user' ? 'flex justify-end' : 'flex items-start gap-2'}>
-                  {m.role === 'agent' ? (
-                    <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-gc-sm border border-hairline bg-surface font-display text-[11px] font-bold text-accent">
-                      H
-                    </span>
-                  ) : null}
-                  <div
-                    className={
-                      m.role === 'user'
-                        ? 'max-w-[86%] rounded-[12px_12px_3px_12px] bg-accent px-3 py-2 font-sans text-[12.5px] leading-relaxed text-accent-fg'
-                        : 'max-w-[86%] rounded-[3px_12px_12px_12px] border border-hairline bg-surface px-3 py-2 font-sans text-[12.5px] leading-relaxed text-primary'
-                    }
-                  >
-                    {m.text}
-                  </div>
-                </div>
-              ))}
-
-              {reasoning.length ? (
-                <div className="rounded-gc-md border border-hairline bg-surface-raised/50">
-                  <button
-                    type="button"
-                    onClick={() => setShowThinking(s => !s)}
-                    aria-expanded={showThinking}
-                    className="flex w-full items-center justify-between px-3 py-1.5 font-mono text-[9.5px] uppercase tracking-wide text-tertiary"
-                  >
-                    <span>Thinking ({reasoning.length})</span>
-                    <span aria-hidden>{showThinking ? '▾' : '▸'}</span>
-                  </button>
-                  {showThinking ? (
-                    <div className="flex flex-col gap-2 px-3 pb-2.5">
-                      {reasoning.map(r => {
-                        const heading = deriveHeading(r.text)
-                        return (
-                          <div key={r.id}>
-                            {heading ? <div className="font-sans text-[12px] font-semibold text-primary">{heading}</div> : null}
-                            <div className="whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-secondary">{r.text}</div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {trace.length ? (
-                <div className="rounded-gc-md border border-hairline bg-surface p-3">
-                  <div className="mb-1 font-mono text-[9.5px] tracking-[.1em] text-tertiary">FORMULATING CANVAS</div>
-                  {trace.map(step => <TraceStep key={step.id} step={step} />)}
-                </div>
-              ) : null}
+              {turns.map(turn => <TurnView key={turn.id} turn={turn} />)}
 
               {errors.map((e, i) => (
                 <div key={`err-${i}`} className="rounded-gc-sm border border-negative/40 bg-negative/10 px-2.5 py-1.5 font-mono text-[11px] text-negative">
