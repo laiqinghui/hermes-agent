@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import App from './App'
 import type { GatewayLike } from './lib/gateway'
 import { authMe } from './lib/auth'
@@ -31,6 +31,8 @@ function makeFakeClient() {
   let armed = false
   let sessionCreateCalls = 0
   let connectCalls = 0
+  let anyHandler: ((e: { type?: string; payload?: unknown }) => void) | null = null
+  const requests: Array<{ method: string; params: unknown }> = []
 
   const client = {
     async connect() {
@@ -44,8 +46,9 @@ function makeFakeClient() {
       await new Promise<void>(res => openResolvers.push(res))
       state = 'open'
     },
-    async request<T>(method: string): Promise<T> {
+    async request<T>(method: string, params?: unknown): Promise<T> {
       if (state !== 'open') throw new Error('gateway not connected')
+      requests.push({ method, params })
       if (method === 'session.create') {
         sessionCreateCalls++
         return { session_id: 's1' } as unknown as T
@@ -55,8 +58,12 @@ function makeFakeClient() {
     on() {
       return () => undefined
     },
-    onAny() {
-      return () => undefined
+    onAny(cb: (e: { type?: string; payload?: unknown }) => void) {
+      anyHandler = cb
+      return () => { if (anyHandler === cb) anyHandler = null }
+    },
+    emit(event: { type?: string; payload?: unknown }) {
+      anyHandler?.(event)
     },
     openNow() {
       if (openResolvers.length === 0) {
@@ -70,6 +77,9 @@ function makeFakeClient() {
     },
     get connectCalls() {
       return connectCalls
+    },
+    get requests() {
+      return requests
     }
   }
   return client
@@ -111,4 +121,30 @@ test('shows login gate (not a permanent spinner) when the BFF is unreachable', a
   expect(await screen.findByText(/log in with keycloak/i)).toBeInTheDocument()
   expect(screen.queryByText(/checking session/i)).toBeNull()
   expect(client.sessionCreateCalls).toBe(0)
+})
+
+test('surfaces an approval request, responds scoped to the session, and clears it', async () => {
+  const client = makeFakeClient()
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  // open the agent panel (collapsed dock → overlay)
+  fireEvent.click(screen.getByRole('button', { name: /ask the agent to build a dashboard/i }))
+
+  // gateway requests approval to run a gated command
+  act(() => client.emit({ type: 'approval.request', payload: { command: 'python - <<EOF' } }))
+  expect(await screen.findByText(/approval needed/i)).toBeInTheDocument()
+
+  // "Approve for session" → approval.respond scoped to the live gateway session_id
+  fireEvent.click(screen.getByRole('button', { name: /approve for session/i }))
+  expect(client.requests).toContainEqual({ method: 'approval.respond', params: { session_id: 's1', choice: 'session' } })
+  // clears immediately on respond
+  expect(screen.queryByText(/approval needed/i)).toBeNull()
+
+  // a later request clears when the gated tool completes (approved or timed-out)
+  act(() => client.emit({ type: 'approval.request', payload: { command: 'ls' } }))
+  expect(screen.getByText(/approval needed/i)).toBeInTheDocument()
+  act(() => client.emit({ type: 'tool.complete', payload: { tool_id: 't', name: 'execute_code' } }))
+  expect(screen.queryByText(/approval needed/i)).toBeNull()
 })

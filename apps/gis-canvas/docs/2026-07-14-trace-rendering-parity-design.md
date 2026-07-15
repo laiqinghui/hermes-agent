@@ -45,7 +45,8 @@ change to the inspector-toggle / thinking-disclosure UX shell from WS-A — only
 
 ### 1. `lib/humanize.ts` (pure, unit-tested)
 
-`humanizeToolName(name: string): string` — snake/kebab/camel → Title Case
+`humanizeToolName(name: string): string` — snake/kebab → Title Case, preserving already-Cased tokens
+(so `RowCount` stays `RowCount`, not `Row Count`; hence no camelCase splitting)
 (`skill_view` → "Skill View", `execute_code` → "Execute Code", `data_query` → "Data Query"). Falls back
 to the raw name if empty.
 

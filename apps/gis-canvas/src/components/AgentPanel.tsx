@@ -93,14 +93,15 @@ export function AgentPanel({
           ) : (
             <>
               {turns.map(turn => <TurnView key={turn.id} turn={turn} />)}
-
-              {errors.map((e, i) => (
-                <div key={`err-${i}`} className="rounded-gc-sm border border-negative/40 bg-negative/10 px-2.5 py-1.5 font-mono text-[11px] text-negative">
-                  canvas error: {e}
-                </div>
-              ))}
             </>
           )}
+
+          {/* Canvas-render errors are a separate channel from timeline events — show in both views. */}
+          {errors.map((e, i) => (
+            <div key={`err-${i}`} className="rounded-gc-sm border border-negative/40 bg-negative/10 px-2.5 py-1.5 font-mono text-[11px] text-negative">
+              canvas error: {e}
+            </div>
+          ))}
         </div>
 
         {approval && onRespond ? (

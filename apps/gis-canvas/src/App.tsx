@@ -56,8 +56,9 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         setApproval(approvalFromEvent(event.payload as Record<string, unknown> | undefined))
         return
       }
-      // The agent producing its answer (or an interrupt) resolves any pending approval.
-      if (type === 'message.complete') setApproval(null)
+      // A pending approval is resolved once the gated tool completes (approved
+      // OR timed-out/denied) or the agent produces its answer — clear the card.
+      if (type === 'tool.complete' || type === 'message.complete') setApproval(null)
       if (!LOGGED_EVENTS.has(type)) return
       log(activityItemFromEvent(type, event.payload as Record<string, unknown> | undefined))
     })
