@@ -9,6 +9,7 @@ import { CanvasHeader } from './components/CanvasHeader'
 import { useTheme } from './lib/use-theme'
 import { useOverlayShortcut } from './lib/use-overlay-shortcut'
 import { deriveActivity, activityItemFromEvent, type ActivityItem } from './lib/activity'
+import { approvalFromEvent, type PendingApproval, type ApprovalChoice } from './lib/approval'
 import { createGatewayClient, resolveWsUrl, type GatewayLike } from './lib/gateway'
 import { useCanvasDoc } from './lib/use-canvas-doc'
 import { mergeOverrides, type Overrides } from './lib/merge'
@@ -39,6 +40,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const bffUrl = useMemo(() => resolveBffUrl(import.meta.env as Record<string, string | undefined>), [])
   const [theme, toggleTheme] = useTheme()
   const [overlayOpen, setOverlayOpen] = useOverlayShortcut()
+  const [approval, setApproval] = useState<PendingApproval | null>(null)
 
   const log = (item: Omit<ActivityItem, 'id'>) =>
     setActivity(prev => [...prev.slice(-199), { id: nextId.current++, ...item }])
@@ -50,6 +52,12 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     // the subscription is added and torn down per invocation, netting one.
     const off = client.onAny((event: { type?: string; payload?: unknown }) => {
       const type = event?.type ?? ''
+      if (type === 'approval.request') {
+        setApproval(approvalFromEvent(event.payload as Record<string, unknown> | undefined))
+        return
+      }
+      // The agent producing its answer (or an interrupt) resolves any pending approval.
+      if (type === 'message.complete') setApproval(null)
       if (!LOGGED_EVENTS.has(type)) return
       log(activityItemFromEvent(type, event.payload as Record<string, unknown> | undefined))
     })
@@ -91,6 +99,15 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     } catch (err) {
       log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
+  }, [client])
+
+  const respondApproval = useCallback((choice: ApprovalChoice) => {
+    setApproval(null)
+    const sid = sessionIdRef.current
+    if (!sid) return
+    void client.request('approval.respond', { session_id: sid, choice }).catch(err => {
+      log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    })
   }, [client])
 
   const [overrides, setOverrides] = useState<Overrides>({})
@@ -164,6 +181,8 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         errors={errors}
         connected={connected}
         onSend={send}
+        approval={approval}
+        onRespond={respondApproval}
       />
     </div>
   )

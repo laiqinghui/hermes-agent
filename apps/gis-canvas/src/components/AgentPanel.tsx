@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TimelineEvent, Turn } from '../lib/activity'
+import type { PendingApproval, ApprovalChoice } from '../lib/approval'
 import { AgentTimeline } from './AgentTimeline'
 import { TurnView } from './TurnView'
+import { ApprovalCard } from './ApprovalCard'
 
 // Domain-neutral defaults — this panel is shared chrome, not tied to any one dataset.
 const SUGGESTED_PROMPTS = ['Build a dashboard', 'Summarize the data', 'Add a map']
@@ -13,7 +15,9 @@ export function AgentPanel({
   timeline = [],
   errors,
   connected,
-  onSend
+  onSend,
+  approval = null,
+  onRespond
 }: {
   open: boolean
   onClose: () => void
@@ -22,6 +26,8 @@ export function AgentPanel({
   errors: string[]
   connected: boolean
   onSend: (text: string) => void
+  approval?: PendingApproval | null
+  onRespond?: (choice: ApprovalChoice) => void
 }) {
   const [text, setText] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -96,6 +102,12 @@ export function AgentPanel({
             </>
           )}
         </div>
+
+        {approval && onRespond ? (
+          <div className="shrink-0 border-t border-hairline px-4 py-2.5">
+            <ApprovalCard approval={approval} onRespond={onRespond} />
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap gap-1.5 px-4 pb-2.5">
           {SUGGESTED_PROMPTS.map(p => (

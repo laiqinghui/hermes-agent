@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { AgentPanel } from './AgentPanel'
 import type { BuildStep, TimelineEvent, Turn } from '../lib/activity'
@@ -31,5 +31,15 @@ describe('AgentPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /inspector/i }))
     // timeline renders the tool step name
     expect(screen.getAllByText('Data Query').length).toBeGreaterThan(0)
+  })
+  it('shows a pinned approval card and responds with the chosen scope', () => {
+    const onRespond = vi.fn()
+    render(
+      <AgentPanel open onClose={() => {}} turns={turns} timeline={timeline} errors={[]} connected onSend={() => {}}
+        approval={{ command: 'python - <<EOF' }} onRespond={onRespond} />
+    )
+    expect(screen.getByText(/Approval needed/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^approve$/i }))
+    expect(onRespond).toHaveBeenCalledWith('once')
   })
 })
