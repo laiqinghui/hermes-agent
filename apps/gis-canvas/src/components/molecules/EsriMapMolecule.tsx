@@ -50,7 +50,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
             const page = await actions.fetchData(r, { pageSize: 5000 })
             if (cancelled) return
             layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, r)
-            if (view && r === source) mapCtx.current = { view, layer, idField: resolveIdField(page.schema as { name: string }[]) }
+            if (view && r === source) mapCtx.current = { view, layer, idField: resolveIdField(page.schema as { name: string }[], page.rows as Record<string, unknown>[]) }
           } else {
             layer = buildLayer(r, esri)
           }

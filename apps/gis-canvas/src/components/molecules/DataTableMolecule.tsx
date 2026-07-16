@@ -56,7 +56,7 @@ export function DataTableMolecule({ node }: MoleculeProps) {
     return all.filter(r => active.every(([k, v]) => String(r[k]) === v))
   }, [data, filter])
 
-  const idField = resolveIdField(data?.schema)
+  const idField = resolveIdField(data?.schema, data?.rows)
   const fields = useMemo(
     () => (data?.schema ?? []).filter(f => !wanted || wanted.includes(f.name)),
     [data, wanted]

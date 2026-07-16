@@ -3,8 +3,21 @@ import { resolveIdField, collectNodesBySource } from './selection'
 import type { CanvasDoc } from './types'
 
 describe('resolveIdField', () => {
-  it('uses the first schema column', () => {
+  it('uses the first schema column when no rows are given', () => {
     expect(resolveIdField([{ name: 'Timestamp' }, { name: 'Lat' }])).toBe('Timestamp')
+  })
+  it('picks the first column with distinct values across the rows', () => {
+    const schema = [{ name: 'Vessel' }, { name: 'Timestamp' }]
+    const rows = [
+      { Vessel: 'GREY LADY', Timestamp: 't1' },
+      { Vessel: 'GREY LADY', Timestamp: 't2' } // Vessel is constant, Timestamp distinct
+    ]
+    expect(resolveIdField(schema, rows)).toBe('Timestamp')
+  })
+  it('falls back to the first column when no column is distinct', () => {
+    const schema = [{ name: 'a' }, { name: 'b' }]
+    const rows = [{ a: '1', b: 'x' }, { a: '1', b: 'x' }]
+    expect(resolveIdField(schema, rows)).toBe('a')
   })
   it('falls back to "id" for an empty/missing schema', () => {
     expect(resolveIdField([])).toBe('id')

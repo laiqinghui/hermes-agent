@@ -1,9 +1,25 @@
 import { isDataHandle } from './data-plane'
 import type { CanvasDoc, ComponentNode } from './types'
 
-/** Shared row identity: the first schema column's name (today's table behavior). */
-export function resolveIdField(schema: { name: string }[] | undefined): string {
-  return schema?.[0]?.name ?? 'id'
+/** Shared row identity. When rows are given, the first schema column whose values
+ * are distinct across every row (so it actually identifies a row — the first
+ * column is often a constant label like a vessel name). Falls back to the first
+ * column, else 'id'. */
+export function resolveIdField(schema: { name: string }[] | undefined, rows?: Record<string, unknown>[]): string {
+  const cols = schema ?? []
+  if (rows && rows.length) {
+    for (const c of cols) {
+      const seen = new Set<string>()
+      let distinct = true
+      for (const r of rows) {
+        const v = String(r[c.name])
+        if (seen.has(v)) { distinct = false; break }
+        seen.add(v)
+      }
+      if (distinct) return c.name
+    }
+  }
+  return cols[0]?.name ?? 'id'
 }
 
 /** Map each data-source handle to the ids of nodes bound to it — a table's
