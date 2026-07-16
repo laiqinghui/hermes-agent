@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   createColumnHelper,
   flexRender,
@@ -12,6 +12,8 @@ import { resolveMockSource, type MockSource, type MockField } from '../../lib/mo
 import { isDataHandle } from '../../lib/data-plane'
 import { categoryColorVar } from '../../lib/category-color'
 import { useCanvasActions } from '../HandlerContext'
+import { useLinkedSelection } from '../SelectionContext'
+import { resolveIdField } from '../../lib/selection'
 import { Skeleton } from '../atoms/Skeleton'
 import type { MoleculeProps } from '../registry'
 
@@ -40,8 +42,10 @@ export function DataTableMolecule({ node }: MoleculeProps) {
   const data = isDataHandle(source) ? fetched : resolveMockSource(source)
   const wanted = (node.props?.columns as string[] | undefined) ?? null
   const filter = (node.state?.filter as Record<string, string> | undefined) ?? {}
-  const selected = (node.state?.rowSelection as string[] | undefined) ?? []
+  const [selected, setSelected] = useLinkedSelection(source)
   const [sorting, setSorting] = useState<SortingState>([])
+  const firstSelRef = useRef<HTMLTableRowElement | null>(null)
+  useEffect(() => { if (selected.length) firstSelRef.current?.scrollIntoView?.({ block: 'nearest' }) }, [selected])
 
   // client-side filter (reactive, no agent turn): keep rows matching every
   // active filter entry (ignore empty / 'all').
@@ -52,7 +56,7 @@ export function DataTableMolecule({ node }: MoleculeProps) {
     return all.filter(r => active.every(([k, v]) => String(r[k]) === v))
   }, [data, filter])
 
-  const idField = data?.schema[0]?.name ?? 'id'
+  const idField = resolveIdField(data?.schema)
   const fields = useMemo(
     () => (data?.schema ?? []).filter(f => !wanted || wanted.includes(f.name)),
     [data, wanted]
@@ -106,8 +110,7 @@ export function DataTableMolecule({ node }: MoleculeProps) {
   }
 
   const toggle = (rowId: string) => {
-    const next = selected.includes(rowId) ? selected.filter(x => x !== rowId) : [...selected, rowId]
-    actions.reportInteraction(node.id, { rowSelection: next })
+    setSelected(selected.includes(rowId) ? selected.filter(x => x !== rowId) : [...selected, rowId])
   }
 
   const title = (node.props?.title as string | undefined) ?? (source || node.id)
@@ -149,6 +152,7 @@ export function DataTableMolecule({ node }: MoleculeProps) {
               return (
                 <tr
                   key={row.id}
+                  ref={selected[0] === rid ? firstSelRef : undefined}
                   className={`border-l-2 transition-colors hover:bg-accent/5 ${
                     isSel ? 'border-l-accent bg-accent/10' : `border-l-transparent ${i % 2 ? 'bg-surface-raised/40' : ''}`
                   }`}

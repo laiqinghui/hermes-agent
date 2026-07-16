@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { DataTableMolecule } from './DataTableMolecule'
 import { HandlerProvider } from '../HandlerContext'
+import { SelectionProvider } from '../SelectionContext'
 import type { CanvasActions } from '../../lib/handlers'
 
 const page = {
@@ -44,5 +45,23 @@ describe('DataTableMolecule data:// handle', () => {
     renderWith({ id: 't3', type: 'data-table', bindings: { source: 'data://pending' } }, fetchData as any)
     expect(screen.getByTestId('skeleton')).toBeInTheDocument()
     expect(screen.queryByText(/Unknown data source/)).not.toBeInTheDocument()
+  })
+})
+
+describe('DataTableMolecule linked selection', () => {
+  it('toggling a row sets the shared selection (mirrored to the node)', async () => {
+    const onMirror = vi.fn()
+    const fetchData = vi.fn().mockResolvedValue(page)
+    render(
+      <SelectionProvider nodesBySource={{ 'data://ab12': ['t1'] }} onMirror={onMirror}>
+        <HandlerProvider actions={{ setLocalState() {}, reportInteraction: vi.fn(), sendPrompt() {}, fetchData }}>
+          <DataTableMolecule node={{ id: 't1', type: 'data-table', bindings: { source: 'data://ab12' } } as any} renderChild={() => null} />
+        </HandlerProvider>
+      </SelectionProvider>
+    )
+    await waitFor(() => expect(screen.getByText('x1')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('select x1'))
+    expect(onMirror).toHaveBeenCalledWith('t1', ['x1'])
+    expect((screen.getByLabelText('select x1') as HTMLInputElement).checked).toBe(true)
   })
 })
