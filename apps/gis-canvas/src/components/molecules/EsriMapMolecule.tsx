@@ -92,16 +92,23 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
     if (!ready || !ctx) return
     let handle: { remove(): void } | null = null
     let cancelled = false
-    void ctx.view.whenLayerView(ctx.layer).then(async (lv: { queryFeatures(): Promise<{ features: unknown[] }>; highlight(g: unknown[]): { remove(): void } }) => {
+    ;(async () => {
+      // Query the LAYER (not the layerView) so we get every matching feature WITH
+      // geometry, regardless of the current viewport — a layerView query is
+      // extent-limited and omits geometry by default, so goTo() would no-op.
+      const res = await ctx.layer.queryFeatures({ where: '1=1', returnGeometry: true, outFields: ['*'] })
       if (cancelled) return
-      const res = await lv.queryFeatures()
       const matched = (res?.features ?? []).filter(
-        (f: unknown) => selected.includes(String((f as { attributes?: Record<string, unknown> }).attributes?.[ctx.idField]))
+        (f: { attributes?: Record<string, unknown> }) => selected.includes(String(f.attributes?.[ctx.idField]))
       )
-      handle?.remove()
+      const lv = await ctx.view.whenLayerView(ctx.layer)
+      if (cancelled) return
       handle = matched.length ? lv.highlight(matched) : null
-      if (matched.length) void ctx.view.goTo(matched, { animate: true }).catch(() => {})
-    }).catch(() => {})
+      if (matched.length) {
+        const zoom = matched.length === 1 ? Math.max(Number(ctx.view.zoom) || 0, 13) : undefined
+        await ctx.view.goTo(zoom ? { target: matched, zoom } : matched, { animate: true })
+      }
+    })().catch(() => {})
     return () => { cancelled = true; handle?.remove() }
   }, [selected, ready])
 
