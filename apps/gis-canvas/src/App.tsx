@@ -16,6 +16,8 @@ import { mergeOverrides, type Overrides } from './lib/merge'
 import { fetchDataPage } from './lib/data-plane'
 import type { CanvasActions } from './lib/handlers'
 import { resolveBffUrl, authMe, loginUrl, bindSessions, logout, type AuthState } from './lib/auth'
+import { SelectionProvider } from './components/SelectionContext'
+import { collectNodesBySource } from './lib/selection'
 
 const LOGGED_EVENTS = new Set(['message.complete', 'tool.start', 'tool.complete', 'reasoning.available', 'error'])
 
@@ -132,6 +134,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   useEffect(() => { setOverrides({}) }, [doc?.rev])
 
   const mergedDoc = doc ? mergeOverrides(doc, overrides) : null
+  const nodesBySource = useMemo(() => collectNodesBySource(mergedDoc), [mergedDoc])
   const derived = useMemo(() => deriveActivity(activity), [activity])
   const { messages, trace, isBusy } = derived
 
@@ -163,9 +166,14 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
       <main className="relative min-h-0 flex-1 overflow-auto gc-canvas-grid-bg p-4">
         <CanvasHeader rev={mergedDoc?.rev} isBusy={isBusy} />
         {mergedDoc ? (
-          <HandlerProvider actions={actions}>
-            <CanvasGrid doc={mergedDoc} />
-          </HandlerProvider>
+          <SelectionProvider
+            nodesBySource={nodesBySource}
+            onMirror={(id, ids) => actions.reportInteraction(id, { rowSelection: ids })}
+          >
+            <HandlerProvider actions={actions}>
+              <CanvasGrid doc={mergedDoc} />
+            </HandlerProvider>
+          </SelectionProvider>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-tertiary">
             No canvas yet — ask the agent to build a dashboard.
