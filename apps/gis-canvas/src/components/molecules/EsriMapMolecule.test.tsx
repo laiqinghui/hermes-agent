@@ -1,7 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { describe, it, vi } from 'vitest'
 import type { ComponentNode } from '../../lib/types'
 import { HandlerProvider } from '../HandlerContext'
+import { SelectionProvider, useLinkedSelection } from '../SelectionContext'
 import type { CanvasActions } from '../../lib/handlers'
 
 const built: string[] = []
@@ -47,5 +48,28 @@ describe('EsriMapMolecule', () => {
       </HandlerProvider>
     )
     expect(screen.getByTestId('map-skeleton')).toBeInTheDocument()
+  })
+})
+
+function Selector({ source }: { source: string }) {
+  const [, setSel] = useLinkedSelection(source)
+  return <button onClick={() => setSel(['a', 'b'])}>select-2</button>
+}
+
+describe('EsriMapMolecule linked selection', () => {
+  it('shows the selected count from the shared selection for its data source', () => {
+    const actions: CanvasActions = { setLocalState() {}, reportInteraction() {}, sendPrompt() {}, fetchData: vi.fn() }
+    const mapNode: ComponentNode = { id: 'm', type: 'esri:map', bindings: { layers: ['data://x'] }, props: {} }
+    render(
+      <SelectionProvider nodesBySource={{ 'data://x': ['m'] }} onMirror={() => {}}>
+        <HandlerProvider actions={actions}>
+          <Selector source="data://x" />
+          <EsriMapMolecule node={mapNode} renderChild={() => null} />
+        </HandlerProvider>
+      </SelectionProvider>
+    )
+    expect(screen.queryByText(/selected/i)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('select-2'))
+    expect(screen.getByText(/2 selected/i)).toBeInTheDocument()
   })
 })

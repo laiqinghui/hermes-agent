@@ -3,6 +3,8 @@ import { loadEsri } from '../../lib/esri/loader'
 import { buildLayer, buildRowsLayer } from '../../lib/esri/layers'
 import { isDataHandle } from '../../lib/data-plane'
 import { useCanvasActions } from '../HandlerContext'
+import { useLinkedSelection } from '../SelectionContext'
+import { resolveIdField } from '../../lib/selection'
 import { EsriFrame } from './EsriFrame'
 import { Skeleton } from '../atoms/Skeleton'
 import type { MoleculeProps } from '../registry'
@@ -19,6 +21,13 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   const layerRefs = asArray(node.bindings?.layers)
   const props = (node.props ?? {}) as { basemap?: string; center?: [number, number]; zoom?: number }
   const basemap = props.basemap ?? 'osm'
+  // Linked selection: the map's data-layer handle is the shared source.
+  const source = layerRefs.find(isDataHandle) ?? ''
+  const [selected, setSelected] = useLinkedSelection(source)
+  const selectedRef = useRef<string[]>(selected)
+  useEffect(() => { selectedRef.current = selected }, [selected])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mapCtx = useRef<{ view: any; layer: any; idField: string } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -41,6 +50,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
             const page = await actions.fetchData(r, { pageSize: 5000 })
             if (cancelled) return
             layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, r)
+            if (view && r === source) mapCtx.current = { view, layer, idField: resolveIdField(page.schema as { name: string }[]) }
           } else {
             layer = buildLayer(r, esri)
           }
@@ -51,13 +61,19 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
       // selection: click → hitTest → write objectIds to state.selection (reactive interaction)
       // arcgisViewClick is a CustomEvent; the screen point is in event.detail (not the event itself)
       clickHandle = esri.reactiveUtils.on(() => el, 'arcgisViewClick', async (event: unknown) => {
+        const ctx = mapCtx.current
+        if (!ctx) return
         const detail = (event as Record<string, unknown>)?.['detail']
         const hit = await (el as Record<string, unknown> & { hitTest?(e: unknown): Promise<{ results: unknown[] }> }).hitTest?.(detail)
         const ids = (hit?.results ?? [])
           .map((r: unknown) => (r as Record<string, unknown>)?.['graphic'] as Record<string, unknown>)
-          .map((g) => (g?.['attributes'] as Record<string, unknown> | undefined)?.['__oid'] ?? (g?.['getObjectId'] as (() => unknown) | undefined)?.())
+          .map(g => (g?.['attributes'] as Record<string, unknown> | undefined)?.[ctx.idField])
           .filter((x: unknown) => x != null)
-        actions.reportInteraction(node.id, { selection: ids })
+          .map(String)
+        if (!ids.length) return
+        // toggle the clicked ids into the current shared selection
+        const next = ids.reduce<string[]>((acc, id) => acc.includes(id) ? acc.filter(x => x !== id) : [...acc, id], selectedRef.current)
+        setSelected(next)
       })
     }
 
@@ -70,11 +86,27 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
     // node.id/layers are stable for a given rendered node; actions is stable (useMemo in App)
   }, [node.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // React to the shared selection: highlight the matching features and recenter.
+  useEffect(() => {
+    const ctx = mapCtx.current
+    if (!ready || !ctx) return
+    let handle: { remove(): void } | null = null
+    let cancelled = false
+    void ctx.view.whenLayerView(ctx.layer).then(async (lv: { queryFeatures(): Promise<{ features: unknown[] }>; highlight(g: unknown[]): { remove(): void } }) => {
+      if (cancelled) return
+      const res = await lv.queryFeatures()
+      const matched = (res?.features ?? []).filter(
+        (f: unknown) => selected.includes(String((f as { attributes?: Record<string, unknown> }).attributes?.[ctx.idField]))
+      )
+      handle?.remove()
+      handle = matched.length ? lv.highlight(matched) : null
+      if (matched.length) void ctx.view.goTo(matched, { animate: true }).catch(() => {})
+    }).catch(() => {})
+    return () => { cancelled = true; handle?.remove() }
+  }, [selected, ready])
+
   const center = props.center ? `${props.center[0]}, ${props.center[1]}` : undefined
-  const selection = node.state?.selection as unknown[] | undefined
-  const selectionSummary = Array.isArray(selection) && selection.length
-    ? `${selection.length} selected`
-    : undefined
+  const selectionSummary = selected.length ? `${selected.length} selected` : undefined
 
   return (
     <EsriFrame title={(node.props?.title as string | undefined) ?? 'Map'} meta={basemap} corners>
