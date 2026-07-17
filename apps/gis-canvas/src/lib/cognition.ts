@@ -4,7 +4,8 @@ import { summarizeValue } from './summarize-value'
 
 /** Cognition-molecule shape, detected from a step's result DATA shape — never
  * from the tool name. New tools whose results are rows/geo-rows/scalars get the
- * right molecule automatically; genuinely novel shapes fall back to 'text'. */
+ * right molecule automatically; novel/other values become a compact 'stat' —
+ * only an absent result (null/undefined) falls back to 'text'. */
 export type CognitionShape = 'error' | 'geo-rows' | 'rows' | 'stat' | 'text'
 
 export interface StepMolecule {
@@ -47,7 +48,7 @@ export function describeStep(step: BuildStep): StepMolecule {
   const title = humanizeLabel(step.label)
   const result = step.result
 
-  if (isRowObject(result) && 'error' in result) {
+  if (isRowObject(result) && result.error != null) {
     return { shape: 'error', title, summary: summarizeValue(result.error) }
   }
 

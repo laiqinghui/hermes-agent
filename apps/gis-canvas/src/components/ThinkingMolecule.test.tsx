@@ -26,4 +26,15 @@ describe('ThinkingMolecule', () => {
     act(() => { vi.advanceTimersByTime(20) })
     expect(el.textContent).toContain('bbbb')
   })
+
+  it('renders the full text immediately when prefers-reduced-motion is set', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: true, media: query, onchange: null,
+      addEventListener() {}, removeEventListener() {},
+      addListener() {}, removeListener() {}, dispatchEvent: () => false,
+    }))
+    render(<ThinkingMolecule text="hello" speedMs={1} />)
+    expect(screen.getByTestId('thinking-molecule').textContent).toContain('hello')
+    vi.unstubAllGlobals()
+  })
 })

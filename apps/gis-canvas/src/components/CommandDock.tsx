@@ -12,7 +12,7 @@ export function CommandDock({
   busy?: boolean
   step?: BuildStep
 }) {
-  const live = busy && step
+  const live = busy && step && step.status === 'running'
   return (
     <button
       onClick={onOpen}
@@ -43,8 +43,8 @@ export function CommandDock({
       {live ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 left-0 w-2/5"
-          style={{ background: 'linear-gradient(90deg,transparent,color-mix(in oklab,var(--color-accent) 22%,transparent),transparent)', animation: 'gc-dock-sweep 1.6s linear infinite' }}
+          className="pointer-events-none absolute inset-y-0 left-0 w-2/5 gc-anim-dock-sweep"
+          style={{ background: 'linear-gradient(90deg,transparent,color-mix(in oklab,var(--color-accent) 22%,transparent),transparent)' }}
         />
       ) : null}
     </button>

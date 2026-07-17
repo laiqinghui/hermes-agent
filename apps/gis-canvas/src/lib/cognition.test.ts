@@ -43,4 +43,10 @@ describe('describeStep', () => {
     expect(m.shape).toBe('text')
     expect(m.summary).toBe('Rendered')
   })
+
+  it("uses '—' when there is no result and no summary", () => {
+    const m = describeStep(mk('render_view', undefined))
+    expect(m.shape).toBe('text')
+    expect(m.summary).toBe('—')
+  })
 })

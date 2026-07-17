@@ -11,6 +11,11 @@ export function ThinkingMolecule({ text, speedMs = 18 }: { text: string; speedMs
   // fake-timer advance in tests, and ticks aren't gated behind a render.
   useEffect(() => {
     setShown(0)
+    const reduce =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduce) { setShown(text.length); return }
     let cancelled = false
     let i = 0
     let timer: ReturnType<typeof setTimeout> | undefined

@@ -25,16 +25,17 @@ function StepChip({ molecule }: { molecule: StepMolecule }) {
 export function CognitionPlane({ turn }: { turn: Turn | undefined }) {
   if (!turn || !turn.isBusy) return null
 
-  const lastReasoning = [...turn.items].reverse().find(i => i.kind === 'reasoning') as
-    | { kind: 'reasoning'; id: number; text: string }
-    | undefined
+  let lastReasoning: { kind: 'reasoning'; id: number; text: string } | undefined
+  for (let i = turn.items.length - 1; i >= 0; i--) {
+    const it = turn.items[i]
+    if (it.kind === 'reasoning') { lastReasoning = it; break }
+  }
   const doneSteps = turn.trace.filter(s => s.status === 'done')
 
   return (
     <div
       data-testid="cognition-plane"
-      className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center p-6"
-      style={{ animation: 'gc-cognition-in .3s ease both' }}
+      className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center p-6 gc-anim-cognition"
     >
       <div className="flex w-[min(64%,460px)] flex-col items-stretch gap-3">
         {lastReasoning ? <ThinkingMolecule text={lastReasoning.text} /> : null}
