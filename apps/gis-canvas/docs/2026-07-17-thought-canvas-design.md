@@ -71,22 +71,47 @@ stream — only `subagent.*` carries `parent_id`); backend changes to the event 
 A new overlay rendered above the result plane, driven entirely by the derived activity for the
 **current (busy) turn**. No schema change, no new events.
 
-- **Thinking molecule** — a center-stage glass card that types the agent's *current* reasoning text
-  character-by-character. A client typewriter animation over the latest `reasoning.available` text;
-  advances as new reasoning arrives. The agent never calls a tool for this.
-- **Step molecules** — as each `tool.complete` lands, a small molecule appears near the thought,
-  chosen by a **shape detector** over the step's `result`:
+**Presentation: Narration Spotlight (revised 2026-07-17 after live visual verify).** The first cut
+rendered *every* completed step as a molecule in a centered column. Live, a single turn produced 25+
+steps (a `data_query` 401 sent the agent into a raw `execute_code`/PKCE fallback — a separate backend
+fault, see §Out-of-scope), so the column overflowed the viewport, buried the thinking card off-screen,
+and the per-step summaries ("19 fields", raw JSON) gave no sense of *what happened*. The revised design
+below is **bounded at any scale** and **narrative**. (Superseded: the stacked shape-detector molecule
+grid.)
 
-  | Detected shape | Cognition molecule |
+While busy the plane renders exactly **three bounded, centered elements** — never an accumulating stack:
+
+- **Thinking star (top)** — the `ThinkingMolecule` glass card typing the agent's *current* reasoning
+  character-by-character (client typewriter over the latest `reasoning.available`; the agent never calls
+  a tool for this). If no reasoning has arrived yet, a subtle `◆ Working…` placeholder so thinking still
+  leads.
+- **Current-step card (middle)** — **one** card showing the *active* step (the last `running` step, else
+  the most recent), narrated as a human sentence with a status glyph and a live left→right sweep. It
+  **updates in place** as the agent advances — it never accumulates.
+- **Breadcrumb rail (bottom)** — completed steps as compact pills (`✓`/`✕` + short label) in a **single
+  non-wrapping row**, bounded: the most recent ~5 on the right, older collapsed into a `+N earlier` chip
+  on the left (`overflow:hidden`).
+
+Because the plane is bounded to ~3 compact elements it stays centered and cannot push the thinking card
+off-screen — the failure observed live.
+
+- **`narrateStep(step)` — meaningful step content.** A new `lib/narrate.ts` turns `name + args + result`
+  into a human sentence + outcome, replacing structural summaries. A small table of known verbs with a
+  **generic fallback** (so novel tools still read sensibly, no per-tool registration):
+
+  | tool | narration |
   |---|---|
-  | `text` / reasoning preview | line / churned text |
-  | scalar or `{k: v}` | stat chip |
-  | `rows[]` | mini-table + row count |
-  | rows with lat/lng (via `detectGeoFields`) | spark-map |
-  | `error` | fault card |
-  | *anything else* | **generic step card (fallback)** |
+  | `skill_view` | `Read skill · <skill>` |
+  | `data_query` | `Queried <table> · 20 rows` / `· ✕ 401` |
+  | `search_files` | `Searched files · 50 matches` |
+  | `read_file` | `Read <basename>` |
+  | `execute_code` / `terminal` | `Ran <lang> · <intent>` |
+  | `render_view` | `Rendered the canvas` |
+  | *unknown* | `humanizeLabel(name) · <rows/count/error, else —>` |
 
-  Detectors reuse `lib/summarize-value.ts` and `lib/esri/graphics.ts::detectGeoFields`.
+  The *outcome* (ok / error / row-count) reuses the existing `describeStep` shape detection
+  (`lib/cognition.ts`); the *verb/object* comes from `name`+`args`. `describeStep`'s role narrows to
+  supplying that outcome badge — it no longer drives layout.
 - **Lifecycle (fade-out).** Cognition is the *process*; the result plane is the *destination*. When the
   turn's final `message.complete` / result `render_view` lands, the thinking + step molecules
   **gracefully dissolve**, and the busy ribbon **collapses to a thin status strip** (e.g. "Idle · last:
@@ -98,7 +123,7 @@ A new overlay rendered above the result plane, driven entirely by the derived ac
   disclosure is replaced by interleaved reasoning headers ahead of each step. `lib/derive-heading.ts`
   supplies the short headings.
 
-Centering: cognition molecules are centered on the grid to hold attention, per the C2 intent.
+Centering: the spotlight is centered on the grid to hold attention, per the C2 intent.
 
 ## Section 3 — Dock ticker
 
@@ -174,8 +199,9 @@ brief and is out of scope here.)
 | Unit | Responsibility | Change |
 |---|---|---|
 | `lib/activity.ts` | derive turns/timeline (has ordering already) | consume for interleave + cognition |
-| `lib/cognition.ts` *(new)* | shape-detect a step `result` → cognition molecule descriptor | new |
-| `components/CognitionPlane.tsx` *(new)* | render thinking + step molecules for the busy turn; fade-out | new |
+| `lib/cognition.ts` *(new)* | shape-detect a step `result` → outcome (ok/error/rows) for the narration badge | new |
+| `lib/narrate.ts` *(new, rework)* | `name`+`args`+`result` → human sentence + outcome (`narrateStep`) | new |
+| `components/CognitionPlane.tsx` *(new; reworked to Spotlight)* | thinking star + one current-step card + bounded breadcrumb rail for the busy turn; fade-out | new |
 | `components/ThinkingMolecule.tsx` *(new)* | typewriter over current reasoning | new |
 | `components/CanvasGrid.tsx` | base/float/grid layering + auto-hero transform | modify |
 | `components/CommandDock.tsx` | live step ticker with L→R sweep | modify |
@@ -187,24 +213,27 @@ brief and is out of scope here.)
 
 1. User prompt → gateway streams `reasoning.available` + `tool.start/complete` (unchanged).
 2. `App.tsx` logs activity → `deriveActivity` → `{turns, timeline, trace, isBusy}` (unchanged).
-3. **Cognition plane** renders from the busy turn's reasoning + steps (via `lib/cognition.ts`); dock
-   ticker reads `isBusy` + `trace.at(-1)`.
+3. **Cognition plane (Spotlight)** renders from the busy turn: thinking star (latest reasoning) + one
+   current-step card (`narrateStep` of the active step) + a bounded breadcrumb rail of completed steps;
+   dock ticker reads `isBusy` + `trace.at(-1)`.
 4. Agent's final `render_view` → `{gis_canvas:true}` doc on `tool.complete` → `use-canvas-doc` →
    `mergeOverrides` → **auto-hero transform** → `CanvasGrid` renders base/float/grid.
 5. Final result → cognition plane fades → status strip; trail stays in Inspector.
 
 ## Error handling
 
-- Cognition molecules are best-effort: a shape detector that throws falls back to the generic step card
-  (never breaks the canvas).
+- Cognition is best-effort: if `narrateStep`/`describeStep` throws for a step it falls back to
+  `humanizeLabel(name)` (never breaks the canvas).
 - Auto-hero transform is a guarded pure function; on any inconsistency it returns the doc unchanged
   (falls back to grid).
 - Schema validation rejects malformed `layer`/`anchor` with actionable errors, same contract as today.
 
 ## Testing
 
-- **Cognition:** shape-detector unit tests (each shape → expected molecule + generic fallback);
-  interleave ordering test in `TurnView`; fade-out lifecycle on final result.
+- **Cognition:** `describeStep` shape unit tests (outcome + fallback); `narrateStep` unit tests (known
+  verbs + generic fallback); `CognitionPlane` renders thinking star + one current-step card + bounded
+  rail (never a per-step stack); interleave ordering test in `TurnView`; fade-out lifecycle on final
+  result.
 - **Dock:** busy → ticker with current step; idle → prompt pill.
 - **Stacking:** `layer/anchor` validation (one base max, float requires anchor); grid unchanged when no
   base (regression); auto-hero promotes a lone `esri:map`; explicit layers respected over auto-hero.
@@ -213,7 +242,9 @@ brief and is out of scope here.)
 ## Phasing (each independently shippable)
 
 - **Phase A — Cognition plane** (frontend-only): interleave fix, thinking molecule, step molecules,
-  dock ticker, fade lifecycle. Highest value, no schema change, lowest risk.
+  dock ticker, fade lifecycle. Highest value, no schema change, lowest risk. **Shipped**, then
+  **reworked to the Narration Spotlight** (bounded current-step card + breadcrumb rail + `narrateStep`)
+  after live visual verify showed the stacked-molecule approach cluttered and buried the thinking card.
 - **Phase B — Stacking primitive** (schema + validator + grid + glass HUD + auto-hero): the C2
   map-hero.
 - **Phase C — Agent composition guidance** (tool-description edits): steers the result plane.
@@ -225,3 +256,6 @@ brief and is out of scope here.)
 - **Fade-out** post-turn lifecycle (trail via Inspector) over a persistent on-canvas trail.
 - **Auto-hero promotion** so map-center-stage works without agent cooperation.
 - **A → B → C phasing** over a single big-bang change.
+- **Cognition = Narration Spotlight** (revised after live verify): thinking star + one in-place
+  current-step card + a bounded breadcrumb rail, with `narrateStep` human sentences — over the original
+  stacked shape-detector molecule grid (which cluttered and buried the thinking card at real step counts).
