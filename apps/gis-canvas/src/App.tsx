@@ -180,8 +180,12 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         )}
         <CognitionPlane turn={isBusy ? derived.turns.at(-1) : undefined} />
       </main>
-      <BuildToast show={isBusy} step={trace.at(-1)} />
-      {!overlayOpen && <CommandDock latest={messages.at(-1)} onOpen={() => setOverlayOpen(true)} />}
+      {/* progress shows in exactly one place: the dock ticker when minimized,
+          the top toast when the panel is open (dock hidden). */}
+      <BuildToast show={isBusy && overlayOpen} step={trace.at(-1)} />
+      {!overlayOpen && (
+        <CommandDock latest={messages.at(-1)} onOpen={() => setOverlayOpen(true)} busy={isBusy} step={trace.at(-1)} />
+      )}
       <AgentPanel
         open={overlayOpen}
         onClose={() => setOverlayOpen(false)}

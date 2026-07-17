@@ -138,6 +138,9 @@ html, body { margin: 0; padding: 0; }
 
 @keyframes gc-cognition-in { 0% { opacity: 0; transform: translateY(8px) scale(.98); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
 
+@keyframes gc-dock-sweep { 0% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
+@media (prefers-reduced-motion: reduce) { @keyframes gc-dock-sweep { 0%,100% { transform: none; } } }
+
 .gc-skeleton { position: relative; overflow: hidden; background: var(--color-surface-raised); }
 .gc-skeleton::after {
   content: '';
