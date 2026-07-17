@@ -105,9 +105,9 @@ off-screen — the failure observed live.
   | `data_query` | `Queried <table> · 20 rows` / `· ✕ 401` |
   | `search_files` | `Searched files · 50 matches` |
   | `read_file` | `Read <basename>` |
-  | `execute_code` / `terminal` | `Ran <lang> · <intent>` |
+  | `execute_code` / `terminal` | `Ran <lang>` / `Ran <cmd>` |
   | `render_view` | `Rendered the canvas` |
-  | *unknown* | `humanizeLabel(name) · <rows/count/error, else —>` |
+  | *unknown* | `humanizeLabel(name)` · rows/error tail when present |
 
   The *outcome* (ok / error / row-count) reuses the existing `describeStep` shape detection
   (`lib/cognition.ts`); the *verb/object* comes from `name`+`args`. `describeStep`'s role narrows to
