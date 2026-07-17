@@ -3,13 +3,18 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { TurnView } from './TurnView'
 import type { Turn } from '../lib/activity'
 
+const step = { id: 3, label: 'data_query', status: 'done' as const, result: { RowCount: 20 } }
 const turn: Turn = {
   id: 1,
   prompt: 'show me the positions',
-  reasoning: [{ id: 2, text: 'Exploring vessel positions' }],
-  trace: [{ id: 3, label: 'data_query', status: 'done', result: { RowCount: 20 } }],
+  reasoning: [{ id: 2, text: 'Exploring vessel positions before querying' }],
+  trace: [step],
+  items: [
+    { kind: 'reasoning', id: 2, text: 'Exploring vessel positions before querying' },
+    { kind: 'step', id: 3, step },
+  ],
   answers: ['Displayed 20 positions.'],
-  isBusy: false
+  isBusy: false,
 }
 
 describe('TurnView', () => {
@@ -20,10 +25,21 @@ describe('TurnView', () => {
     expect(screen.getByText('Data Query')).toBeInTheDocument()
     expect(screen.getByText('Displayed 20 positions.')).toBeInTheDocument()
   })
-  it('reveals reasoning via its own Thinking disclosure', () => {
+
+  it('shows a per-step Thinking row (heading visible) and reveals the body on click', () => {
     render(<TurnView turn={turn} />)
-    expect(screen.queryByText('Exploring vessel positions')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /thinking/i }))
-    expect(screen.getAllByText('Exploring vessel positions').length).toBeGreaterThan(0)
+    // derived heading is always visible; full body hidden until expanded
+    expect(screen.getByText('Exploring vessel positions before querying')).toBeInTheDocument()
+    // body text (same string here) toggles: at least one Thinking toggle exists
+    const toggle = screen.getByRole('button', { name: /thinking/i })
+    expect(toggle).toBeInTheDocument()
+    fireEvent.click(toggle)
+    expect(screen.getAllByText('Exploring vessel positions before querying').length).toBeGreaterThan(0)
+  })
+
+  it('orders the reasoning row before the step it triggered', () => {
+    const { container } = render(<TurnView turn={turn} />)
+    const html = container.innerHTML
+    expect(html.indexOf('Thinking')).toBeLessThan(html.indexOf('Data Query'))
   })
 })
