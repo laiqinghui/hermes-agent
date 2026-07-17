@@ -6,6 +6,7 @@ import { BuildToast } from './components/BuildToast'
 import { HandlerProvider } from './components/HandlerContext'
 import { TopBar } from './components/TopBar'
 import { CanvasHeader } from './components/CanvasHeader'
+import { CognitionPlane } from './components/CognitionPlane'
 import { useTheme } from './lib/use-theme'
 import { useOverlayShortcut } from './lib/use-overlay-shortcut'
 import { deriveActivity, activityItemFromEvent, type ActivityItem } from './lib/activity'
@@ -177,6 +178,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
             No canvas yet — ask the agent to build a dashboard.
           </div>
         )}
+        <CognitionPlane turn={isBusy ? derived.turns.at(-1) : undefined} />
       </main>
       <BuildToast show={isBusy} step={trace.at(-1)} />
       {!overlayOpen && <CommandDock latest={messages.at(-1)} onOpen={() => setOverlayOpen(true)} />}
