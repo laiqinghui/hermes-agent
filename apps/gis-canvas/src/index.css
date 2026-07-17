@@ -132,6 +132,10 @@ html, body { margin: 0; padding: 0; }
   .gc-anim-dock, .gc-anim-panel, .gc-anim-scrim, .gc-anim-toast, .gc-anim-pulse { animation: none !important; }
 }
 
+@keyframes gc-caret { 50% { opacity: 0; } }
+.gc-caret { animation: gc-caret 1s steps(1) infinite; }
+@media (prefers-reduced-motion: reduce) { .gc-caret { animation: none; } }
+
 .gc-skeleton { position: relative; overflow: hidden; background: var(--color-surface-raised); }
 .gc-skeleton::after {
   content: '';
