@@ -38,7 +38,7 @@ function StepRail({ steps }: { steps: BuildStep[] }) {
   const shown = steps.slice(-RAIL_MAX)
   const hidden = steps.length - shown.length
   return (
-    <div className="flex items-center gap-1.5 overflow-hidden">
+    <div className="flex items-center justify-end gap-1.5 overflow-hidden">
       {hidden > 0 ? (
         <span className="shrink-0 font-mono text-[9px] text-tertiary">+{hidden} earlier</span>
       ) : null}
@@ -95,14 +95,14 @@ export function CognitionPlane({ turn }: { turn: Turn | undefined }) {
   }
   if (!current && turn.trace.length) current = turn.trace[turn.trace.length - 1]
 
-  const done = turn.trace.filter(s => s.status === 'done')
+  const done = turn.trace.filter(s => s.status === 'done' && s !== current)
 
   return (
     <div
       data-testid="cognition-plane"
       className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center p-6 gc-anim-cognition"
     >
-      <div className="flex w-[min(66%,520px)] flex-col items-stretch gap-3">
+      <div className="flex max-h-[86vh] w-[min(66%,520px)] flex-col items-stretch gap-3 overflow-hidden">
         {lastReasoning ? <ThinkingMolecule text={lastReasoning.text} /> : <WorkingPlaceholder />}
         {current ? <CurrentStepCard step={current} /> : null}
         {done.length ? <StepRail steps={done} /> : null}

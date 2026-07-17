@@ -38,7 +38,7 @@ export function ThinkingMolecule({ text, speedMs = 18 }: { text: string; speedMs
       className="w-full rounded-gc-lg border border-accent/40 bg-surface/90 px-4 py-3.5 shadow-gc-overlay backdrop-blur"
     >
       <div className="mb-2 font-mono text-[9.5px] uppercase tracking-[.14em] text-accent">◆ Thinking</div>
-      <div className="min-h-[2.6em] whitespace-pre-wrap font-mono text-[12.5px] leading-relaxed text-primary">
+      <div className="min-h-[2.6em] max-h-[38vh] overflow-hidden whitespace-pre-wrap font-mono text-[12.5px] leading-relaxed text-primary">
         {text.slice(0, shown)}
         <span aria-hidden className="gc-caret text-accent">▍</span>
       </div>

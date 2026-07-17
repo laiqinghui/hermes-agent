@@ -44,8 +44,9 @@ function outcomeOf(step: BuildStep): StepOutcome {
 /** A concise result tail (error summary or row count), or '' when neither applies. */
 function resultTail(step: BuildStep): string {
   const d = describeStep(step)
-  if (d.shape === 'error') return d.summary
-  if (typeof d.rowCount === 'number') return `${d.rowCount} row${d.rowCount === 1 ? '' : 's'}`
+  // Reuse describeStep's summary verbatim for error + row shapes (it already
+  // formats "N rows"); other shapes (stat/text) contribute no tail.
+  if (d.shape === 'error' || typeof d.rowCount === 'number') return d.summary
   return ''
 }
 
