@@ -26,8 +26,10 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   const [selected, setSelected] = useLinkedSelection(source)
   const selectedRef = useRef<string[]>(selected)
   useEffect(() => { selectedRef.current = selected }, [selected])
+  const setSelectedRef = useRef(setSelected)
+  useEffect(() => { setSelectedRef.current = setSelected }, [setSelected])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mapCtx = useRef<{ view: any; layer: any; idField: string } | null>(null)
+  const mapCtx = useRef<{ view: any; layer: any; idField: string; keyByOid: Map<number, string> } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -50,41 +52,57 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
             const page = await actions.fetchData(r, { pageSize: 5000 })
             if (cancelled) return
             layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, r)
-            if (view && r === source) mapCtx.current = { view, layer, idField: resolveIdField(page.schema as { name: string }[], page.rows as Record<string, unknown>[]) }
+            if (view && r === source) {
+              const rows = page.rows as Record<string, unknown>[]
+              const idField = resolveIdField(page.schema as { name: string }[], rows)
+              // __oid is i+1 (see graphicsFromMockSource). Map it to the shared row key,
+              // because ESRI hitTest graphics carry only the objectId, not the fields.
+              const keyByOid = new Map<number, string>()
+              rows.forEach((row, i) => keyByOid.set(i + 1, String(row[idField])))
+              mapCtx.current = { view, layer, idField, keyByOid }
+            }
           } else {
             layer = buildLayer(r, esri)
           }
           if (view) view.map.add(layer)
         } catch (e) { console.error('layer build failed', r, e) }
       }
+      // A click on the map is a selection here, not an info request — disable the popup.
+      if (view) (view as unknown as { popupEnabled?: boolean }).popupEnabled = false
       if (!cancelled) setReady(true)
-      // selection: click → hitTest → write objectIds to state.selection (reactive interaction)
-      // arcgisViewClick is a CustomEvent; the screen point is in event.detail (not the event itself)
-      clickHandle = esri.reactiveUtils.on(() => el, 'arcgisViewClick', async (event: unknown) => {
-        const ctx = mapCtx.current
-        if (!ctx) return
-        const detail = (event as Record<string, unknown>)?.['detail']
-        const hit = await (el as Record<string, unknown> & { hitTest?(e: unknown): Promise<{ results: unknown[] }> }).hitTest?.(detail)
-        const ids = (hit?.results ?? [])
-          .map((r: unknown) => (r as Record<string, unknown>)?.['graphic'] as Record<string, unknown>)
-          .map(g => (g?.['attributes'] as Record<string, unknown> | undefined)?.[ctx.idField])
-          .filter((x: unknown) => x != null)
-          .map(String)
-        if (!ids.length) return
-        // toggle the clicked ids into the current shared selection
-        const next = ids.reduce<string[]>((acc, id) => acc.includes(id) ? acc.filter(x => x !== id) : [...acc, id], selectedRef.current)
-        setSelected(next)
-      })
     }
 
     el.addEventListener('arcgisViewReadyChange', onReady)
     return () => {
       cancelled = true
       el.removeEventListener('arcgisViewReadyChange', onReady)
-      clickHandle?.remove()
     }
     // node.id/layers are stable for a given rendered node; actions is stable (useMemo in App)
   }, [node.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Map click → shared selection. Kept in its own ready-keyed effect (not inside the
+  // one-time onReady) so it (re)attaches whenever the view is ready — including after
+  // an HMR reload, and always in production.
+  useEffect(() => {
+    const ctx = mapCtx.current
+    if (!ready || !ctx) return
+    const handle = ctx.view.on('click', async (e: unknown) => {
+      // ESRI hitTest graphics carry only the objectId (__oid), not the fields,
+      // so map __oid → the shared row key instead of reading attributes[idField].
+      const hit = await ctx.view.hitTest(e, { include: [ctx.layer] }) as { results?: unknown[] }
+      const ids = (hit?.results ?? [])
+        .map((r: unknown) => (r as Record<string, unknown>)?.['graphic'] as Record<string, unknown>)
+        .map(g => (g?.['attributes'] as Record<string, unknown> | undefined)?.['__oid'])
+        .filter((x: unknown) => x != null)
+        .map(oid => ctx.keyByOid?.get(Number(oid)))
+        .filter((x: unknown): x is string => x != null)
+      if (!ids.length) return
+      // toggle the clicked ids into the current shared selection
+      const next = ids.reduce<string[]>((acc, id) => acc.includes(id) ? acc.filter(x => x !== id) : [...acc, id], selectedRef.current)
+      setSelectedRef.current(next)
+    }) as { remove(): void }
+    return () => handle.remove()
+  }, [ready])
 
   // React to the shared selection: highlight the matching features and recenter.
   useEffect(() => {
