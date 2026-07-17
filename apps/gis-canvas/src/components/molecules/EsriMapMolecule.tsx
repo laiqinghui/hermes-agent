@@ -107,7 +107,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   // React to the shared selection: highlight the matching features and recenter.
   useEffect(() => {
     const ctx = mapCtx.current
-    if (!ready || !ctx) return
+    if (!ready || !ctx || !selected.length) return // nothing selected → prior cleanup already cleared the highlight
     let handle: { remove(): void } | null = null
     let cancelled = false
     ;(async () => {

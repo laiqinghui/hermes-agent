@@ -5,7 +5,10 @@ interface SelectionContextValue {
   set: (source: string, ids: string[]) => void
 }
 
-const NOOP: SelectionContextValue = { get: () => [], set: () => {} }
+// Stable empty reference so consumers with no selection don't see a new array
+// identity every render (which would re-run their selection effects needlessly).
+const EMPTY: string[] = []
+const NOOP: SelectionContextValue = { get: () => EMPTY, set: () => {} }
 const Ctx = createContext<SelectionContextValue>(NOOP)
 
 /** Holds selection keyed by data source and mirrors every change onto the
@@ -21,7 +24,7 @@ export function SelectionProvider({
   children: ReactNode
 }) {
   const [selection, setSelection] = useState<Record<string, string[]>>({})
-  const get = useCallback((source: string) => selection[source] ?? [], [selection])
+  const get = useCallback((source: string) => selection[source] ?? EMPTY, [selection])
   const set = useCallback((source: string, ids: string[]) => {
     setSelection(prev => ({ ...prev, [source]: ids }))
     for (const nodeId of nodesBySource[source] ?? []) onMirror(nodeId, ids)
@@ -34,7 +37,7 @@ export function SelectionProvider({
  * yields an empty, inert selection. */
 export function useLinkedSelection(source: string | undefined): [string[], (ids: string[]) => void] {
   const ctx = useContext(Ctx)
-  const selected = source ? ctx.get(source) : []
+  const selected = source ? ctx.get(source) : EMPTY
   const setSelected = useCallback((ids: string[]) => { if (source) ctx.set(source, ids) }, [ctx, source])
   return [selected, setSelected]
 }

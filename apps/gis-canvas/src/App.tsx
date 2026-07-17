@@ -133,8 +133,9 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   // reset local overrides whenever the agent re-renders the canvas (new structure)
   useEffect(() => { setOverrides({}) }, [doc?.rev])
 
-  const mergedDoc = doc ? mergeOverrides(doc, overrides) : null
+  const mergedDoc = useMemo(() => (doc ? mergeOverrides(doc, overrides) : null), [doc, overrides])
   const nodesBySource = useMemo(() => collectNodesBySource(mergedDoc), [mergedDoc])
+  const mirrorSelection = useCallback((id: string, ids: string[]) => actions.reportInteraction(id, { rowSelection: ids }), [actions])
   const derived = useMemo(() => deriveActivity(activity), [activity])
   const { messages, trace, isBusy } = derived
 
@@ -166,10 +167,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
       <main className="relative min-h-0 flex-1 overflow-auto gc-canvas-grid-bg p-4">
         <CanvasHeader rev={mergedDoc?.rev} isBusy={isBusy} />
         {mergedDoc ? (
-          <SelectionProvider
-            nodesBySource={nodesBySource}
-            onMirror={(id, ids) => actions.reportInteraction(id, { rowSelection: ids })}
-          >
+          <SelectionProvider nodesBySource={nodesBySource} onMirror={mirrorSelection}>
             <HandlerProvider actions={actions}>
               <CanvasGrid doc={mergedDoc} />
             </HandlerProvider>
