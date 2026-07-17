@@ -448,9 +448,7 @@ export function describeStep(step: BuildStep): StepMolecule {
   if (result === null || result === undefined) {
     return { shape: 'text', title, summary: step.summary ?? '—' }
   }
-  if (typeof result === 'object') {
-    return { shape: 'stat', title, summary: summarizeValue(result) }
-  }
+  // Any other value (scalar or a non-row object) → a compact stat.
   return { shape: 'stat', title, summary: summarizeValue(result) }
 }
 ```
