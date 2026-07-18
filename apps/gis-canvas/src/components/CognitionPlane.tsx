@@ -1,9 +1,30 @@
+import { useEffect, useRef, useState } from 'react'
 import type { BuildStep, Turn } from '../lib/activity'
 import { narrateStep, type StepOutcome } from '../lib/narrate'
 import { humanizeLabel } from '../lib/humanize'
+import { useDwell } from '../lib/use-dwell'
 import { ThinkingMolecule } from './ThinkingMolecule'
 
 const RAIL_MAX = 5
+const DWELL_MS = 1200
+
+// Seconds since `resetKey` last changed, ticking every second while `active`.
+// A client-side live timer for the running step (the stream carries no elapsed
+// for an in-flight step; duration_s only arrives on completion).
+function useElapsedSeconds(resetKey: string, active: boolean): number {
+  const [secs, setSecs] = useState(0)
+  const startRef = useRef(Date.now())
+  useEffect(() => {
+    startRef.current = Date.now()
+    setSecs(0)
+  }, [resetKey])
+  useEffect(() => {
+    if (!active) return
+    const id = setInterval(() => setSecs(Math.floor((Date.now() - startRef.current) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [active, resetKey])
+  return secs
+}
 
 const OUTCOME_TEXT: Record<StepOutcome, string> = {
   ok: 'text-positive',
@@ -15,6 +36,8 @@ const OUTCOME_TEXT: Record<StepOutcome, string> = {
 // thinking star above). A running step gets the sweep.
 function CurrentStepCard({ step }: { step: BuildStep }) {
   const n = narrateStep(step)
+  const running = n.outcome === 'running'
+  const secs = useElapsedSeconds(String(step.id), running)
   return (
     <div
       data-testid="current-step"
@@ -25,6 +48,9 @@ function CurrentStepCard({ step }: { step: BuildStep }) {
         {humanizeLabel(step.label)}
         {n.tail ? <span className="text-tertiary"> · {n.tail}</span> : null}
       </span>
+      {running && secs > 0 ? (
+        <span className="shrink-0 font-mono text-[10.5px] text-tertiary">{secs}s</span>
+      ) : null}
       {n.outcome === 'running' ? (
         <span
           aria-hidden
@@ -79,11 +105,14 @@ function WorkingPlaceholder() {
 // breadcrumb rail of completed steps. Never a per-step stack. Unmounts when the
 // turn is no longer busy (trail stays recallable via the Inspector).
 export function CognitionPlane({ turn }: { turn: Turn | undefined }) {
-  if (!turn || !turn.isBusy) return null
+  // Raw values are computed with null guards so the pacing hook below can run
+  // unconditionally (Rules of Hooks) — the early return happens after it.
+  const items = turn?.items ?? []
+  const trace = turn?.trace ?? []
 
   let lastReasoning: { kind: 'reasoning'; id: number; text: string } | undefined
-  for (let i = turn.items.length - 1; i >= 0; i--) {
-    const it = turn.items[i]
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i]
     if (it.kind === 'reasoning') {
       lastReasoning = it
       break
@@ -91,20 +120,29 @@ export function CognitionPlane({ turn }: { turn: Turn | undefined }) {
   }
 
   let current: BuildStep | undefined
-  for (let i = turn.trace.length - 1; i >= 0; i--) {
-    if (turn.trace[i].status === 'running') {
-      current = turn.trace[i]
+  for (let i = trace.length - 1; i >= 0; i--) {
+    if (trace[i].status === 'running') {
+      current = trace[i]
       break
     }
   }
-  if (!current && turn.trace.length) current = turn.trace[turn.trace.length - 1]
+  if (!current && trace.length) current = trace[trace.length - 1]
 
-  const done = turn.trace.filter(s => s.status === 'done' && s !== current)
+  const done = trace.filter(s => s.status === 'done' && s !== current)
 
   // The star types the agent's reasoning when it emits any; otherwise it falls
   // back to the current step's `context` — the agent's own description of what
   // it is doing (the rich text the dock shows) — so it is never a bare placeholder.
   const thinkingText = lastReasoning?.text ?? current?.context
+
+  // Pace the cognition frame: hold each (thought + current step + rail) for a
+  // readable minimum, coalescing rapid updates to the latest so nothing flashes
+  // by. Keyed on the active step + thinking text (the things that visibly change).
+  const busy = !!turn?.isBusy
+  const frameKey = busy ? `${current?.id ?? 'none'}|${thinkingText ?? ''}` : '∅'
+  const frame = useDwell({ thinkingText, current, done }, frameKey, DWELL_MS)
+
+  if (!turn || !turn.isBusy) return null
 
   return (
     <div
@@ -112,9 +150,9 @@ export function CognitionPlane({ turn }: { turn: Turn | undefined }) {
       className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center p-6 gc-anim-cognition"
     >
       <div className="flex max-h-[86vh] w-[min(66%,520px)] flex-col items-stretch gap-3 overflow-hidden">
-        {thinkingText ? <ThinkingMolecule text={thinkingText} /> : <WorkingPlaceholder />}
-        {current ? <CurrentStepCard step={current} /> : null}
-        {done.length ? <StepRail steps={done} /> : null}
+        {frame.thinkingText ? <ThinkingMolecule text={frame.thinkingText} /> : <WorkingPlaceholder />}
+        {frame.current ? <CurrentStepCard step={frame.current} /> : null}
+        {frame.done.length ? <StepRail steps={frame.done} /> : null}
       </div>
     </div>
   )
