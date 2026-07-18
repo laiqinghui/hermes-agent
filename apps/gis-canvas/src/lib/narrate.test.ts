@@ -26,6 +26,12 @@ describe('narrateStep', () => {
     expect(n.glyph).toBe('✕')
   })
 
+  it('exposes a compact outcome tail (row count / error) for a "<label> · <tail>" card', () => {
+    expect(narrateStep(mk('data_query', { args: { table: 't' }, result: { rows: [{ a: 1 }, { a: 2 }] } })).tail).toBe('2 rows')
+    expect(narrateStep(mk('data_query', { result: { error: '401 Unauthorized' } })).tail).toBe('401 Unauthorized')
+    expect(narrateStep(mk('skill_view', { status: 'running' })).tail).toBe('') // running: no result yet
+  })
+
   it('search_files reports the match count from result.total_count', () => {
     expect(narrateStep(mk('search_files', { result: { total_count: 50, files: ['a', 'b'] } })).text)
       .toBe('Searched files · 50 matches')

@@ -11,7 +11,8 @@ const OUTCOME_TEXT: Record<StepOutcome, string> = {
   running: 'text-accent',
 }
 
-// The single active step, narrated in place. A running step gets the sweep.
+// The single active step, shown compactly (the rich intent lives in the
+// thinking star above). A running step gets the sweep.
 function CurrentStepCard({ step }: { step: BuildStep }) {
   const n = narrateStep(step)
   return (
@@ -20,7 +21,10 @@ function CurrentStepCard({ step }: { step: BuildStep }) {
       className="relative flex items-center gap-2.5 overflow-hidden rounded-gc-md border border-hairline-strong bg-surface/95 px-3 py-2.5 shadow-gc-overlay backdrop-blur"
     >
       <span className={`shrink-0 font-mono text-[13px] ${OUTCOME_TEXT[n.outcome]}`}>{n.glyph}</span>
-      <span className="min-w-0 flex-1 truncate font-sans text-[12.5px] text-primary">{n.text}</span>
+      <span className="min-w-0 flex-1 truncate font-sans text-[12.5px] text-primary">
+        {humanizeLabel(step.label)}
+        {n.tail ? <span className="text-tertiary"> · {n.tail}</span> : null}
+      </span>
       {n.outcome === 'running' ? (
         <span
           aria-hidden
@@ -65,7 +69,7 @@ function WorkingPlaceholder() {
       data-testid="cognition-working"
       className="w-full rounded-gc-lg border border-accent/40 bg-surface/90 px-4 py-3.5 font-mono text-[11px] uppercase tracking-[.14em] text-accent shadow-gc-overlay backdrop-blur"
     >
-      ◆ Working…
+      ◆ Composing…
     </div>
   )
 }
@@ -97,13 +101,18 @@ export function CognitionPlane({ turn }: { turn: Turn | undefined }) {
 
   const done = turn.trace.filter(s => s.status === 'done' && s !== current)
 
+  // The star types the agent's reasoning when it emits any; otherwise it falls
+  // back to the current step's `context` — the agent's own description of what
+  // it is doing (the rich text the dock shows) — so it is never a bare placeholder.
+  const thinkingText = lastReasoning?.text ?? current?.context
+
   return (
     <div
       data-testid="cognition-plane"
       className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center p-6 gc-anim-cognition"
     >
       <div className="flex max-h-[86vh] w-[min(66%,520px)] flex-col items-stretch gap-3 overflow-hidden">
-        {lastReasoning ? <ThinkingMolecule text={lastReasoning.text} /> : <WorkingPlaceholder />}
+        {thinkingText ? <ThinkingMolecule text={thinkingText} /> : <WorkingPlaceholder />}
         {current ? <CurrentStepCard step={current} /> : null}
         {done.length ? <StepRail steps={done} /> : null}
       </div>

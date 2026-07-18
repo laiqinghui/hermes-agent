@@ -173,11 +173,11 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
               <CanvasGrid doc={mergedDoc} />
             </HandlerProvider>
           </SelectionProvider>
-        ) : (
+        ) : !isBusy ? (
           <div className="flex h-full items-center justify-center text-sm text-tertiary">
             No canvas yet — ask the agent to build a dashboard.
           </div>
-        )}
+        ) : null}
         <CognitionPlane turn={isBusy ? derived.turns.at(-1) : undefined} />
       </main>
       {/* progress shows in exactly one place: the dock ticker when minimized,

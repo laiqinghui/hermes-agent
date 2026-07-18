@@ -23,16 +23,30 @@ describe('CognitionPlane (spotlight)', () => {
     expect(render(<CognitionPlane turn={{ ...turnWith([]), isBusy: false }} />).container.firstChild).toBeNull()
   })
 
-  it('leads with the thinking star and shows one narrated current-step card', () => {
+  it('leads with the thinking star (reasoning) and shows one compact current-step card', () => {
     const running = step(3, 'data_query', { status: 'running', args: { table: 'admin.vessel_positions' } })
     render(<CognitionPlane turn={turnWith([running], 'Planning the data query')} />)
     expect(screen.getByTestId('cognition-plane')).toBeInTheDocument()
+    // reasoning present -> the star renders (not the placeholder); its text types async,
+    // so we assert the branch, not the typed content (ThinkingMolecule has its own typing tests)
     expect(screen.getByTestId('thinking-molecule')).toBeInTheDocument()
-    // exactly one current-step card, narrated as a human sentence
-    expect(screen.getByTestId('current-step')).toHaveTextContent('Queried admin.vessel_positions')
+    expect(screen.queryByTestId('cognition-working')).toBeNull()
+    // exactly one current-step card, compact: humanized tool label (the detail lives in the star)
+    expect(screen.getByTestId('current-step')).toHaveTextContent('Data Query')
   })
 
-  it('falls back to a Working placeholder when there is no reasoning yet', () => {
+  it('falls the thinking star back to the current step context when there is no reasoning', () => {
+    const running = step(3, 'data_query', {
+      status: 'running',
+      context: 'Retrieve the latest 20 AIS vessel position rows for vessel name GREY LADY',
+    })
+    render(<CognitionPlane turn={turnWith([running])} />)
+    // no reasoning, but a context is present -> the star renders it, not the placeholder
+    expect(screen.queryByTestId('cognition-working')).toBeNull()
+    expect(screen.getByTestId('thinking-molecule')).toBeInTheDocument()
+  })
+
+  it('falls back to the Composing placeholder only when there is neither reasoning nor context', () => {
     render(<CognitionPlane turn={turnWith([step(3, 'skill_view', { status: 'running' })])} />)
     expect(screen.queryByTestId('thinking-molecule')).toBeNull()
     expect(screen.getByTestId('cognition-working')).toBeInTheDocument()

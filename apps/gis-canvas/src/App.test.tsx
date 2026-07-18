@@ -159,6 +159,8 @@ test('shows the cognition plane while a tool is running and hides it when the tu
   act(() => client.emit({ type: 'reasoning.available', payload: { text: 'Planning the data query' } }))
   act(() => client.emit({ type: 'tool.start', payload: { tool_id: 't1', name: 'data_query' } }))
   expect(await screen.findByTestId('cognition-plane')).toBeInTheDocument()
+  // the "No canvas yet" placeholder must not bleed through while composing
+  expect(screen.queryByText(/No canvas yet/)).toBeNull()
 
   // tool completes and the agent answers → no longer busy → plane unmounts
   act(() => client.emit({ type: 'tool.complete', payload: { tool_id: 't1', name: 'data_query', result: { rows: 1 } } }))

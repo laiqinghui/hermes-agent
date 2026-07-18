@@ -11,6 +11,8 @@ export interface StepNarration {
   outcome: StepOutcome
   /** '✓' ok · '✕' error · '·' running. */
   glyph: string
+  /** Concise outcome tail (error summary or row count), '' when neither — for a compact "<label> · <tail>". */
+  tail: string
 }
 
 const rec = (v: unknown): Record<string, unknown> =>
@@ -96,5 +98,5 @@ export function narrateStep(step: BuildStep): StepNarration {
       text = withTail(humanizeLabel(step.label))
   }
 
-  return { text, outcome, glyph }
+  return { text, outcome, glyph, tail }
 }
