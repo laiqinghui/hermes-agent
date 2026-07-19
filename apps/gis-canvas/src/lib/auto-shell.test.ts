@@ -14,7 +14,7 @@ describe('edgeForType', () => {
     expect(edgeForType('esri:legend')).toBe('right')
     expect(edgeForType('stat')).toBe('left')
     expect(edgeForType('select')).toBe('top')
-    expect(edgeForType('card')).toBe('top')
+    expect(edgeForType('card')).toBe('left')
     expect(edgeForType('future:widget')).toBe('bottom')
   })
 })

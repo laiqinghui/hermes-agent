@@ -5,8 +5,8 @@ const ROLE_EDGE: Record<string, Edge> = {
   'esri:feature-table': 'bottom',
   'esri:legend': 'right',
   stat: 'left',
-  select: 'top',
-  card: 'top',
+  select: 'top',   // thin control → top toolbar rail
+  card: 'left',    // content container → full-height rail (not a 10% top strip)
 }
 
 /** Role→edge fallback for a docked molecule (also the auto-shell rail assignment). */
