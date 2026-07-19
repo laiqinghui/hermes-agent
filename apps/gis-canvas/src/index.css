@@ -163,17 +163,21 @@ html, body { margin: 0; padding: 0; }
    zero per-molecule edits), and strip the inner card's own border/shadow so a
    panel reads as one surface, not a card-in-a-card. */
 .gc-hud {
-  --color-surface: color-mix(in oklab, #FFFFFF 55%, transparent);
-  --color-surface-raised: color-mix(in oklab, #FFFFFF 62%, transparent);
-  backdrop-filter: blur(14px) saturate(1.05);
-  -webkit-backdrop-filter: blur(14px) saturate(1.05);
+  /* The panel is the SINGLE tint layer, so overlapping molecule surfaces don't
+     compound into an opaque band. Molecule fills (`bg-surface`) contribute
+     nothing; only raised chrome (thead/chips) gets a faint lift for structure. */
+  --color-surface: transparent;
+  --color-surface-raised: color-mix(in oklab, #FFFFFF 26%, transparent);
+  background: color-mix(in oklab, #FFFFFF 52%, transparent);
+  backdrop-filter: blur(16px) saturate(1.05);
+  -webkit-backdrop-filter: blur(16px) saturate(1.05);
   border: 1px solid var(--color-hairline-strong);
   box-shadow: var(--shadow-gc-overlay);
   overflow: hidden;
 }
 :root.dark .gc-hud {
-  --color-surface: color-mix(in oklab, #0F161D 50%, transparent);
-  --color-surface-raised: color-mix(in oklab, #16202A 55%, transparent);
+  --color-surface-raised: color-mix(in oklab, #FFFFFF 8%, transparent);
+  background: color-mix(in oklab, #0B1116 58%, transparent);
 }
 .gc-hud > * {
   border-color: transparent !important;
