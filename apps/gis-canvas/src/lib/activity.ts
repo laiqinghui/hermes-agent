@@ -33,11 +33,15 @@ export type TimelineEvent =
   | { id: number; kind: 'error'; text: string }
 // One conversation turn: a user prompt and the reasoning, tool steps, and
 // answer(s) that followed it, so the panel can show a fresh trace per turn.
+export type TurnItem =
+  | { kind: 'reasoning'; id: number; text: string }
+  | { kind: 'step'; id: number; step: BuildStep }
 export interface Turn {
   id: number
   prompt?: string
   reasoning: ReasoningItem[]
   trace: BuildStep[]
+  items: TurnItem[]
   answers: string[]
   isBusy: boolean
 }
@@ -80,9 +84,9 @@ export function deriveActivity(items: ActivityItem[]): DerivedActivity {
   // The current turn accumulates activity until the next user prompt starts a
   // fresh one. Steps pushed here share their object with the global `trace`, so
   // a later tool.complete enriches both.
-  let cur: Turn = { id: -1, reasoning: [], trace: [], answers: [], isBusy: false }
+  let cur: Turn = { id: -1, reasoning: [], trace: [], items: [], answers: [], isBusy: false }
   const flush = () => {
-    if (cur.prompt !== undefined || cur.reasoning.length || cur.trace.length || cur.answers.length) {
+    if (cur.prompt !== undefined || cur.reasoning.length || cur.trace.length || cur.items.length || cur.answers.length) {
       turns.push(cur)
     }
   }
@@ -91,7 +95,7 @@ export function deriveActivity(items: ActivityItem[]): DerivedActivity {
     switch (item.kind) {
       case 'you':
         flush()
-        cur = { id: item.id, prompt: item.text, reasoning: [], trace: [], answers: [], isBusy: false }
+        cur = { id: item.id, prompt: item.text, reasoning: [], trace: [], items: [], answers: [], isBusy: false }
         messages.push({ id: item.id, role: 'user', text: item.text })
         timeline.push({ id: item.id, kind: 'message', role: 'user', text: item.text })
         break
@@ -104,6 +108,7 @@ export function deriveActivity(items: ActivityItem[]): DerivedActivity {
         const r = { id: item.id, text: item.text }
         reasoning.push(r)
         cur.reasoning.push(r)
+        cur.items.push({ kind: 'reasoning', id: item.id, text: item.text })
         timeline.push({ id: item.id, kind: 'reasoning', text: item.text })
         break
       }
@@ -111,6 +116,7 @@ export function deriveActivity(items: ActivityItem[]): DerivedActivity {
         const step: BuildStep = { id: item.id, label: item.name ?? item.text, status: 'running', context: item.context }
         trace.push(step)
         cur.trace.push(step)
+        cur.items.push({ kind: 'step', id: item.id, step })
         timeline.push({ id: item.id, kind: 'tool', step })
         if (item.toolId) openById.set(item.toolId, step)
         else openByName.push(step)

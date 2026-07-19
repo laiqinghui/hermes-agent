@@ -9,6 +9,10 @@ const turns: Turn[] = [{
   prompt: 'show me positions',
   reasoning: [{ id: 2, text: 'I need to show the last 20 positions, and first, I should discover the dataset for these vessel positions.' }],
   trace: [step],
+  items: [
+    { kind: 'reasoning', id: 2, text: 'I need to show the last 20 positions, and first, I should discover the dataset for these vessel positions.' },
+    { kind: 'step', id: 1, step },
+  ],
   answers: [],
   isBusy: false
 }]

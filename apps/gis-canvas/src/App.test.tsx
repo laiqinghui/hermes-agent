@@ -148,3 +148,40 @@ test('surfaces an approval request, responds scoped to the session, and clears i
   act(() => client.emit({ type: 'tool.complete', payload: { tool_id: 't', name: 'execute_code' } }))
   expect(screen.queryByText(/approval needed/i)).toBeNull()
 })
+
+test('shows the cognition plane while a tool is running and hides it when the turn completes', async () => {
+  const client = makeFakeClient()
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  // a running tool with reasoning → busy turn → cognition plane appears
+  act(() => client.emit({ type: 'reasoning.available', payload: { text: 'Planning the data query' } }))
+  act(() => client.emit({ type: 'tool.start', payload: { tool_id: 't1', name: 'data_query' } }))
+  expect(await screen.findByTestId('cognition-plane')).toBeInTheDocument()
+  // the "No canvas yet" placeholder must not bleed through while composing
+  expect(screen.queryByText(/No canvas yet/)).toBeNull()
+
+  // tool completes and the agent answers → no longer busy → plane unmounts
+  act(() => client.emit({ type: 'tool.complete', payload: { tool_id: 't1', name: 'data_query', result: { rows: 1 } } }))
+  act(() => client.emit({ type: 'message.complete', payload: { text: 'Done.' } }))
+  await waitFor(() => expect(screen.queryByTestId('cognition-plane')).toBeNull())
+})
+
+test('keeps the cognition plane mounted across the gap between tools, until the answer', async () => {
+  const client = makeFakeClient()
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  // first (short) tool runs then completes — no tool is "running" now, but the
+  // turn isn't done, so the plane must NOT flicker away between tools
+  act(() => client.emit({ type: 'tool.start', payload: { tool_id: 't1', name: 'skill_view' } }))
+  expect(await screen.findByTestId('cognition-plane')).toBeInTheDocument()
+  act(() => client.emit({ type: 'tool.complete', payload: { tool_id: 't1', name: 'skill_view', result: { ok: true } } }))
+  expect(screen.getByTestId('cognition-plane')).toBeInTheDocument()
+
+  // the agent's final answer ends the turn → plane unmounts
+  act(() => client.emit({ type: 'message.complete', payload: { text: 'Done.' } }))
+  await waitFor(() => expect(screen.queryByTestId('cognition-plane')).toBeNull())
+})

@@ -100,6 +100,26 @@ describe('deriveActivity reasoning + timeline', () => {
 
 describe('deriveActivity turns', () => {
   const mk = (kind: string, payload: Record<string, unknown>, id: number): ActivityItem => ({ id, ...activityItemFromEvent(kind, payload) })
+  it('exposes a per-turn chronological items sequence interleaving reasoning and steps', () => {
+    const items: ActivityItem[] = [
+      { id: 1, kind: 'you', text: 'q1' },
+      mk('reasoning.available', { text: 'Identifying data agent' }, 2),
+      mk('tool.start', { tool_id: 'a', name: 'skill_view' }, 3),
+      mk('tool.complete', { tool_id: 'a', name: 'skill_view', result: { ok: true } }, 4),
+      mk('reasoning.available', { text: 'Planning the query' }, 5),
+      mk('tool.start', { tool_id: 'b', name: 'data_query' }, 6),
+      mk('tool.complete', { tool_id: 'b', name: 'data_query', result: { rows: 20 } }, 7),
+    ]
+    const d = deriveActivity(items)
+    const turn = d.turns[0]
+    expect(turn.items.map(i => i.kind)).toEqual(['reasoning', 'step', 'reasoning', 'step'])
+    // step entries share the enriched BuildStep object (so tool.complete result is visible)
+    const firstStep = turn.items[1]
+    expect(firstStep.kind === 'step' && firstStep.step.label).toBe('skill_view')
+    const lastStep = turn.items[3]
+    expect(lastStep.kind === 'step' && lastStep.step.status).toBe('done')
+    expect(lastStep.kind === 'step' && lastStep.step.result).toEqual({ rows: 20 })
+  })
   it('segments activity into one turn per user prompt', () => {
     const items: ActivityItem[] = [
       { id: 1, kind: 'you', text: 'q1' },

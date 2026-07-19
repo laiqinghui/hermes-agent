@@ -3,11 +3,35 @@ import type { Turn } from '../lib/activity'
 import { TraceStep } from './TraceStep'
 import { deriveHeading } from '../lib/derive-heading'
 
-// One conversation turn: the user's prompt, its reasoning (Thinking), its tool
+// A single reasoning entry: the derived heading is always visible; clicking
+// reveals the full body. Renders inline within FORMULATING CANVAS, before the
+// step it triggered — the Hermes "Thinking → step → Thinking → step" cadence.
+function ThinkingRow({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const heading = deriveHeading(text)
+  return (
+    <div className="rounded-gc-md border border-hairline bg-surface-raised/50">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left"
+      >
+        <span className="font-mono text-[9.5px] uppercase tracking-wide text-tertiary">Thinking</span>
+        <span className="min-w-0 flex-1 truncate font-sans text-[12px] text-secondary">{heading}</span>
+        <span aria-hidden className="text-tertiary">{open ? '▾' : '▸'}</span>
+      </button>
+      {open ? (
+        <div className="whitespace-pre-wrap px-3 pb-2.5 font-sans text-[12px] leading-relaxed text-secondary">{text}</div>
+      ) : null}
+    </div>
+  )
+}
+
+// One conversation turn: the user's prompt, its interleaved reasoning + tool
 // trace (FORMULATING CANVAS), and the agent's answer(s) — so each follow-up
 // question starts a fresh block instead of piling into a session-wide trace.
 export function TurnView({ turn }: { turn: Turn }) {
-  const [showThinking, setShowThinking] = useState(false)
   return (
     <>
       {turn.prompt !== undefined ? (
@@ -18,37 +42,16 @@ export function TurnView({ turn }: { turn: Turn }) {
         </div>
       ) : null}
 
-      {turn.reasoning.length ? (
-        <div className="rounded-gc-md border border-hairline bg-surface-raised/50">
-          <button
-            type="button"
-            onClick={() => setShowThinking(s => !s)}
-            aria-expanded={showThinking}
-            className="flex w-full items-center justify-between px-3 py-1.5 font-mono text-[9.5px] uppercase tracking-wide text-tertiary"
-          >
-            <span>Thinking ({turn.reasoning.length})</span>
-            <span aria-hidden>{showThinking ? '▾' : '▸'}</span>
-          </button>
-          {showThinking ? (
-            <div className="flex flex-col gap-2 px-3 pb-2.5">
-              {turn.reasoning.map(r => {
-                const heading = deriveHeading(r.text)
-                return (
-                  <div key={r.id}>
-                    {heading ? <div className="font-sans text-[12px] font-semibold text-primary">{heading}</div> : null}
-                    <div className="whitespace-pre-wrap font-sans text-[12px] leading-relaxed text-secondary">{r.text}</div>
-                  </div>
-                )
-              })}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {turn.trace.length ? (
+      {turn.items.length ? (
         <div className="rounded-gc-md border border-hairline bg-surface p-3">
-          <div className="mb-1 font-mono text-[9.5px] tracking-[.1em] text-tertiary">FORMULATING CANVAS</div>
-          {turn.trace.map(step => <TraceStep key={step.id} step={step} />)}
+          <div className="mb-1.5 font-mono text-[9.5px] tracking-[.1em] text-tertiary">FORMULATING CANVAS</div>
+          <div className="flex flex-col gap-1.5">
+            {turn.items.map(it =>
+              it.kind === 'reasoning'
+                ? <ThinkingRow key={`r${it.id}`} text={it.text} />
+                : <TraceStep key={`s${it.id}`} step={it.step} />
+            )}
+          </div>
         </div>
       ) : null}
 
