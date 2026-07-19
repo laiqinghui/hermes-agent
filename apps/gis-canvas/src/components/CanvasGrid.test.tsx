@@ -120,6 +120,45 @@ test('data-table filters rows by state.filter', () => {
   expect(screen.queryByText('f_82')).not.toBeInTheDocument()
 })
 
+test('auto-hero: a lone map renders full-bleed base with floats over it', () => {
+  const d: CanvasDoc = {
+    canvasVersion: 1, rev: 1, layout: { type: 'grid', cols: 12 },
+    components: [
+      { id: 's1', type: 'stat', props: { label: 'Vessels', value: 20 } },
+      { id: 'm1', type: 'esri:map', bindings: { layers: 'mock://incidents' } },
+      { id: 't1', type: 'data-table', bindings: { source: 'mock://incidents' } },
+    ],
+  }
+  render(<CanvasGrid doc={d} />)
+  // base + float layers present; NO grid cells
+  expect(screen.getByTestId('canvas-base')).toBeInTheDocument()
+  expect(screen.getByTestId('float-s1')).toBeInTheDocument()
+  expect(screen.getByTestId('float-t1')).toBeInTheDocument()
+  expect(screen.queryByTestId('cell-s1')).toBeNull()
+  // the stat's content still renders inside its float panel
+  expect(screen.getByText('Vessels')).toBeInTheDocument()
+})
+
+test('explicit base/float layers are honored (no auto-hero needed)', () => {
+  const d: CanvasDoc = {
+    canvasVersion: 1, rev: 1, layout: { type: 'grid', cols: 12 },
+    components: [
+      { id: 'm1', type: 'esri:map', layer: 'base', bindings: { layers: 'mock://x' } },
+      { id: 'l1', type: 'esri:legend', layer: 'float', anchor: 'top-right' },
+    ],
+  }
+  render(<CanvasGrid doc={d} />)
+  expect(screen.getByTestId('canvas-base')).toBeInTheDocument()
+  expect(screen.getByTestId('float-l1')).toBeInTheDocument()
+})
+
+test('no base -> unchanged flat grid (regression: grid cell + CSS preserved)', () => {
+  render(<CanvasGrid doc={doc()} />)
+  const cell = screen.getByTestId('cell-s1')
+  expect(cell.style.gridColumn).toBe('1 / span 3')
+  expect(screen.queryByTestId('canvas-base')).toBeNull()
+})
+
 test('marks a freshly-rendered tile with the entrance class', async () => {
   // Regression guard for the entering-state fix: the entrance class must
   // survive intervening re-renders (it's cleared only on animationend, not
