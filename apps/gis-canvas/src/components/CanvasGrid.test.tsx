@@ -120,7 +120,7 @@ test('data-table filters rows by state.filter', () => {
   expect(screen.queryByText('f_82')).not.toBeInTheDocument()
 })
 
-test('auto-hero: a lone map renders full-bleed base with floats over it', () => {
+test('auto-shell: a lone map renders a full-bleed base with dock rails', () => {
   const d: CanvasDoc = {
     canvasVersion: 1, rev: 1, layout: { type: 'grid', cols: 12 },
     components: [
@@ -130,26 +130,27 @@ test('auto-hero: a lone map renders full-bleed base with floats over it', () => 
     ],
   }
   render(<CanvasGrid doc={d} />)
-  // base + float layers present; NO grid cells
   expect(screen.getByTestId('canvas-base')).toBeInTheDocument()
-  expect(screen.getByTestId('float-s1')).toBeInTheDocument()
-  expect(screen.getByTestId('float-t1')).toBeInTheDocument()
+  expect(screen.getByTestId('dock-left')).toBeInTheDocument()   // stat
+  expect(screen.getByTestId('dock-bottom')).toBeInTheDocument() // table
+  expect(screen.getByTestId('panel-s1')).toBeInTheDocument()
   expect(screen.queryByTestId('cell-s1')).toBeNull()
-  // the stat's content still renders inside its float panel
   expect(screen.getByText('Vessels')).toBeInTheDocument()
 })
 
-test('explicit base/float layers are honored (no auto-hero needed)', () => {
+test('explicit dock + float layers are honored', () => {
   const d: CanvasDoc = {
     canvasVersion: 1, rev: 1, layout: { type: 'grid', cols: 12 },
     components: [
       { id: 'm1', type: 'esri:map', layer: 'base', bindings: { layers: 'mock://x' } },
-      { id: 'l1', type: 'esri:legend', layer: 'float', anchor: 'top-right' },
+      { id: 't1', type: 'data-table', layer: 'dock', edge: 'bottom', bindings: { source: 'mock://incidents' } },
+      { id: 'st', type: 'stat', layer: 'float', anchor: 'top-left', props: { label: 'N', value: 3 } },
     ],
   }
   render(<CanvasGrid doc={d} />)
   expect(screen.getByTestId('canvas-base')).toBeInTheDocument()
-  expect(screen.getByTestId('float-l1')).toBeInTheDocument()
+  expect(screen.getByTestId('panel-t1')).toBeInTheDocument()
+  expect(screen.getByTestId('float-st')).toBeInTheDocument()
 })
 
 test('no base -> unchanged flat grid (regression: grid cell + CSS preserved)', () => {
