@@ -17,6 +17,8 @@ export type Anchor =
   | 'left' | 'center' | 'right'
   | 'bottom-left' | 'bottom' | 'bottom-right'
 
+export type Edge = 'left' | 'right' | 'top' | 'bottom'
+
 export interface Size {
   w: number // percent of canvas, 0-100
   h: number // percent of canvas, 0-100
@@ -32,7 +34,8 @@ export interface ComponentNode {
   id: string
   type: MoleculeType | (string & {}) // tolerate future types; renderer falls back to UnknownTile
   area?: Area
-  layer?: 'base' | 'float'
+  layer?: 'base' | 'dock' | 'float'
+  edge?: Edge
   anchor?: Anchor
   size?: Size
   z?: number
