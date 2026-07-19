@@ -146,11 +146,14 @@ export function CognitionPlane({ turn }: { turn: Turn | undefined }) {
   // Pace the cognition frame: hold each (thought + current step + rail) for a
   // readable minimum, coalescing rapid updates to the latest so nothing flashes
   // by. Keyed on the active step + thinking text (the things that visibly change).
-  const busy = !!turn?.isBusy
-  const frameKey = busy ? `${current?.id ?? 'none'}|${thinkingText ?? ''}` : '∅'
+  // App decides when the plane is visible (the whole active turn); here we just
+  // render whatever turn we're given. `present` keys the dwell to the empty state
+  // when no turn is passed so it doesn't hold a stale frame across turns.
+  const present = !!turn
+  const frameKey = present ? `${current?.id ?? 'none'}|${thinkingText ?? ''}` : '∅'
   const frame = useDwell({ thinkingText, current, done, hasReasoning }, frameKey, DWELL_MS)
 
-  if (!turn || !turn.isBusy) return null
+  if (!turn) return null
 
   return (
     <div

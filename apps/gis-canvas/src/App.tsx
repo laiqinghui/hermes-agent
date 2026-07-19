@@ -140,6 +140,14 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const derived = useMemo(() => deriveActivity(activity), [activity])
   const { messages, trace, isBusy } = derived
 
+  // Keep the cognition plane mounted for the whole ACTIVE turn — from first
+  // activity until the agent's final answer — not just while a tool is running.
+  // `isBusy` alone drops between every tool (the gap after one completes, before
+  // the next starts), which would unmount/remount the plane and make the first
+  // short step flash. A turn is active while it has done work but has no answer yet.
+  const lastTurn = derived.turns.at(-1)
+  const turnActive = isBusy || (!!lastTurn && lastTurn.answers.length === 0 && lastTurn.trace.length > 0)
+
   if (auth === null) {
     return (
       <div className="flex h-screen items-center justify-center bg-canvas font-sans text-sm text-tertiary">
@@ -178,7 +186,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
             No canvas yet — ask the agent to build a dashboard.
           </div>
         ) : null}
-        <CognitionPlane turn={isBusy ? derived.turns.at(-1) : undefined} />
+        <CognitionPlane turn={turnActive ? lastTurn : undefined} />
       </main>
       {/* progress shows in exactly one place: the dock ticker when minimized,
           the top toast when the panel is open (dock hidden). */}

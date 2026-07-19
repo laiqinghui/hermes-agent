@@ -18,9 +18,14 @@ const turnWith = (trace: BuildStep[], reasoning?: string): Turn => {
 }
 
 describe('CognitionPlane (spotlight)', () => {
-  it('renders nothing when there is no turn or the turn is not busy', () => {
+  it('renders nothing when no turn is provided (App owns visibility for the active turn)', () => {
     expect(render(<CognitionPlane turn={undefined} />).container.firstChild).toBeNull()
-    expect(render(<CognitionPlane turn={{ ...turnWith([]), isBusy: false }} />).container.firstChild).toBeNull()
+  })
+
+  it('renders the plane whenever a turn is given, even between tools (no running step)', () => {
+    // a turn with a completed step and no running one (an inter-tool gap)
+    render(<CognitionPlane turn={turnWith([step(3, 'skill_view', { status: 'done', result: { ok: true } })], 'thinking')} />)
+    expect(screen.getByTestId('cognition-plane')).toBeInTheDocument()
   })
 
   it('leads with the thinking star (reasoning) and shows one compact current-step card', () => {

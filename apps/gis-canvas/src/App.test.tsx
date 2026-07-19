@@ -167,3 +167,21 @@ test('shows the cognition plane while a tool is running and hides it when the tu
   act(() => client.emit({ type: 'message.complete', payload: { text: 'Done.' } }))
   await waitFor(() => expect(screen.queryByTestId('cognition-plane')).toBeNull())
 })
+
+test('keeps the cognition plane mounted across the gap between tools, until the answer', async () => {
+  const client = makeFakeClient()
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  // first (short) tool runs then completes — no tool is "running" now, but the
+  // turn isn't done, so the plane must NOT flicker away between tools
+  act(() => client.emit({ type: 'tool.start', payload: { tool_id: 't1', name: 'skill_view' } }))
+  expect(await screen.findByTestId('cognition-plane')).toBeInTheDocument()
+  act(() => client.emit({ type: 'tool.complete', payload: { tool_id: 't1', name: 'skill_view', result: { ok: true } } }))
+  expect(screen.getByTestId('cognition-plane')).toBeInTheDocument()
+
+  // the agent's final answer ends the turn → plane unmounts
+  act(() => client.emit({ type: 'message.complete', payload: { text: 'Done.' } }))
+  await waitFor(() => expect(screen.queryByTestId('cognition-plane')).toBeNull())
+})
