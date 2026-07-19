@@ -12,6 +12,16 @@ export interface Area {
   rowSpan: number
 }
 
+export type Anchor =
+  | 'top-left' | 'top' | 'top-right'
+  | 'left' | 'center' | 'right'
+  | 'bottom-left' | 'bottom' | 'bottom-right'
+
+export interface Size {
+  w: number // percent of canvas, 0-100
+  h: number // percent of canvas, 0-100
+}
+
 export type Handler =
   | { kind: 'set'; target: string; key: string; value: unknown }
   | { kind: 'reactive'; controls: string } // "targetId.key.subkey" path written from event value
@@ -22,6 +32,10 @@ export interface ComponentNode {
   id: string
   type: MoleculeType | (string & {}) // tolerate future types; renderer falls back to UnknownTile
   area?: Area
+  layer?: 'base' | 'float'
+  anchor?: Anchor
+  size?: Size
+  z?: number
   props?: Record<string, unknown>
   bindings?: Record<string, string | string[]>
   state?: Record<string, unknown>
