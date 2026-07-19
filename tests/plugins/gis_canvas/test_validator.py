@@ -258,3 +258,31 @@ def test_bad_anchor_value_rejected(plugin):
     })
     errors = plugin.validator.validate_doc(doc)
     assert errors  # schema enum rejects it
+
+
+def test_dock_layer_requires_edge(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "tbl", "type": "data-table", "layer": "dock",
+        "bindings": {"source": "mock://x"},  # no edge
+    })
+    assert any("edge" in e for e in plugin.validator.validate_doc(doc))
+
+
+def test_dock_layer_with_edge_passes(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "tbl", "type": "data-table", "layer": "dock",
+        "edge": "bottom", "size": {"w": 100, "h": 34},
+        "bindings": {"source": "mock://x"},
+    })
+    assert plugin.validator.validate_doc(doc) == []
+
+
+def test_bad_edge_value_rejected(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "tbl", "type": "data-table", "layer": "dock",
+        "edge": "north", "bindings": {"source": "mock://x"},  # not in enum
+    })
+    assert plugin.validator.validate_doc(doc)  # schema enum rejects

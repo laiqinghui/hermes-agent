@@ -107,6 +107,9 @@ def validate_doc(doc: dict) -> list[str]:
             layer = node.get("layer")
             if layer == "base":
                 pass  # base: full-bleed, needs neither area nor anchor
+            elif layer == "dock":
+                if not node.get("edge"):
+                    errors.append(f"'{node_id}': dock component requires edge")
             elif layer == "float":
                 if not node.get("anchor"):
                     errors.append(f"'{node_id}': float component requires anchor")
