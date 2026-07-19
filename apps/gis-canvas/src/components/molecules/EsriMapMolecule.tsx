@@ -51,7 +51,10 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
           if (isDataHandle(r)) {
             const page = await actions.fetchData(r, { pageSize: 5000 })
             if (cancelled) return
-            layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, r)
+            // The legend shows the layer title — prefer the map's human title
+            // over the raw data:// handle (Phase C lets the agent title layers).
+            const layerTitle = (node.props?.title as string | undefined) ?? r
+            layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, layerTitle)
             if (view && r === source) {
               const rows = page.rows as Record<string, unknown>[]
               const idField = resolveIdField(page.schema as { name: string }[], rows)

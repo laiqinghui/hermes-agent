@@ -104,13 +104,23 @@ def validate_doc(doc: dict) -> list[str]:
                 errors.append(f"'{node_id}' ({node_type}): missing required bindings.{b}")
 
         if top_level:
-            area = node.get("area")
-            if not area:
-                errors.append(f"'{node_id}': top-level component requires area")
-            elif area["col"] + area["colSpan"] - 1 > cols:
-                errors.append(
-                    f"'{node_id}': area col {area['col']}+span {area['colSpan']} exceeds grid cols {cols}"
-                )
+            layer = node.get("layer")
+            if layer == "base":
+                pass  # base: full-bleed, needs neither area nor anchor
+            elif layer == "dock":
+                if not node.get("edge"):
+                    errors.append(f"'{node_id}': dock component requires edge")
+            elif layer == "float":
+                if not node.get("anchor"):
+                    errors.append(f"'{node_id}': float component requires anchor")
+            else:
+                area = node.get("area")
+                if not area:
+                    errors.append(f"'{node_id}': top-level component requires area")
+                elif area["col"] + area["colSpan"] - 1 > cols:
+                    errors.append(
+                        f"'{node_id}': area col {area['col']}+span {area['colSpan']} exceeds grid cols {cols}"
+                    )
 
         kids = list(node.get("children", []))
         slots = node.get("slots", {})
@@ -122,6 +132,10 @@ def validate_doc(doc: dict) -> list[str]:
             kids.extend(slot_kids)
         for kid in kids:
             walk(kid, depth + 1, top_level=False)
+
+    base_count = sum(1 for c in doc.get("components", []) if c.get("layer") == "base")
+    if base_count > 1:
+        errors.append(f"at most one 'base' component allowed, found {base_count}")
 
     for comp in doc.get("components", []):
         walk(comp, 1, top_level=True)

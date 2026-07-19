@@ -120,6 +120,46 @@ test('data-table filters rows by state.filter', () => {
   expect(screen.queryByText('f_82')).not.toBeInTheDocument()
 })
 
+test('auto-shell: a lone map renders a full-bleed base with dock rails', () => {
+  const d: CanvasDoc = {
+    canvasVersion: 1, rev: 1, layout: { type: 'grid', cols: 12 },
+    components: [
+      { id: 's1', type: 'stat', props: { label: 'Vessels', value: 20 } },
+      { id: 'm1', type: 'esri:map', bindings: { layers: 'mock://incidents' } },
+      { id: 't1', type: 'data-table', bindings: { source: 'mock://incidents' } },
+    ],
+  }
+  render(<CanvasGrid doc={d} />)
+  expect(screen.getByTestId('canvas-base')).toBeInTheDocument()
+  expect(screen.getByTestId('dock-left')).toBeInTheDocument()   // stat
+  expect(screen.getByTestId('dock-bottom')).toBeInTheDocument() // table
+  expect(screen.getByTestId('panel-s1')).toBeInTheDocument()
+  expect(screen.queryByTestId('cell-s1')).toBeNull()
+  expect(screen.getByText('Vessels')).toBeInTheDocument()
+})
+
+test('explicit dock + float layers are honored', () => {
+  const d: CanvasDoc = {
+    canvasVersion: 1, rev: 1, layout: { type: 'grid', cols: 12 },
+    components: [
+      { id: 'm1', type: 'esri:map', layer: 'base', bindings: { layers: 'mock://x' } },
+      { id: 't1', type: 'data-table', layer: 'dock', edge: 'bottom', bindings: { source: 'mock://incidents' } },
+      { id: 'st', type: 'stat', layer: 'float', anchor: 'top-left', props: { label: 'N', value: 3 } },
+    ],
+  }
+  render(<CanvasGrid doc={d} />)
+  expect(screen.getByTestId('canvas-base')).toBeInTheDocument()
+  expect(screen.getByTestId('panel-t1')).toBeInTheDocument()
+  expect(screen.getByTestId('float-st')).toBeInTheDocument()
+})
+
+test('no base -> unchanged flat grid (regression: grid cell + CSS preserved)', () => {
+  render(<CanvasGrid doc={doc()} />)
+  const cell = screen.getByTestId('cell-s1')
+  expect(cell.style.gridColumn).toBe('1 / span 3')
+  expect(screen.queryByTestId('canvas-base')).toBeNull()
+})
+
 test('marks a freshly-rendered tile with the entrance class', async () => {
   // Regression guard for the entering-state fix: the entrance class must
   // survive intervening re-renders (it's cleared only on animationend, not

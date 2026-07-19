@@ -196,3 +196,93 @@ def test_wellformed_reactive_handler_passes(plugin):
     doc = _minimal_doc()
     doc["components"][0]["handlers"] = {"onChange": {"kind": "reactive", "controls": "tbl1.filter.severity"}}
     assert plugin.validator.validate_doc(doc) == []
+
+
+def test_base_layer_needs_no_area(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "map1", "type": "esri:map",
+        "layer": "base",
+        "bindings": {"layers": "mock://incidents"},
+    })
+    assert plugin.validator.validate_doc(doc) == []
+
+
+def test_float_layer_requires_anchor(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "leg1", "type": "esri:legend",
+        "layer": "float",  # no anchor
+    })
+    errors = plugin.validator.validate_doc(doc)
+    assert any("anchor" in e for e in errors)
+
+
+def test_float_layer_with_anchor_and_size_passes(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "leg1", "type": "esri:legend",
+        "layer": "float", "anchor": "top-right",
+        "size": {"w": 24, "h": 40}, "z": 2,
+    })
+    assert plugin.validator.validate_doc(doc) == []
+
+
+def test_at_most_one_base(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "map1", "type": "esri:map", "layer": "base",
+        "bindings": {"layers": "mock://a"},
+    })
+    doc["components"].append({
+        "id": "map2", "type": "esri:map", "layer": "base",
+        "bindings": {"layers": "mock://b"},
+    })
+    errors = plugin.validator.validate_doc(doc)
+    assert any("one 'base'" in e for e in errors)
+
+
+def test_grid_component_still_requires_area(plugin):
+    # Regression: a component with NO layer keeps today's area requirement.
+    doc = _minimal_doc()
+    del doc["components"][0]["area"]  # stat, no layer
+    errors = plugin.validator.validate_doc(doc)
+    assert any("area" in e for e in errors)
+
+
+def test_bad_anchor_value_rejected(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "leg1", "type": "esri:legend",
+        "layer": "float", "anchor": "middle-ish",  # not in enum
+    })
+    errors = plugin.validator.validate_doc(doc)
+    assert errors  # schema enum rejects it
+
+
+def test_dock_layer_requires_edge(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "tbl", "type": "data-table", "layer": "dock",
+        "bindings": {"source": "mock://x"},  # no edge
+    })
+    assert any("edge" in e for e in plugin.validator.validate_doc(doc))
+
+
+def test_dock_layer_with_edge_passes(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "tbl", "type": "data-table", "layer": "dock",
+        "edge": "bottom", "size": {"w": 100, "h": 34},
+        "bindings": {"source": "mock://x"},
+    })
+    assert plugin.validator.validate_doc(doc) == []
+
+
+def test_bad_edge_value_rejected(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "tbl", "type": "data-table", "layer": "dock",
+        "edge": "north", "bindings": {"source": "mock://x"},  # not in enum
+    })
+    assert plugin.validator.validate_doc(doc)  # schema enum rejects

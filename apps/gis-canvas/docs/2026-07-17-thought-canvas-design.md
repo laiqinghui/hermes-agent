@@ -138,43 +138,91 @@ Centering: the spotlight is centered on the grid to hold attention, per the C2 i
 `components/BuildToast.tsx` (already fed by `trace.at(-1)`) is reconciled with this so progress is shown
 in one place, not two.
 
-## Section 4 — Result plane: the `layer` + `anchor` stacking primitive
+## Section 4 — Result plane: the base-agnostic **C2 shell** (base + dock + float)
 
-A new, content-driven layering model that powers the C2 map-hero and **collapses to today's flat grid
-when unused** (zero regression).
+**Revised 2026-07-19 (hybrid, after live verify + Palantir Gotham reference).** The first cut treated
+"map hero" as the special case and floated content-sized cards centered in anchor *zones*. Live, that
+produced collapsed panels (percentage sizes resolving against shrink-wrapped, indefinite containers →
+a legend rendered as a one-char-wide sliver, a table that ignored its height cap) and read as opaque
+cards, not a HUD. The Gotham "South China Situation" reference is the target idiom: a **full-bleed dark
+base**, a **full-width bottom dock rail** (its Timeline), a **floating translucent card** (its Task
+Asset panel, top-left), and a **thin left dock** (icon toolbar) — translucent glass over the base.
+
+Reframed model: the shell is a **base-agnostic composition** — a full-bleed base, edge **dock** rails,
+and anchored **float** cards. The base is just "the primary view"; it is *usually* a map but does not
+have to be, so **non-geospatial data is a first-class case**, not an afterthought.
+
+| Data | Base | Docks / floats |
+|---|---|---|
+| Geospatial | the `esri:map` | table → bottom dock, details → right dock, stats/filters → left dock |
+| Non-geo, one dominant view | a large `data-table`/chart | stats → left dock, filters → top dock |
+| Non-geo dashboard (equal tiles) | *none* | → **today's flat grid** (zero-regression fallback) |
 
 ### Schema additions (`ComponentNode`)
 
-- `layer?: 'base' | 'float'` — omitted ⇒ grid (today's behavior).
+- `layer?: 'base' | 'dock' | 'float'` — omitted ⇒ grid (today's behavior).
+- `edge?: 'left' | 'right' | 'top' | 'bottom'` — required for `dock`; the rail's edge.
 - `anchor?: 'top-left' | 'top' | 'top-right' | 'left' | 'center' | 'right' | 'bottom-left' | 'bottom' | 'bottom-right'`
-  — placement for `float` components.
-- `size?: { w: number; h: number }` — float panel size as a percentage of the canvas (0–100 each);
-  omitted ⇒ a sensible default per anchor (e.g. corner panels ~22%×auto, bottom strip ~full-width×20%).
+  — required for `float`; the card's placement.
+- `size?: { w: number; h: number }` — percent of the canvas (0–100). For a `dock` it is the rail
+  **thickness** (`w` for left/right, `h` for top/bottom); for a `float` it is the card box. Omitted ⇒ a
+  sensible default per edge/anchor.
 - `z?: number` — stack order among floats.
 
 `area` remains valid and is the default for grid components. Mirror the additions in
 `plugins/gis-canvas/schema/canvas.schema.json`, `plugins/gis-canvas/validator.py`, and
-`apps/gis-canvas/src/lib/types.ts`. Validation: at most one `base` component; floats require `anchor`;
-grid components keep the existing `area` rules.
+`apps/gis-canvas/src/lib/types.ts`.
 
-### Rendering (`components/CanvasGrid.tsx`)
+**Validator is layer-mode-aware** (today `validator.py` *requires* `area` on every top-level component
+— that rule forks on `layer`):
 
-Split into two layers:
+- grid component (no `layer`) → keeps today's `area`-required + `col+span ≤ cols` rules.
+- `base` → requires neither `area`/`anchor`/`edge`; **at most one `base` per doc**; type-agnostic.
+- `dock` → requires `edge`; `area` ignored.
+- `float` → requires `anchor`; `area` ignored.
 
-- **base layer** — the single `base` component rendered full-bleed (absolute, inset 0).
-- **float layer** — `float` components absolutely positioned by `anchor` + `size`, stacked by `z`,
-  styled as **glass HUD panels** (backdrop-blur, hairline border, elevation) per the mockup.
-- **grid layer** — when **no** component is `base`, render exactly today's CSS grid over all
-  components. The entrance animation and `mergeOverrides` path are preserved.
+### Rendering (`components/CanvasGrid.tsx`) — "shell mode" vs "grid mode"
 
-### Auto-hero promotion (robustness — chosen)
+**Shell mode** (the doc has a `base`) renders three stacked layers inside a full-size, positioned shell:
 
-If a rendered doc contains an `esri:map` and the agent did **not** set `layer` on any component, the
-client **auto-promotes the map to `base`** and anchors the other molecules as floats (stats/telemetry →
-`top-left`, legend → `top-right`, table/timeline → `bottom`). So the Command-and-Control view happens
-**even without agent cooperation**; the agent can still set `layer`/`anchor` explicitly for finer
-control. This honors the Hybrid philosophy: the core UX never depends on agent discipline. The mapping
-is a pure client-side transform of the doc before render (does not mutate stored server state).
+- **base** — the single `base` component, full-bleed (`absolute inset-0`), `z-0`. Establishes a
+  **definite** shell box, so every percentage below resolves (the fix for the collapse/overflow bugs).
+- **dock rails** (`z-10`) — grouped by `edge`; each rail is an absolutely-positioned, **definite-size**
+  flex container: left/right fill full height (`top:0;bottom:0`, width = thickness), top/bottom fill
+  full width (`left/right` inset by any adjacent vertical rail, height = thickness). Multiple panels on
+  one edge tile along the rail. Panels are **theme-aware translucent glass** (see below); content scrolls
+  inside.
+- **float cards** (`z-20`) — anchored cards positioned against the definite inset-0 float layer (not a
+  shrink-wrapped zone), so width/height percentages resolve; same glass.
+
+**Grid mode** (no `base`) — render exactly today's CSS grid over all components. Entrance animation and
+`mergeOverrides` path preserved. **Zero regression.**
+
+**Glass (theme-aware):** a `.gc-hud` utility — `bg-surface/70` + strong `backdrop-blur` + hairline
+border + `shadow-gc-overlay`, so it reads as a HUD panel that lets the base through, in *both* themes
+(dark glass in dark mode ≈ the Gotham look; light glass in light mode). Replaces the near-opaque
+`bg-surface/90` card.
+
+**Z-order:** base (`z-0`) < docks (`z-10`) < floats (`z-20`) < cognition plane (`z-30`, Phase A).
+
+### Auto-shell promotion (robustness — generalized from auto-hero)
+
+A guarded **pure client-side transform** run on the doc before render (does not mutate stored server
+state), so the C2 shell happens **even before the agent learns to author it** (agent authorship is
+§5 / Phase C). If the doc contains **exactly one** `esri:map` **and no** component sets `layer`:
+
+- map → `base`.
+- every other top-level molecule → `dock`, by role (**place-all** — nothing dropped; tiles along the
+  edge when multiple): `data-table`/`esri:feature-table` → `bottom`, `esri:legend` → `right`, `stat` →
+  `left`, `select`/`card` → `top`, anything else → `bottom`.
+- On any inconsistency (0 or >1 `esri:map`, or an explicit `layer` already present) → returns the doc
+  **unchanged** (grid mode / agent-controlled).
+
+**No map ⇒ grid** (no auto-promotion): a non-map shell is *agent-authored*, not guessed — safe and
+predictable. The primitive still fully supports agent-authored non-map shells (a `base` table + docks).
+
+(Rejected: forcing a map-hero on every doc — breaks the non-geo case the operator sometimes needs;
+free-floating centered cards — not the C2 idiom and the source of the sizing bugs.)
 
 ## Section 5 — Agent result-composition guidance (repo-tracked)
 
@@ -245,9 +293,13 @@ brief and is out of scope here.)
   dock ticker, fade lifecycle. Highest value, no schema change, lowest risk. **Shipped**, then
   **reworked to the Narration Spotlight** (bounded current-step card + breadcrumb rail + `narrateStep`)
   after live visual verify showed the stacked-molecule approach cluttered and buried the thinking card.
-- **Phase B — Stacking primitive** (schema + validator + grid + glass HUD + auto-hero): the C2
-  map-hero.
-- **Phase C — Agent composition guidance** (tool-description edits): steers the result plane.
+- **Phase B — Stacking primitive → C2 shell** (schema + validator + shell renderer + theme-aware glass
+  + auto-shell). Shipped as `base`/`float` first (commits `1499dc20b`..`6398d4ed6`), then **refined to
+  the base-agnostic hybrid `base`/`dock`/`float` C2 shell** (2026-07-19) after live verify + the Gotham
+  reference: docked edge rails, floating cards, translucent glass, non-map bases, definite-size geometry.
+- **Phase C — Agent composition guidance** (tool-description edits): teaches the agent to *author* the
+  C2 shell (base map/table + docks + floats; map & non-map layouts). Auto-shell is the default; Phase C
+  lets the agent drive it.
 
 ## Decisions locked during brainstorming
 
@@ -255,6 +307,14 @@ brief and is out of scope here.)
 - **`layer` + `anchor`** unified primitive over a `hero` flag or a dual `layout.mode`.
 - **Fade-out** post-turn lifecycle (trail via Inspector) over a persistent on-canvas trail.
 - **Auto-hero promotion** so map-center-stage works without agent cooperation.
+- **Base-agnostic C2 shell = base + dock + float** (revised 2026-07-19 after live verify + Gotham
+  reference): a hybrid of docked edge rails and floating cards over a full-bleed base, where the base is
+  *any* dominant view (map or table/chart), so non-geospatial data is first-class; grid remains the
+  no-base fallback. Chosen over map-only hero and over free-floating centered cards (which caused the
+  percentage-collapse sizing bugs).
+- **Theme-aware translucent glass** (`.gc-hud`) over dark-forced glass — panels follow the app theme.
+- **Auto-shell defaults first, agent authorship (Phase C) second** — the shell looks right without agent
+  cooperation; the agent later authors custom (incl. non-map) shells.
 - **A → B → C phasing** over a single big-bang change.
 - **Cognition = Narration Spotlight** (revised after live verify): thinking star + one in-place
   current-step card + a bounded breadcrumb rail, with `narrateStep` human sentences — over the original
