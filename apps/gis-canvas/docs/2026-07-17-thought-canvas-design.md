@@ -154,27 +154,55 @@ when unused** (zero regression).
 
 `area` remains valid and is the default for grid components. Mirror the additions in
 `plugins/gis-canvas/schema/canvas.schema.json`, `plugins/gis-canvas/validator.py`, and
-`apps/gis-canvas/src/lib/types.ts`. Validation: at most one `base` component; floats require `anchor`;
-grid components keep the existing `area` rules.
+`apps/gis-canvas/src/lib/types.ts`.
+
+**Validator becomes layer-mode-aware** (today `validator.py` *requires* `area` on every top-level
+component — that rule must fork on `layer`):
+
+- grid component (no `layer`) → keeps today's `area`-required + `col+span ≤ cols` rules.
+- `base` → requires neither `area` nor `anchor`; **at most one `base` per doc**.
+- `float` → requires `anchor`; any `area` is ignored (not an error).
 
 ### Rendering (`components/CanvasGrid.tsx`)
 
 Split into two layers:
 
-- **base layer** — the single `base` component rendered full-bleed (absolute, inset 0).
+- **base layer** — the single `base` component rendered full-bleed (`absolute inset-0`), `z-0`. A map
+  here finally gets real height without an explicit `rowSpan`.
 - **float layer** — `float` components absolutely positioned by `anchor` + `size`, stacked by `z`,
-  styled as **glass HUD panels** (backdrop-blur, hairline border, elevation) per the mockup.
+  `z-10`, styled as **glass HUD panels** reusing the existing cognition tokens (`backdrop-blur`,
+  `border-hairline`, `shadow-gc-overlay`).
 - **grid layer** — when **no** component is `base`, render exactly today's CSS grid over all
   components. The entrance animation and `mergeOverrides` path are preserved.
 
-### Auto-hero promotion (robustness — chosen)
+**Z-order handoff:** base (`z-0`) < floats (`z-10`) < cognition plane (`z-20`, Phase A). The cognition
+overlay already fades on final result, so the map reveals underneath it naturally — no extra handoff work.
 
-If a rendered doc contains an `esri:map` and the agent did **not** set `layer` on any component, the
-client **auto-promotes the map to `base`** and anchors the other molecules as floats (stats/telemetry →
-`top-left`, legend → `top-right`, table/timeline → `bottom`). So the Command-and-Control view happens
-**even without agent cooperation**; the agent can still set `layer`/`anchor` explicitly for finer
-control. This honors the Hybrid philosophy: the core UX never depends on agent discipline. The mapping
-is a pure client-side transform of the doc before render (does not mutate stored server state).
+### Auto-hero promotion (robustness — chosen; zone-tiled, revised 2026-07-19)
+
+Phase C (which teaches the agent to author a clean single map+table with explicit `layer`s) ships
+*after* B, so during B the agent still emits **flat, sometimes-redundant** grids (live: it authored two
+duplicate tables). Auto-hero is therefore what makes the C2 view happen at all before C, and it must
+handle messy docs.
+
+A guarded **pure client-side transform** run on the doc before render (does not mutate stored server
+state). If the doc contains **exactly one** `esri:map` **and no** component sets `layer`:
+
+- map → `base`.
+- **every** other top-level molecule → `float` (**place-all** — nothing dropped), assigned to a zone by
+  role and **tiled within the zone** when multiple: stats/telemetry → `top-left` (stack down), legend →
+  `top-right`, tables/timeline/other → `bottom` (tile across), `select`/`card` → `top`.
+- On any inconsistency (0 or >1 `esri:map`, or an explicit `layer` already present) → returns the doc
+  **unchanged** (flat grid / agent-controlled).
+
+So the Command-and-Control view happens **even without agent cooperation** and **faithful to everything
+the agent authored** (redundancy stays visible until Phase C fixes authoring); the agent can still set
+`layer`/`anchor` explicitly for finer control. This honors the Hybrid philosophy: the core UX never
+depends on agent discipline.
+
+(Rejected alternatives: *type-slotted first-wins* — drop extra same-role molecules from the hero,
+divert to the Inspector — masks the over-composition but hides agent output; *conservative promotion* —
+only hero a clean doc — leaves today's common (messy) case with no C2 view until Phase C.)
 
 ## Section 5 — Agent result-composition guidance (repo-tracked)
 
@@ -255,6 +283,9 @@ brief and is out of scope here.)
 - **`layer` + `anchor`** unified primitive over a `hero` flag or a dual `layout.mode`.
 - **Fade-out** post-turn lifecycle (trail via Inspector) over a persistent on-canvas trail.
 - **Auto-hero promotion** so map-center-stage works without agent cooperation.
+- **Auto-hero is zone-tiled place-all** (revised 2026-07-19): every non-map molecule floats into a
+  role zone, tiling when multiple, nothing dropped — over type-slotted-first-wins or conservative
+  promotion, so today's messy docs still get the C2 view and all agent output stays visible.
 - **A → B → C phasing** over a single big-bang change.
 - **Cognition = Narration Spotlight** (revised after live verify): thinking star + one in-place
   current-step card + a bounded breadcrumb rail, with `narrateStep` human sentences — over the original
