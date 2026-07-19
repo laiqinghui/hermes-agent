@@ -127,7 +127,8 @@ _CATALOG_HELP = (
     "data-table (bindings.source data handle: a 'data://…' handle returned by data_query, or a "
     "'mock://incidents' dev source; optional props.title, "
     "props.columns as string[]). Grid: layout.cols (default 12); every TOP-LEVEL component "
-    "requires area {col,colSpan,row,rowSpan} (1-based; col+colSpan-1 must fit cols). Nesting "
+    "requires area {col,colSpan,row,rowSpan} unless it sets a layer (see C2 shell below) "
+    "(1-based; col+colSpan-1 must fit cols). Nesting "
     "depth max 3. NEVER inline data rows — bind data via bindings.source handles only. "
     "(Phase 2) select: {id, type:'select', area, props:{field:'<attr>', options:[...] }, "
     "state:{value}, handlers:{onChange:<Handler>}}. props.options may be a string array OR "
@@ -145,6 +146,15 @@ _CATALOG_HELP = (
     "esri:map component id it describes). esri:feature-table (bindings.layer = a layer handle; "
     "optional bindings.mapRef = an esri:map id to highlight selected rows on that map; state.selection). "
     "Plot geospatial data on esri:map; use esri:feature-table for a spatial table of a layer."
+    " (Phase B C2 shell) A top-level component may use a LAYER instead of a grid area to build a "
+    "Command-and-Control view: layer:'base' = one full-bleed primary view (usually esri:map; may be a "
+    "data-table/chart for non-geospatial data; max one; needs no area/edge/anchor). layer:'dock' = an "
+    "edge rail; requires edge:'left'|'right'|'top'|'bottom'; optional size:{w,h} = rail thickness in "
+    "percent (left/right fill height, top/bottom fill width). layer:'float' = an anchored card; requires "
+    "anchor:'top-left'|'top'|'top-right'|'left'|'center'|'right'|'bottom-left'|'bottom'|'bottom-right'; "
+    "optional size:{w,h} in percent; optional z. area{col,colSpan,row,rowSpan} is ONLY for grid "
+    "components (those WITHOUT a layer). If you author a plain grid containing one esri:map, the client "
+    "auto-arranges it into a shell — but prefer authoring the shell explicitly."
 )
 
 RENDER_VIEW_SCHEMA = {
@@ -165,6 +175,21 @@ RENDER_VIEW_SCHEMA = {
         " GIS example: {id:'map1', type:'esri:map', area:{col:1,colSpan:8,row:2,rowSpan:4}, "
         "props:{basemap:'osm'}, bindings:{layers:['mock://incidents']}} with a companion "
         "{id:'lg1', type:'esri:legend', area:{...}, bindings:{mapRef:'map1'}}."
+        " COMPOSITION (Command-and-Control): ALWAYS call render_view — even a text/summary answer ends "
+        "with a card or stat so the canvas is never empty. Hero the primary view: for geospatial rows "
+        "render an esri:map as layer:'base'; for a tabular-only result make the main data-table the "
+        "layer:'base'. Put supporting panels in rails/floats: table -> dock:'bottom', legend -> "
+        "dock:'right', key stats/filters -> dock:'left' or 'top'; use float for compact callouts. Author "
+        "at most ONE map and ONE table per dataset — do NOT wrap a table in a card AND also emit a "
+        "standalone table. Give esri:map a props.title — the legend shows it (never a raw data:// "
+        "handle). For non-geospatial data use a base data-table with stat docks, or a plain area grid for "
+        "equal tiles. C2 example: {canvasVersion:1, layout:{type:'grid',cols:12}, components:[ "
+        "{id:'map1', type:'esri:map', layer:'base', props:{title:'GREY LADY — AIS positions', "
+        "basemap:'osm'}, bindings:{layers:['data://<handle>']}}, {id:'tbl1', type:'data-table', "
+        "layer:'dock', edge:'bottom', size:{w:100,h:34}, props:{title:'Latest positions'}, "
+        "bindings:{source:'data://<handle>'}}, {id:'lg1', type:'esri:legend', layer:'dock', "
+        "edge:'right', bindings:{mapRef:'map1'}}, {id:'st1', type:'stat', layer:'float', "
+        "anchor:'top-left', props:{label:'Records', value:20}} ]}."
     ),
     "parameters": {
         "type": "object",
