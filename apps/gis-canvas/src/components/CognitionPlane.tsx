@@ -38,6 +38,9 @@ function CurrentStepCard({ step }: { step: BuildStep }) {
   const n = narrateStep(step)
   const running = n.outcome === 'running'
   const secs = useElapsedSeconds(String(step.id), running)
+  // The step's own description (`context`) is the meaningful detail here; fall
+  // back to the outcome tail (row count / error) when there is no context.
+  const detail = step.context?.trim() || n.tail
   return (
     <div
       data-testid="current-step"
@@ -46,7 +49,7 @@ function CurrentStepCard({ step }: { step: BuildStep }) {
       <span className={`shrink-0 font-mono text-[13px] ${OUTCOME_TEXT[n.outcome]}`}>{n.glyph}</span>
       <span className="min-w-0 flex-1 truncate font-sans text-[12.5px] text-primary">
         {humanizeLabel(step.label)}
-        {n.tail ? <span className="text-tertiary"> · {n.tail}</span> : null}
+        {detail ? <span className="text-tertiary"> · {detail}</span> : null}
       </span>
       {running && secs > 0 ? (
         <span className="shrink-0 font-mono text-[10.5px] text-tertiary">{secs}s</span>
@@ -130,10 +133,9 @@ export function CognitionPlane({ turn }: { turn: Turn | undefined }) {
 
   const done = trace.filter(s => s.status === 'done' && s !== current)
 
-  // The star types the agent's reasoning when it emits any; otherwise it falls
-  // back to the current step's `context` — the agent's own description of what
-  // it is doing (the rich text the dock shows) — so it is never a bare placeholder.
-  const thinkingText = lastReasoning?.text ?? current?.context
+  // The star shows the agent's actual thinking (reasoning). Step-level detail
+  // (the `context`) belongs on the current-step card, not here.
+  const thinkingText = lastReasoning?.text
 
   // Pace the cognition frame: hold each (thought + current step + rail) for a
   // readable minimum, coalescing rapid updates to the latest so nothing flashes

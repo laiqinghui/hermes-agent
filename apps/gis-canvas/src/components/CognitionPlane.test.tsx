@@ -35,18 +35,22 @@ describe('CognitionPlane (spotlight)', () => {
     expect(screen.getByTestId('current-step')).toHaveTextContent('Data Query')
   })
 
-  it('falls the thinking star back to the current step context when there is no reasoning', () => {
+  it('shows the step context on the current-step card, not the thinking star', () => {
     const running = step(3, 'data_query', {
       status: 'running',
       context: 'Retrieve the latest 20 AIS vessel position rows for vessel name GREY LADY',
     })
     render(<CognitionPlane turn={turnWith([running])} />)
-    // no reasoning, but a context is present -> the star renders it, not the placeholder
-    expect(screen.queryByTestId('cognition-working')).toBeNull()
-    expect(screen.getByTestId('thinking-molecule')).toBeInTheDocument()
+    // no reasoning -> the star is the Composing placeholder (context does NOT leak into it)
+    expect(screen.queryByTestId('thinking-molecule')).toBeNull()
+    expect(screen.getByTestId('cognition-working')).toBeInTheDocument()
+    // the context is the meaningful detail on the current-step card
+    expect(screen.getByTestId('current-step')).toHaveTextContent(
+      'Data Query · Retrieve the latest 20 AIS vessel position rows for vessel name GREY LADY'
+    )
   })
 
-  it('falls back to the Composing placeholder only when there is neither reasoning nor context', () => {
+  it('falls back to the Composing placeholder when there is no reasoning', () => {
     render(<CognitionPlane turn={turnWith([step(3, 'skill_view', { status: 'running' })])} />)
     expect(screen.queryByTestId('thinking-molecule')).toBeNull()
     expect(screen.getByTestId('cognition-working')).toBeInTheDocument()
