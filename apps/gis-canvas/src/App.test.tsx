@@ -167,23 +167,3 @@ test('shows the cognition plane while a tool is running and hides it when the tu
   act(() => client.emit({ type: 'message.complete', payload: { text: 'Done.' } }))
   await waitFor(() => expect(screen.queryByTestId('cognition-plane')).toBeNull())
 })
-
-test('folds streamed thinking.delta into the thoughts stream (as reasoning) at the next tool.start', async () => {
-  const client = makeFakeClient()
-  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x" />)
-  client.openNow()
-  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
-
-  // raw thinking streams as many high-frequency deltas, then a tool starts
-  act(() => {
-    client.emit({ type: 'thinking.delta', payload: { text: 'Preparing the ' } })
-    client.emit({ type: 'thinking.delta', payload: { text: 'vessel query' } })
-  })
-  act(() => client.emit({ type: 'tool.start', payload: { tool_id: 't1', name: 'data_query' } }))
-  // let the turn settle so we can open the panel via the idle dock
-  act(() => client.emit({ type: 'tool.complete', payload: { tool_id: 't1', name: 'data_query', result: { rows: 1 } } }))
-
-  // open the agent panel; the accumulated thinking burst shows as a Thinking row
-  fireEvent.click(await screen.findByRole('button', { name: /ask the agent to build a dashboard/i }))
-  expect(await screen.findByText('Preparing the vessel query')).toBeInTheDocument()
-})

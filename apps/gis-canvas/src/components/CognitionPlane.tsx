@@ -34,13 +34,14 @@ const OUTCOME_TEXT: Record<StepOutcome, string> = {
 
 // The single active step, shown compactly (the rich intent lives in the
 // thinking star above). A running step gets the sweep.
-function CurrentStepCard({ step }: { step: BuildStep }) {
+function CurrentStepCard({ step, showContext }: { step: BuildStep; showContext: boolean }) {
   const n = narrateStep(step)
   const running = n.outcome === 'running'
   const secs = useElapsedSeconds(String(step.id), running)
-  // The step's own description (`context`) is the meaningful detail here; fall
-  // back to the outcome tail (row count / error) when there is no context.
-  const detail = step.context?.trim() || n.tail
+  // The step's `context` is the meaningful detail — but only shown here when the
+  // thinking star isn't already showing it (see cardShowsContext); otherwise the
+  // card carries just the outcome tail (row count / error).
+  const detail = (showContext && step.context?.trim()) || n.tail
   return (
     <div
       data-testid="current-step"
@@ -133,16 +134,21 @@ export function CognitionPlane({ turn }: { turn: Turn | undefined }) {
 
   const done = trace.filter(s => s.status === 'done' && s !== current)
 
-  // The star shows the agent's actual thinking (reasoning). Step-level detail
-  // (the `context`) belongs on the current-step card, not here.
-  const thinkingText = lastReasoning?.text
+  // The star shows the agent's actual thinking (reasoning) when it emits any.
+  // These a2a/Denodo turns rarely surface real reasoning-summary previews (only
+  // a decorative live indicator), so it falls back to the current step's
+  // `context` — the agent's stated intent — rather than a bare placeholder.
+  const thinkingText = lastReasoning?.text ?? current?.context
+  // Avoid duplicating the context: the current-step card only shows it when the
+  // star is already occupied by real reasoning; otherwise the star has it.
+  const hasReasoning = !!lastReasoning
 
   // Pace the cognition frame: hold each (thought + current step + rail) for a
   // readable minimum, coalescing rapid updates to the latest so nothing flashes
   // by. Keyed on the active step + thinking text (the things that visibly change).
   const busy = !!turn?.isBusy
   const frameKey = busy ? `${current?.id ?? 'none'}|${thinkingText ?? ''}` : '∅'
-  const frame = useDwell({ thinkingText, current, done }, frameKey, DWELL_MS)
+  const frame = useDwell({ thinkingText, current, done, hasReasoning }, frameKey, DWELL_MS)
 
   if (!turn || !turn.isBusy) return null
 
@@ -153,7 +159,7 @@ export function CognitionPlane({ turn }: { turn: Turn | undefined }) {
     >
       <div className="flex max-h-[86vh] w-[min(66%,520px)] flex-col items-stretch gap-3 overflow-hidden">
         {frame.thinkingText ? <ThinkingMolecule text={frame.thinkingText} /> : <WorkingPlaceholder />}
-        {frame.current ? <CurrentStepCard step={frame.current} /> : null}
+        {frame.current ? <CurrentStepCard step={frame.current} showContext={frame.hasReasoning} /> : null}
         {frame.done.length ? <StepRail steps={frame.done} /> : null}
       </div>
     </div>

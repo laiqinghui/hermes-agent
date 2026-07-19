@@ -39,11 +39,6 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const canvasKeyRef = useRef<string | null>(null)
   const startedRef = useRef(false)
   const nextId = useRef(0)
-  // Raw thinking tokens arrive as high-frequency `thinking.delta` events. We
-  // accumulate the current burst here (NOT in the capped activity log, which
-  // they would flood — evicting tool/reasoning rows, the old message.delta
-  // problem) and fold each burst in as ONE reasoning item at the next tool.start.
-  const thinkingBufferRef = useRef('')
   const [auth, setAuth] = useState<AuthState | null>(null)
   const bffUrl = useMemo(() => resolveBffUrl(import.meta.env as Record<string, string | undefined>), [])
   const [theme, toggleTheme] = useTheme()
@@ -64,24 +59,9 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         setApproval(approvalFromEvent(event.payload as Record<string, unknown> | undefined))
         return
       }
-      // Accumulate raw thinking tokens off the activity log (see thinkingBufferRef).
-      if (type === 'thinking.delta') {
-        const t = (event.payload as { text?: unknown } | undefined)?.text
-        if (typeof t === 'string') thinkingBufferRef.current += t
-        return
-      }
-      // At each tool.start, fold the thinking burst that preceded it in as one
-      // reasoning item, so the thoughts stream shows the real thinking (the agent
-      // emits raw thinking even when reasoning-summary previews are disabled).
-      if (type === 'tool.start') {
-        const burst = thinkingBufferRef.current.trim()
-        thinkingBufferRef.current = ''
-        if (burst) log(activityItemFromEvent('reasoning.available', { text: burst }))
-      }
       // A pending approval is resolved once the gated tool completes (approved
       // OR timed-out/denied) or the agent produces its answer — clear the card.
       if (type === 'tool.complete' || type === 'message.complete') setApproval(null)
-      if (type === 'message.complete') thinkingBufferRef.current = ''
       if (!LOGGED_EVENTS.has(type)) return
       log(activityItemFromEvent(type, event.payload as Record<string, unknown> | undefined))
     })
@@ -117,7 +97,6 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
 
   const send = useCallback(async (text: string) => {
     if (!sessionIdRef.current) return
-    thinkingBufferRef.current = '' // a new prompt starts a fresh thinking stream
     log({ kind: 'you', text })
     try {
       await client.request('prompt.submit', { session_id: sessionIdRef.current, text })
