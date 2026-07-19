@@ -190,6 +190,14 @@ RENDER_VIEW_SCHEMA = {
         "bindings:{source:'data://<handle>'}}, {id:'lg1', type:'esri:legend', layer:'dock', "
         "edge:'right', bindings:{mapRef:'map1'}}, {id:'st1', type:'stat', layer:'float', "
         "anchor:'top-left', props:{label:'Records', value:20}} ]}."
+        " LAYOUT HYGIENE (spatial awareness — panels must not overlap): a float MAY overlay the map, but "
+        "must NOT overlap another panel or the map's own chrome (title/legend/zoom near the corners, "
+        "attribution along the bottom). Group related metrics into ONE panel — a dock rail of stats (they "
+        "tile without overlapping) or a single card with stat children — do NOT scatter several separate "
+        "float stats (they collide, as three floats at top-left/top/top-right would). Use float sparingly: "
+        "at most one or two SMALL callouts in distinct corners, each with a size that will not reach its "
+        "neighbours. Keep the map's centre clear and dock supporting panels (table, legend, stat strip) to "
+        "the edges; reserve floats for a single compact highlight."
     ),
     "parameters": {
         "type": "object",

@@ -125,5 +125,5 @@ def test_render_view_accepts_c2_shell(plugin):
 
 def test_tool_guidance_documents_c2_primitive(plugin):
     text = plugin.tools_canvas.RENDER_VIEW_SCHEMA["description"] + plugin.tools_canvas._CATALOG_HELP
-    for kw in ("layer:'base'", "dock", "float", "edge", "anchor", "props.title"):
+    for kw in ("layer:'base'", "dock", "float", "edge", "anchor", "props.title", "overlap"):
         assert kw in text, f"guidance missing {kw!r}"
