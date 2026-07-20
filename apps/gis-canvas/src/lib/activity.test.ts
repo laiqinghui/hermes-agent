@@ -96,7 +96,8 @@ describe('deriveActivity reasoning + timeline', () => {
       mk('tool.complete', { tool_id: 'a', name: 'data_query', result: { rows: 20 } }, 4),
     ]
     const d = deriveActivity(items)
-    expect(d.reasoning).toEqual([{ id: 1, text: '**Planning data query**' }])
+    // markdown emphasis is unwrapped for the terminal-style display
+    expect(d.reasoning).toEqual([{ id: 1, text: 'Planning data query' }])
     // interleaved before the step it precedes
     expect(d.turns[0].items.map(i => i.kind)).toEqual(['reasoning', 'step'])
   })

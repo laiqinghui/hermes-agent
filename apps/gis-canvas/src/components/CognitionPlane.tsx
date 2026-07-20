@@ -45,15 +45,15 @@ function CurrentStepCard({ step, showContext }: { step: BuildStep; showContext: 
   return (
     <div
       data-testid="current-step"
-      className="relative flex items-center gap-2.5 overflow-hidden rounded-gc-md border border-hairline-strong bg-surface/95 px-3 py-2.5 shadow-gc-overlay backdrop-blur"
+      className="relative flex items-start gap-2.5 overflow-hidden rounded-gc-md border border-hairline-strong bg-surface/95 px-3 py-2.5 shadow-gc-overlay backdrop-blur"
     >
-      <span className={`shrink-0 font-mono text-[13px] ${OUTCOME_TEXT[n.outcome]}`}>{n.glyph}</span>
-      <span className="min-w-0 flex-1 truncate font-sans text-[12.5px] text-primary">
+      <span className={`shrink-0 font-mono text-[13px] leading-5 ${OUTCOME_TEXT[n.outcome]}`}>{n.glyph}</span>
+      <span className="min-w-0 flex-1 font-sans text-[12.5px] leading-5 text-primary [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] overflow-hidden">
         {humanizeLabel(step.label)}
         {detail ? <span className="text-tertiary"> · {detail}</span> : null}
       </span>
       {running && secs > 0 ? (
-        <span className="shrink-0 font-mono text-[10.5px] text-tertiary">{secs}s</span>
+        <span className="shrink-0 font-mono text-[10.5px] leading-5 text-tertiary">{secs}s</span>
       ) : null}
       {n.outcome === 'running' ? (
         <span

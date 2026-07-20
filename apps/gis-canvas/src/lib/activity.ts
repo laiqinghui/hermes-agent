@@ -2,6 +2,8 @@
 // stream into what the AgentPanel needs: a conversation thread, an enriched
 // tool-call trace (with inputs/outputs the gateway already sends), the agent's
 // reasoning, and a chronological timeline for the verbose inspector.
+import { stripInlineMarkdown } from './plain-text'
+
 export interface ActivityItem {
   id: number
   kind: string
@@ -93,8 +95,10 @@ export function deriveActivity(items: ActivityItem[]): DerivedActivity {
 
   // Record a reasoning item across the global list, the current turn, its
   // interleaved items, and the timeline (shared by reasoning.available and the
-  // real streamed reasoning.delta).
-  const pushReasoning = (id: number, text: string) => {
+  // real streamed reasoning.delta). Reasoning arrives as markdown (`**Planning…**`);
+  // unwrap emphasis so the terminal-style star/rows read clean.
+  const pushReasoning = (id: number, raw: string) => {
+    const text = stripInlineMarkdown(raw)
     const r = { id, text }
     reasoning.push(r)
     cur.reasoning.push(r)
