@@ -25,14 +25,14 @@ export function minSizePct(type: string, container: { w: number; h: number }): {
   return { w: (px.w / container.w) * 100, h: (px.h / container.h) * 100 }
 }
 
-function dockRect(edge: Edge, size?: { w: number; h: number }): Omit<WindowRect, 'z'> {
+function dockRect(edge: Edge, size?: { w: number; h: number }, insets: { left: number; right: number } = { left: 0, right: 0 }): Omit<WindowRect, 'z'> {
   const s = size ?? defaultDockSize(edge)
   const bottom = 100 - RESERVE_PCT
   switch (edge) {
     case 'left': return { x: 0, y: 0, w: s.w, h: bottom }
     case 'right': return { x: 100 - s.w, y: 0, w: s.w, h: bottom }
-    case 'top': return { x: 0, y: 0, w: 100, h: s.h }
-    case 'bottom': return { x: 0, y: bottom - s.h, w: 100, h: s.h }
+    case 'top': return { x: insets.left, y: 0, w: 100 - insets.left - insets.right, h: s.h }
+    case 'bottom': return { x: insets.left, y: bottom - s.h, w: 100 - insets.left - insets.right, h: s.h }
   }
 }
 
@@ -60,6 +60,20 @@ function floatRect(anchor: Anchor, size?: { w: number; h: number }): Omit<Window
 export function seedRects(doc: CanvasDoc): Record<string, WindowRect> {
   const resolved = applyAutoShell(doc)
   const out: Record<string, WindowRect> = {}
+
+  // Compute left/right rail insets for horizontal docks before processing components
+  let leftInset = 0, rightInset = 0
+  resolved.components.forEach((c: ComponentNode) => {
+    if (c.layer === 'dock') {
+      const edge = (c.edge as Edge | undefined) ?? edgeForType(c.type)
+      if (edge === 'left') {
+        leftInset = c.size?.w ?? defaultDockSize('left').w
+      } else if (edge === 'right') {
+        rightInset = c.size?.w ?? defaultDockSize('right').w
+      }
+    }
+  })
+
   resolved.components.forEach((c: ComponentNode, i: number) => {
     if (c.layer === 'base') { out[c.id] = { x: 0, y: 0, w: 100, h: 100, z: 0 }; return }
     if (c.layer === 'float') {
@@ -67,7 +81,7 @@ export function seedRects(doc: CanvasDoc): Record<string, WindowRect> {
       out[c.id] = { ...r, z: i + 1 }; return
     }
     const edge = (c.edge as Edge | undefined) ?? edgeForType(c.type)
-    out[c.id] = { ...dockRect(edge, c.size), z: i + 1 }
+    out[c.id] = { ...dockRect(edge, c.size, { left: leftInset, right: rightInset }), z: i + 1 }
   })
   return out
 }

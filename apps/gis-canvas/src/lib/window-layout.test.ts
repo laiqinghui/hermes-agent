@@ -54,6 +54,29 @@ describe('seedRects', () => {
     expect(rects.tb.y + rects.tb.h).toBeCloseTo(100 - RESERVE_PCT, 5)
     expect(rects.tb.z).toBeGreaterThan(0)
   })
+
+  it('insets top/bottom docks by adjacent vertical rail widths', () => {
+    // Doc with stat→left, legend→right, data-table→bottom (all inferred via auto-shell).
+    // The bottom dock should be inset by the left/right rail widths.
+    const rects = seedRects(doc([
+      { id: 'm', type: 'esri:map' },
+      { id: 's', type: 'stat' },
+      { id: 'lg', type: 'esri:legend' },
+      { id: 'tb', type: 'data-table' },
+    ]))
+    // stat inferred as left dock (edge='left', default width ~26%)
+    // legend inferred as right dock (edge='right', default width ~26%)
+    // table inferred as bottom dock; should be inset left & right by rail widths
+    const leftRailWidth = 26  // stat default width %
+    const rightRailWidth = 26 // legend default width %
+    expect(rects.tb.x).toBeCloseTo(leftRailWidth, 5)
+    expect(rects.tb.x + rects.tb.w).toBeCloseTo(100 - rightRailWidth, 5)
+    // Verify vertical rails span full height (minus reserve)
+    expect(rects.s.y).toBe(0)
+    expect(rects.s.y + rects.s.h).toBeCloseTo(100 - RESERVE_PCT, 5)
+    expect(rects.lg.y).toBe(0)
+    expect(rects.lg.y + rects.lg.h).toBeCloseTo(100 - RESERVE_PCT, 5)
+  })
 })
 
 describe('minSizePct', () => {
