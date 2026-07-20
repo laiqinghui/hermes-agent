@@ -58,6 +58,13 @@ export function FreeCanvas({ doc }: { doc: CanvasDoc }) {
   const endGesture = (id: string) => { delete gestureBase.current[id] }
 
   const onDrag = (id: string) => (dxPct: number, dyPct: number, commit: boolean) => {
+    // A bare click (pointerdown -> pointerup, no movement) fires exactly one
+    // onDrag(0, 0, true). Guard it: no store write, no guides, no z raise — a
+    // clicked-but-unmoved window must stay unpinned on its seed.
+    if (dxPct === 0 && dyPct === 0) {
+      if (commit) { setGuides({}); endGesture(id) }
+      return
+    }
     let next = applyDrag(baseOf(id), dxPct, dyPct)
     if (!altRef.current) {
       const snapped = snapDrag(next, snapTargets(others(id), GRID_PCT), (SNAP_PX / getContainer().w) * 100)
@@ -69,6 +76,10 @@ export function FreeCanvas({ doc }: { doc: CanvasDoc }) {
   }
 
   const onResize = (id: string, type: string) => (handle: ResizeHandle, dxPct: number, dyPct: number, commit: boolean) => {
+    if (dxPct === 0 && dyPct === 0) {
+      if (commit) endGesture(id)
+      return
+    }
     const next = applyResize(baseOf(id), handle, dxPct, dyPct, minSizePct(type, getContainer()))
     store.set(id, clampToBounds(next, MARGIN_PCT))
     if (commit) endGesture(id)

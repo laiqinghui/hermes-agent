@@ -21,7 +21,12 @@ const doc: CanvasDoc = {
 
 function Harness({ doc }: { doc: CanvasDoc }) {
   const store = useLayoutStore()
-  return <LayoutProvider store={store}><FreeCanvas doc={doc} /></LayoutProvider>
+  return (
+    <LayoutProvider store={store}>
+      <div data-testid="store-empty">{String(store.isEmpty)}</div>
+      <FreeCanvas doc={doc} />
+    </LayoutProvider>
+  )
 }
 
 describe('FreeCanvas', () => {
@@ -42,6 +47,19 @@ describe('FreeCanvas', () => {
     // legend seeded at right edge (x≈74); dragged -20% → override persists (x moved left)
     const el = screen.getByTestId('window-lg')
     expect(el.style.left).not.toBe('74%')
+    // a real drag (with a pointermove) does write an override
+    expect(screen.getByTestId('store-empty').textContent).toBe('false')
+  })
+
+  it('a bare click (no movement) pins nothing', () => {
+    render(<Harness doc={doc} />)
+    const el = screen.getByTestId('window-lg')
+    const seedLeft = el.style.left
+    const header = screen.getByTestId('window-header-lg')
+    fireEvent.pointerDown(header, { clientX: 500, clientY: 100 })
+    fireEvent.pointerUp(window, { clientX: 500, clientY: 100 })
+    expect(screen.getByTestId('store-empty').textContent).toBe('true')
+    expect(el.style.left).toBe(seedLeft)
   })
 
   it('a multi-move drag lands at the net offset (no compounding)', () => {
