@@ -38,14 +38,27 @@ describe('Window', () => {
   it('pointerdown on the header starts a gesture (bubbles to outer onGestureStart)', () => {
     const { onGestureStart } = setup()
     fireEvent.pointerDown(screen.getByTestId('window-header-w1'), { clientX: 0, clientY: 0 })
-    expect(onGestureStart).toHaveBeenCalled()
+    expect(onGestureStart).toHaveBeenCalledTimes(1)
   })
 
   it('a resize handle starts a gesture explicitly (stopPropagation blocks bubbling)', () => {
     const { onGestureStart, onResizeMove } = setup()
     fireEvent.pointerDown(screen.getByTestId('resize-w1-se'), { clientX: 0, clientY: 0 })
-    expect(onGestureStart).toHaveBeenCalled()
+    expect(onGestureStart).toHaveBeenCalledTimes(1)
     fireEvent.pointerMove(window, { clientX: 100, clientY: 50 })
     expect(onResizeMove).toHaveBeenLastCalledWith('se', 10, 10, false)
+  })
+
+  it('pointercancel commits and tears down the window listeners so a later move is ignored', () => {
+    const { onDragMove } = setup()
+    const header = screen.getByTestId('window-header-w1')
+    fireEvent.pointerDown(header, { clientX: 0, clientY: 0 })
+    fireEvent.pointerMove(window, { clientX: 100, clientY: 50 })
+    expect(onDragMove).toHaveBeenLastCalledWith(10, 10, false)
+    fireEvent.pointerCancel(window, { clientX: 100, clientY: 50 })
+    expect(onDragMove).toHaveBeenLastCalledWith(10, 10, true) // finalized at cancel position, like commit
+    const callsAfterCancel = onDragMove.mock.calls.length
+    fireEvent.pointerMove(window, { clientX: 200, clientY: 150 })
+    expect(onDragMove).toHaveBeenCalledTimes(callsAfterCancel) // listeners removed — no further calls
   })
 })

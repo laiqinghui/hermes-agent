@@ -1,4 +1,4 @@
-import { useRef, type ReactNode, type PointerEvent as RPointerEvent } from 'react'
+import { useEffect, useRef, type ReactNode, type PointerEvent as RPointerEvent } from 'react'
 import type { ComponentNode, WindowRect } from '../lib/types'
 import { HANDLES, type ResizeHandle } from '../lib/window-layout'
 
@@ -19,9 +19,20 @@ function humanTitle(node: ComponentNode): string {
 
 export function Window({ node, rect, getContainer, onGestureStart, onDragMove, onResizeMove, children }: WindowProps) {
   const start = useRef<{ x: number; y: number } | null>(null)
+  // Holds the teardown for whichever gesture (drag or resize) is currently in
+  // flight, so an interrupted gesture (pointercancel) or a mid-drag unmount
+  // (this canvas re-renders live from agent-driven CanvasDoc updates) can
+  // still remove the window-level listeners instead of leaking them.
+  const teardownRef = useRef<(() => void) | null>(null)
+
+  // Unmount safety net: if the component goes away mid-gesture, drop any
+  // still-registered window listeners so they don't fire on stale closures.
+  useEffect(() => () => { teardownRef.current?.() }, [])
 
   // px→% deltas against the LIVE container (read at gesture start); window-level
-  // listeners so a fast drag that outruns the header still tracks. Released on up.
+  // listeners so a fast drag that outruns the header still tracks. Released on
+  // up, on cancel (finalized at the cancel position, same as a commit — this
+  // avoids leaving the parent's gesture/guide state stuck mid-drag), and on unmount.
   const beginDrag = (e: RPointerEvent) => {
     e.preventDefault() // NOT stopPropagation — must bubble to outer onGestureStart
     start.current = { x: e.clientX, y: e.clientY }
@@ -31,9 +42,18 @@ export function Window({ node, rect, getContainer, onGestureStart, onDragMove, o
       onDragMove(((ev.clientX - start.current.x) / c.w) * 100, ((ev.clientY - start.current.y) / c.h) * 100, commit)
     }
     const move = (ev: PointerEvent) => emit(ev, false)
-    const up = (ev: PointerEvent) => { emit(ev, true); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
+    const teardown = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      teardownRef.current = null
+    }
+    const up = (ev: PointerEvent) => { emit(ev, true); teardown() }
+    const cancel = (ev: PointerEvent) => { emit(ev, true); teardown() }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
+    teardownRef.current = teardown
   }
 
   const beginResize = (handle: ResizeHandle) => (e: RPointerEvent) => {
@@ -46,9 +66,18 @@ export function Window({ node, rect, getContainer, onGestureStart, onDragMove, o
       onResizeMove(handle, ((ev.clientX - start.current.x) / c.w) * 100, ((ev.clientY - start.current.y) / c.h) * 100, commit)
     }
     const move = (ev: PointerEvent) => emit(ev, false)
-    const up = (ev: PointerEvent) => { emit(ev, true); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
+    const teardown = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+      teardownRef.current = null
+    }
+    const up = (ev: PointerEvent) => { emit(ev, true); teardown() }
+    const cancel = (ev: PointerEvent) => { emit(ev, true); teardown() }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', cancel)
+    teardownRef.current = teardown
   }
 
   return (
