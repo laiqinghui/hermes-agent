@@ -99,3 +99,31 @@ def test_sessions_are_isolated_by_task_id(plugin):
     plugin.tools_canvas.render_view({"spec": _spec()}, task_id="t1")
     other = json.loads(plugin.tools_canvas.canvas_get_state({}, task_id="t2"))
     assert other["ok"] is False
+
+def _c2_spec():
+    return {
+        "canvasVersion": 1,
+        "layout": {"type": "grid", "cols": 12},
+        "components": [
+            {"id": "map1", "type": "esri:map", "layer": "base",
+             "props": {"title": "GREY LADY — AIS positions", "basemap": "osm"},
+             "bindings": {"layers": ["mock://incidents"]}},
+            {"id": "tbl1", "type": "data-table", "layer": "dock", "edge": "bottom",
+             "size": {"w": 100, "h": 34}, "bindings": {"source": "mock://incidents"}},
+            {"id": "lg1", "type": "esri:legend", "layer": "dock", "edge": "right",
+             "bindings": {"mapRef": "map1"}},
+            {"id": "st1", "type": "stat", "layer": "float", "anchor": "top-left",
+             "props": {"label": "Records", "value": 20}},
+        ],
+    }
+
+
+def test_render_view_accepts_c2_shell(plugin):
+    out = json.loads(plugin.tools_canvas.render_view({"spec": _c2_spec()}, task_id="t1"))
+    assert out["ok"] is True and out["rev"] == 1
+
+
+def test_tool_guidance_documents_c2_primitive(plugin):
+    text = plugin.tools_canvas.RENDER_VIEW_SCHEMA["description"] + plugin.tools_canvas._CATALOG_HELP
+    for kw in ("layer:'base'", "dock", "float", "edge", "anchor", "props.title", "overlap"):
+        assert kw in text, f"guidance missing {kw!r}"

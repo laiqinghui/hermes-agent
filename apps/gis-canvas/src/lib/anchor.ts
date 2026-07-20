@@ -2,6 +2,10 @@ import type { CSSProperties } from 'react'
 import type { Anchor, Edge, Size } from './types'
 
 const GAP = 12 // px inset/padding
+// Reserve the base map's bottom attribution strip ("Map data © …") so docks/bottom
+// floats never bury it — legally it must stay visible. The base stays inset-0, so
+// its attribution shows in this strip below the rails.
+const ATTRIB = 22 // px
 
 const FLOAT_DEFAULTS: Record<Anchor, Size> = {
   'top-left': { w: 24, h: 40 }, 'top-right': { w: 24, h: 40 },
@@ -28,10 +32,10 @@ export function railStyle(edge: Edge, size?: Size, insets: RailInsets = {}): CSS
   const s = size ?? DOCK_DEFAULTS[edge]
   const base: CSSProperties = { position: 'absolute', display: 'flex', gap: `${GAP}px`, padding: `${GAP}px` }
   switch (edge) {
-    case 'left': return { ...base, top: 0, bottom: 0, left: 0, width: `${s.w}%`, flexDirection: 'column' }
-    case 'right': return { ...base, top: 0, bottom: 0, right: 0, width: `${s.w}%`, flexDirection: 'column' }
+    case 'left': return { ...base, top: 0, bottom: ATTRIB, left: 0, width: `${s.w}%`, flexDirection: 'column' }
+    case 'right': return { ...base, top: 0, bottom: ATTRIB, right: 0, width: `${s.w}%`, flexDirection: 'column' }
     case 'top': return { ...base, top: 0, left: insets.left ?? 0, right: insets.right ?? 0, height: `${s.h}%`, flexDirection: 'row' }
-    case 'bottom': return { ...base, bottom: 0, left: insets.left ?? 0, right: insets.right ?? 0, height: `${s.h}%`, flexDirection: 'row' }
+    case 'bottom': return { ...base, bottom: ATTRIB, left: insets.left ?? 0, right: insets.right ?? 0, height: `${s.h}%`, flexDirection: 'row' }
   }
 }
 
@@ -50,8 +54,8 @@ export function floatStyle(anchor: Anchor, size?: Size): CSSProperties {
     case 'left': return { ...box, top: '50%', left: GAP, transform: 'translateY(-50%)' }
     case 'center': return { ...box, top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }
     case 'right': return { ...box, top: '50%', right: GAP, transform: 'translateY(-50%)' }
-    case 'bottom-left': return { ...box, bottom: GAP, left: GAP }
-    case 'bottom': return { ...box, bottom: GAP, left: '50%', transform: 'translateX(-50%)' }
-    case 'bottom-right': return { ...box, bottom: GAP, right: GAP }
+    case 'bottom-left': return { ...box, bottom: GAP + ATTRIB, left: GAP }
+    case 'bottom': return { ...box, bottom: GAP + ATTRIB, left: '50%', transform: 'translateX(-50%)' }
+    case 'bottom-right': return { ...box, bottom: GAP + ATTRIB, right: GAP }
   }
 }

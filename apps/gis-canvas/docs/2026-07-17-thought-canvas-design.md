@@ -224,18 +224,43 @@ predictable. The primitive still fully supports agent-authored non-map shells (a
 (Rejected: forcing a map-hero on every doc — breaks the non-geo case the operator sometimes needs;
 free-floating centered cards — not the C2 idiom and the source of the sizing bugs.)
 
-## Section 5 — Agent result-composition guidance (repo-tracked)
+## Section 5 — Agent C2-composition guidance (Phase C, repo-tracked)
 
-Edits to `plugins/gis-canvas/tools_canvas.py` (`_CATALOG_HELP` / `RENDER_VIEW_SCHEMA` description) — the
-agent guides the *result* plane only, never cognition:
+Edits to `plugins/gis-canvas/tools_canvas.py` (`_CATALOG_HELP`, shared by `render_view`/`update_view`, +
+the `render_view` description) — the agent guides the *result* plane only, never cognition. **Style:
+flexible building blocks** (chosen 2026-07-19): teach the full `base`/`dock`/`float` primitive + the
+composition principles, and let the agent compose per situation (rather than one rigid recipe). Auto-shell
+remains the fallback when the agent authors a plain grid.
 
-- **`render_view` always required.** Even a text/summary answer ends with a result molecule (a `card`
-  or `stat`), so the canvas is never empty — the thought canvas is always the output surface.
-- **Hero rule.** "If the result includes geospatial rows, render an `esri:map` as `layer:'base'` and
-  place stats/legend/table as anchored `float` panels."
-- **Anti-redundancy.** "Author at most one table and/or one map per dataset; do not create redundant
-  components showing the same source." Fixes the over-composition flagged in
-  `2026-07-17-denodo-skill-tuning-brief.md`.
+**Document the C2 shell primitive** (the catalog help currently knows nothing about it and wrongly says
+*every* top-level component requires `area`):
+
+- `layer: 'base' | 'dock' | 'float'` — omit ⇒ grid (the `area` path, still valid).
+- **base** — full-bleed primary view; usually an `esri:map`, but a dominant `data-table`/chart for
+  non-geospatial data. **Max one.** Needs neither `area` nor `edge`/`anchor`.
+- **dock** — an edge rail; requires `edge: left|right|top|bottom`; optional `size {w,h}` = rail thickness
+  (percent). Left/right fill full height; top/bottom fill full width.
+- **float** — an anchored card; requires `anchor` (9-point); optional `size` = card box (percent).
+- `area {col,colSpan,row,rowSpan}` applies **only** to grid components (no `layer`).
+
+**Composition principles** (in the `render_view` description):
+
+- **`render_view` always required.** Even a text/summary answer ends with a result molecule (`card`/`stat`)
+  so the canvas is never empty — the thought canvas is always the output surface.
+- **Hero the primary view.** Geospatial rows → `esri:map` as `layer:'base'`; a tabular-only result → the
+  main `data-table` as `layer:'base'`.
+- **Rails & floats for support.** Table → `dock:'bottom'`, legend → `dock:'right'`, stats/filters →
+  `dock:'left'`/`'top'`; use `float` for compact/transient callouts.
+- **One map + one table per dataset** — don't wrap a table in a `card` *and* also emit a standalone table
+  (the over-composition flagged in `2026-07-17-denodo-skill-tuning-brief.md`).
+- **Title layers.** Give `esri:map` a `props.title`; it is what the legend shows (kills the raw `data://`
+  handle).
+- **Non-map & grid.** A `base` table + stat docks for tabular data; a plain `area` grid for equal-tile
+  dashboards (the client auto-arranges if `layer` is omitted).
+
+Plus a worked C2 example in the description (titled base map + bottom-rail table + right-rail legend +
+a float stat). No code-logic change; guarded by a light test that the schema text carries the new
+primitive keywords, then live-verified over a couple of agent runs (flexible style ⇒ some variance).
 
 (The `denodo-data-agent` skill's `data_query`-over-`execute_code` tuning is tracked separately in that
 brief and is out of scope here.)

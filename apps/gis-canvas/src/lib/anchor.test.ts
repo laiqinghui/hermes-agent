@@ -10,15 +10,15 @@ describe('defaultDockSize', () => {
 })
 
 describe('railStyle', () => {
-  it('left rail fills full height with a definite width', () => {
+  it('left rail fills height above the attribution strip, definite width', () => {
     const s = railStyle('left')
     expect(s.position).toBe('absolute')
-    expect(s.top).toBe(0); expect(s.bottom).toBe(0); expect(s.left).toBe(0)
+    expect(s.top).toBe(0); expect(s.bottom).toBe(22); expect(s.left).toBe(0)
     expect(s.width).toBe('26%'); expect(s.flexDirection).toBe('column')
   })
-  it('bottom rail fills width (inset by vertical rails) with a definite height', () => {
+  it('bottom rail sits above the attribution strip, inset by vertical rails', () => {
     const s = railStyle('bottom', undefined, { left: '26%', right: '0' })
-    expect(s.bottom).toBe(0); expect(s.left).toBe('26%'); expect(s.right).toBe('0')
+    expect(s.bottom).toBe(22); expect(s.left).toBe('26%'); expect(s.right).toBe('0')
     expect(s.height).toBe('34%'); expect(s.flexDirection).toBe('row')
   })
 })
