@@ -70,7 +70,7 @@ global reservation no longer applies.
   this header too**, so its body keeps ESRI pan/zoom; dragging is header-only. Never drag from a
   molecule body (tables scroll, maps pan).
 - **Resize** — edge + corner handles that appear on hover.
-- **Click-to-front** — focusing a window bumps its `z` to `maxZ + 1`.
+- **Click-to-front** — dragging a window bumps its `z` to `maxZ + 1`. **Exception: the base layer (map) is never raised** — it stays at its background `z` on drag/resize, so panels remain visible on top of it.
 - **Reset layout** — a control in the top bar clears all overrides.
 
 ## Hybrid snapping
