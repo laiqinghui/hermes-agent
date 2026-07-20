@@ -1,8 +1,30 @@
+import { beforeAll } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { CanvasGrid } from './CanvasGrid'
 import type { CanvasDoc } from '../lib/types'
 import { HandlerProvider } from './HandlerContext'
 import type { CanvasActions } from '../lib/handlers'
+import { LayoutProvider } from './LayoutProvider'
+import { useLayoutStore } from '../lib/use-layout-store'
+
+// jsdom has no layout; give the container a real rect so px→% is finite (FreeCanvas
+// consumes getBoundingClientRect for live container sizing during gestures).
+beforeAll(() => {
+  Element.prototype.getBoundingClientRect = () =>
+    ({ x: 0, y: 0, top: 0, left: 0, right: 1000, bottom: 500, width: 1000, height: 500, toJSON: () => {} }) as DOMRect
+})
+
+function renderWithLayout(d: CanvasDoc) {
+  function Harness() {
+    const store = useLayoutStore()
+    return (
+      <LayoutProvider store={store}>
+        <CanvasGrid doc={d} />
+      </LayoutProvider>
+    )
+  }
+  return render(<Harness />)
+}
 
 function renderWithActions(d: CanvasDoc, actions: Partial<CanvasActions> = {}) {
   const full: CanvasActions = {
@@ -120,7 +142,7 @@ test('data-table filters rows by state.filter', () => {
   expect(screen.queryByText('f_82')).not.toBeInTheDocument()
 })
 
-test('auto-shell: a lone map renders a full-bleed base with dock rails', () => {
+test('auto-shell: a lone map renders as a free-canvas with windows for each molecule', () => {
   const d: CanvasDoc = {
     canvasVersion: 1, rev: 1, layout: { type: 'grid', cols: 12 },
     components: [
@@ -129,16 +151,16 @@ test('auto-shell: a lone map renders a full-bleed base with dock rails', () => {
       { id: 't1', type: 'data-table', bindings: { source: 'mock://incidents' } },
     ],
   }
-  render(<CanvasGrid doc={d} />)
-  expect(screen.getByTestId('canvas-base')).toBeInTheDocument()
-  expect(screen.getByTestId('dock-left')).toBeInTheDocument()   // stat
-  expect(screen.getByTestId('dock-bottom')).toBeInTheDocument() // table
-  expect(screen.getByTestId('panel-s1')).toBeInTheDocument()
+  renderWithLayout(d)
+  expect(screen.getByTestId('free-canvas')).toBeInTheDocument()
+  expect(screen.getByTestId('window-m1')).toBeInTheDocument()
+  expect(screen.getByTestId('window-s1')).toBeInTheDocument()
+  expect(screen.getByTestId('window-t1')).toBeInTheDocument()
   expect(screen.queryByTestId('cell-s1')).toBeNull()
   expect(screen.getByText('Vessels')).toBeInTheDocument()
 })
 
-test('explicit dock + float layers are honored', () => {
+test('explicit dock + float layers are honored (rendered as windows on the free canvas)', () => {
   const d: CanvasDoc = {
     canvasVersion: 1, rev: 1, layout: { type: 'grid', cols: 12 },
     components: [
@@ -147,17 +169,17 @@ test('explicit dock + float layers are honored', () => {
       { id: 'st', type: 'stat', layer: 'float', anchor: 'top-left', props: { label: 'N', value: 3 } },
     ],
   }
-  render(<CanvasGrid doc={d} />)
-  expect(screen.getByTestId('canvas-base')).toBeInTheDocument()
-  expect(screen.getByTestId('panel-t1')).toBeInTheDocument()
-  expect(screen.getByTestId('float-st')).toBeInTheDocument()
+  renderWithLayout(d)
+  expect(screen.getByTestId('free-canvas')).toBeInTheDocument()
+  expect(screen.getByTestId('window-t1')).toBeInTheDocument()
+  expect(screen.getByTestId('window-st')).toBeInTheDocument()
 })
 
 test('no base -> unchanged flat grid (regression: grid cell + CSS preserved)', () => {
   render(<CanvasGrid doc={doc()} />)
   const cell = screen.getByTestId('cell-s1')
   expect(cell.style.gridColumn).toBe('1 / span 3')
-  expect(screen.queryByTestId('canvas-base')).toBeNull()
+  expect(screen.queryByTestId('free-canvas')).toBeNull()
 })
 
 test('marks a freshly-rendered tile with the entrance class', async () => {

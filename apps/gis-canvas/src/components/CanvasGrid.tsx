@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { Anchor, CanvasDoc, ComponentNode, Edge } from '../lib/types'
+import { useMemo, useRef, useState, useEffect, type ReactNode } from 'react'
+import type { CanvasDoc, ComponentNode } from '../lib/types'
 import { COMPONENT_REGISTRY, UnknownTile } from './registry'
-import { applyAutoShell, edgeForType } from '../lib/auto-shell'
-import { railStyle, floatStyle, defaultDockSize } from '../lib/anchor'
+import { applyAutoShell } from '../lib/auto-shell'
+import { FreeCanvas } from './FreeCanvas'
 
 function renderNode(node: ComponentNode): ReactNode {
   const Molecule = COMPONENT_REGISTRY[node.type] ?? UnknownTile
@@ -11,77 +11,8 @@ function renderNode(node: ComponentNode): ReactNode {
 
 export function CanvasGrid({ doc }: { doc: CanvasDoc }) {
   const resolved = useMemo(() => applyAutoShell(doc), [doc])
-  const base = resolved.components.find(c => c.layer === 'base')
-  return base ? <ShellLayers doc={resolved} base={base} /> : <GridLayer doc={resolved} />
-}
-
-// Full-bleed base + dock rails + float cards. The shell is a definite-size box so
-// all the percentage geometry below resolves (the fix for the collapse/overflow bugs).
-function ShellLayers({ doc, base }: { doc: CanvasDoc; base: ComponentNode }) {
-  const rest = doc.components.filter(c => c !== base)
-  const floats = rest.filter(c => c.layer === 'float')
-  const docks = rest.filter(c => c.layer !== 'float') // dock or leftover grid → dock
-
-  const byEdge = new Map<Edge, ComponentNode[]>()
-  for (const c of docks) {
-    const e = (c.edge as Edge | undefined) ?? edgeForType(c.type)
-    const list = byEdge.get(e) ?? []
-    list.push(c)
-    byEdge.set(e, list)
-  }
-  // Horizontal rails inset by adjacent vertical rails' thickness so corners don't overlap.
-  const thickness = (edge: Edge): string => {
-    const list = byEdge.get(edge)
-    if (!list) return '0'
-    const s = list[0].size ?? defaultDockSize(edge)
-    return `${edge === 'left' || edge === 'right' ? s.w : s.h}%`
-  }
-  const insets = { left: thickness('left'), right: thickness('right') }
-
-  return (
-    <div className="relative w-full min-h-[80vh] overflow-hidden">
-      <div data-testid="canvas-base" className="absolute inset-0 z-0 overflow-hidden">
-        {renderNode(base)}
-      </div>
-
-      {[...byEdge.entries()].map(([edge, comps]) => (
-        <div
-          key={edge}
-          data-testid={`dock-${edge}`}
-          className="z-10"
-          style={railStyle(edge, comps[0].size, edge === 'top' || edge === 'bottom' ? insets : undefined)}
-        >
-          {comps
-            .slice()
-            .sort((a, b) => (a.z ?? 0) - (b.z ?? 0))
-            .map(c => (
-              <div
-                key={c.id}
-                data-testid={`panel-${c.id}`}
-                className="gc-hud rounded-gc-md min-w-0 min-h-0 flex-1 overflow-auto"
-              >
-                {renderNode(c)}
-              </div>
-            ))}
-        </div>
-      ))}
-
-      {floats.length > 0 && (
-        <div className="pointer-events-none absolute inset-0 z-20">
-          {floats.map(c => (
-            <div
-              key={c.id}
-              data-testid={`float-${c.id}`}
-              className="gc-hud pointer-events-auto rounded-gc-md"
-              style={floatStyle((c.anchor as Anchor | undefined) ?? 'top-left', c.size)}
-            >
-              {renderNode(c)}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
+  const hasBase = resolved.components.some(c => c.layer === 'base')
+  return hasBase ? <FreeCanvas doc={resolved} /> : <GridLayer doc={resolved} />
 }
 
 // Today's flat grid — unchanged (entrance animation preserved).

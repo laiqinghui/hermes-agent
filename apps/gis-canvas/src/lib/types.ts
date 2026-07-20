@@ -24,6 +24,14 @@ export interface Size {
   h: number // percent of canvas, 0-100
 }
 
+export interface WindowRect {
+  x: number // percent of canvas box, left edge
+  y: number // percent of canvas box, top edge
+  w: number // percent width
+  h: number // percent height
+  z: number // stacking order
+}
+
 export type Handler =
   | { kind: 'set'; target: string; key: string; value: unknown }
   | { kind: 'reactive'; controls: string } // "targetId.key.subkey" path written from event value
