@@ -66,6 +66,9 @@ describe('activityItemFromEvent', () => {
   it('captures reasoning text', () => {
     expect(activityItemFromEvent('reasoning.available', { text: 'thinking...' })).toMatchObject({ kind: 'reasoning.available', text: 'thinking...' })
   })
+  it('captures reasoning.delta text', () => {
+    expect(activityItemFromEvent('reasoning.delta', { text: 'plan' })).toMatchObject({ kind: 'reasoning.delta', text: 'plan' })
+  })
 })
 
 describe('deriveActivity reasoning + timeline', () => {
@@ -82,6 +85,20 @@ describe('deriveActivity reasoning + timeline', () => {
     expect(step.status).toBe('done')
     expect(step.args).toEqual({ sql: 'x' })
     expect(step.durationS).toBe(2)
+  })
+  it('captures reasoning.delta (real streamed reasoning) as reasoning items, skipping empty gaps', () => {
+    // gpt-5.5 et al. stream real between-step reasoning as reasoning.delta;
+    // reasoning.available carries only the final answer for such models.
+    const items: ActivityItem[] = [
+      mk('reasoning.delta', { text: '**Planning data query**' }, 1),
+      mk('reasoning.delta', { text: '' }, 2), // decorative/empty gap — skipped
+      mk('tool.start', { tool_id: 'a', name: 'data_query' }, 3),
+      mk('tool.complete', { tool_id: 'a', name: 'data_query', result: { rows: 20 } }, 4),
+    ]
+    const d = deriveActivity(items)
+    expect(d.reasoning).toEqual([{ id: 1, text: '**Planning data query**' }])
+    // interleaved before the step it precedes
+    expect(d.turns[0].items.map(i => i.kind)).toEqual(['reasoning', 'step'])
   })
   it('builds a chronological timeline interleaving reasoning, tool, message', () => {
     const items: ActivityItem[] = [
