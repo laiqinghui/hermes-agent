@@ -3194,11 +3194,14 @@ def _tool_ctx(name: str, args: dict) -> str:
     try:
         from agent.display import build_tool_label
 
-        # 240 (was 80): this label is the ONLY human description of an in-flight
-        # step the canvas/dock receives (raw args only arrive on tool.complete),
-        # and 80 chars cut the intent sentence off mid-word. build_tool_label just
-        # truncates to max_len, so a larger cap only lets more of it through.
-        return build_tool_label(name, args, max_len=240) or ""
+        # 1200 (was 80→240): this label is the ONLY human description of an
+        # in-flight step the canvas/dock receives (raw args only arrive on
+        # tool.complete), and the canvas shows it in full — a smaller cap cut the
+        # intent sentence off mid-word. A generous ceiling lets any realistic
+        # prose intent through untruncated while still bounding a pathological
+        # payload; clients truncate to their own width. build_tool_label just
+        # truncates to max_len.
+        return build_tool_label(name, args, max_len=1200) or ""
     except Exception:
         return ""
 
