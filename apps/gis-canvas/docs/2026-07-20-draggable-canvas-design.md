@@ -85,6 +85,9 @@ If a moving edge is within a threshold (~8px) of a candidate, it snaps and a gui
 Holding **Alt** disables snapping for fine placement. Snap targets are recomputed per drag frame
 against current geometry.
 
+**v1 scope:** snapping applies to **dragging**. Resizing is free (clamped only to per-type min-size
+and canvas bounds); edge-snapping during resize is a deferred follow-up.
+
 ## Edge cases / 2nd-order details
 
 - **Min size (per type, px):** map 280×220, table 260×160, legend 180×120, card 160×100,

@@ -419,7 +419,7 @@ git commit -m "feat(canvas): magnetic snap-target math"
 
 **Interfaces:**
 - Consumes: `WindowRect`.
-- Produces: `LayoutStore` = `{ overrides: Record<string, WindowRect>; get; set; bringToFront; prune; reset; isEmpty }`; `useLayoutStore()`; `LayoutProvider`; `useLayout()`.
+- Produces: `LayoutStore` = `{ overrides: Record<string, WindowRect>; get; set; prune; reset; isEmpty }`; `useLayoutStore()`; `LayoutProvider`; `useLayout()`. (Z-ordering / bring-to-front is computed by `FreeCanvas` at gesture start and written through `set` — the store stays a plain keyed rect map.)
 
 - [ ] **Step 1: Write the failing test** `src/lib/use-layout-store.test.ts`:
 
@@ -434,16 +434,6 @@ describe('useLayoutStore', () => {
     act(() => result.current.set('a', { x: 1, y: 2, w: 3, h: 4, z: 1 }))
     expect(result.current.get('a')).toEqual({ x: 1, y: 2, w: 3, h: 4, z: 1 })
     expect(result.current.isEmpty).toBe(false)
-  })
-
-  it('bringToFront raises z above every other override', () => {
-    const { result } = renderHook(() => useLayoutStore())
-    act(() => {
-      result.current.set('a', { x: 0, y: 0, w: 10, h: 10, z: 1 })
-      result.current.set('b', { x: 0, y: 0, w: 10, h: 10, z: 5 })
-    })
-    act(() => result.current.bringToFront('a'))
-    expect(result.current.get('a')!.z).toBeGreaterThan(5)
   })
 
   it('prune drops overrides whose id is gone; reset clears all', () => {
@@ -472,7 +462,6 @@ export interface LayoutStore {
   overrides: Record<string, WindowRect>
   get: (id: string) => WindowRect | undefined
   set: (id: string, rect: WindowRect) => void
-  bringToFront: (id: string) => void
   prune: (validIds: string[]) => void
   reset: () => void
   isEmpty: boolean
@@ -489,14 +478,6 @@ export function useLayoutStore(): LayoutStore {
   const set = useCallback((id: string, rect: WindowRect) => {
     setOverrides(prev => ({ ...prev, [id]: rect }))
   }, [])
-  const bringToFront = useCallback((id: string) => {
-    setOverrides(prev => {
-      const cur = prev[id]; if (!cur) return prev
-      const maxZ = Math.max(0, ...Object.values(prev).map(r => r.z))
-      if (cur.z === maxZ && cur.z > 0) return prev
-      return { ...prev, [id]: { ...cur, z: maxZ + 1 } }
-    })
-  }, [])
   const prune = useCallback((validIds: string[]) => {
     const valid = new Set(validIds)
     setOverrides(prev => {
@@ -509,8 +490,8 @@ export function useLayoutStore(): LayoutStore {
   const reset = useCallback(() => setOverrides({}), [])
 
   return useMemo(
-    () => ({ overrides, get, set, bringToFront, prune, reset, isEmpty: Object.keys(overrides).length === 0 }),
-    [overrides, get, set, bringToFront, prune, reset],
+    () => ({ overrides, get, set, prune, reset, isEmpty: Object.keys(overrides).length === 0 }),
+    [overrides, get, set, prune, reset],
   )
 }
 ```
@@ -522,7 +503,7 @@ import { createContext, useContext, type ReactNode } from 'react'
 import type { LayoutStore } from '../lib/use-layout-store'
 
 const NOOP: LayoutStore = {
-  overrides: {}, get: () => undefined, set: () => {}, bringToFront: () => {},
+  overrides: {}, get: () => undefined, set: () => {},
   prune: () => {}, reset: () => {}, isEmpty: true,
 }
 const Ctx = createContext<LayoutStore>(NOOP)
@@ -557,9 +538,13 @@ git commit -m "feat(canvas): ephemeral layout override store + provider"
 
 **Interfaces:**
 - Consumes: `WindowRect`, `applyDrag`, `applyResize`, `clampToBounds`, `minSizePct`, `HANDLES`, `ResizeHandle` from `window-layout`; `ComponentNode`.
-- Produces: `Window` component. Props: `{ node, rect, container, minPx?, onDragMove(dxPct,dyPct,commit), onResizeMove(handle,dxPct,dyPct,commit), onFocus, children }`. **The parent (`FreeCanvas`) owns snap + store writes**; `Window` only reports pointer deltas as `%` of the container and renders chrome.
+- Produces: `Window` component. Props: `{ node, rect, getContainer, onGestureStart, onDragMove(dxPct,dyPct,commit), onResizeMove(handle,dxPct,dyPct,commit), children }`. **The parent (`FreeCanvas`) owns snap + store writes**; `Window` only reports pointer deltas as `%` of the container and renders chrome.
 
-> Design note: `Window` is deliberately dumb about snapping/clamping — it converts pointer px→% against `container` and calls the callbacks. This keeps DOM-pointer glue thin and puts all policy (snap, clamp, store) in `FreeCanvas`, which is unit-tested via the pure libs. `Window`'s own tests assert it emits the right deltas.
+> Design note: `Window` is deliberately dumb about snapping/clamping — it converts pointer px→% against the container and calls the callbacks. This keeps DOM-pointer glue thin and puts all policy (snap, clamp, store) in `FreeCanvas`, which is unit-tested via the pure libs. `Window`'s own tests assert it emits the right deltas.
+>
+> **Two contract rules that prevent latent bugs (do not simplify away):**
+> 1. **`getContainer` is a live accessor, not a snapshot.** `Window` calls `getContainer()` *inside* each pointer gesture, so it always reads the current container rect. A render-time `{w,h}` snapshot is wrong: on first render the parent's ref is null and would yield `{1,1}`, corrupting every delta.
+> 2. **`onGestureStart` fires at pointerdown for BOTH drag and resize.** The parent snapshots the window's rect and brings it to front here. Resize handles must call it explicitly (they `stopPropagation` to suppress drag, so it won't bubble to the outer div); the header relies on bubbling to the outer `onPointerDown`. Without this, multi-move resizes compound because each delta re-bases on the live (already-moved) override.
 
 - [ ] **Step 1: Write the failing test** `src/components/Window.test.tsx`:
 
@@ -571,17 +556,17 @@ import type { ComponentNode } from '../lib/types'
 
 const node: ComponentNode = { id: 'w1', type: 'stat', props: { title: 'Speed' } }
 const rect = { x: 10, y: 10, w: 30, h: 20, z: 1 }
-const container = { w: 1000, h: 500 }
+const getContainer = () => ({ w: 1000, h: 500 })
 
 function setup(over = {}) {
-  const onDragMove = vi.fn(); const onFocus = vi.fn()
+  const onDragMove = vi.fn(); const onResizeMove = vi.fn(); const onGestureStart = vi.fn()
   render(
-    <Window node={node} rect={rect} container={container}
-      onDragMove={onDragMove} onResizeMove={vi.fn()} onFocus={onFocus} {...over}>
+    <Window node={node} rect={rect} getContainer={getContainer}
+      onDragMove={onDragMove} onResizeMove={onResizeMove} onGestureStart={onGestureStart} {...over}>
       <div>body</div>
     </Window>,
   )
-  return { onDragMove, onFocus }
+  return { onDragMove, onResizeMove, onGestureStart }
 }
 
 describe('Window', () => {
@@ -601,10 +586,18 @@ describe('Window', () => {
     expect(onDragMove).toHaveBeenLastCalledWith(10, 10, true) // commit
   })
 
-  it('pointerdown anywhere focuses (raises z)', () => {
-    const { onFocus } = setup()
-    fireEvent.pointerDown(screen.getByTestId('window-w1'))
-    expect(onFocus).toHaveBeenCalled()
+  it('pointerdown on the header starts a gesture (bubbles to outer onGestureStart)', () => {
+    const { onGestureStart } = setup()
+    fireEvent.pointerDown(screen.getByTestId('window-header-w1'), { clientX: 0, clientY: 0 })
+    expect(onGestureStart).toHaveBeenCalled()
+  })
+
+  it('a resize handle starts a gesture explicitly (stopPropagation blocks bubbling)', () => {
+    const { onGestureStart, onResizeMove } = setup()
+    fireEvent.pointerDown(screen.getByTestId('resize-w1-se'), { clientX: 0, clientY: 0 })
+    expect(onGestureStart).toHaveBeenCalled()
+    fireEvent.pointerMove(window, { clientX: 100, clientY: 50 })
+    expect(onResizeMove).toHaveBeenLastCalledWith('se', 10, 10, false)
   })
 })
 ```
@@ -621,10 +614,10 @@ import { HANDLES, type ResizeHandle } from '../lib/window-layout'
 interface WindowProps {
   node: ComponentNode
   rect: WindowRect
-  container: { w: number; h: number }
+  getContainer: () => { w: number; h: number } // LIVE accessor — called per gesture, never snapshotted
+  onGestureStart: () => void                    // pointerdown: parent snapshots rect + brings to front
   onDragMove: (dxPct: number, dyPct: number, commit: boolean) => void
   onResizeMove: (handle: ResizeHandle, dxPct: number, dyPct: number, commit: boolean) => void
-  onFocus: () => void
   children: ReactNode
 }
 
@@ -633,30 +626,33 @@ function humanTitle(node: ComponentNode): string {
   return t || node.type.replace(/^esri:/, '').replace(/[-_]/g, ' ')
 }
 
-export function Window({ node, rect, container, onDragMove, onResizeMove, onFocus, children }: WindowProps) {
+export function Window({ node, rect, getContainer, onGestureStart, onDragMove, onResizeMove, children }: WindowProps) {
   const start = useRef<{ x: number; y: number } | null>(null)
 
-  // px→% deltas against the live container; window-level listeners so a fast drag
-  // that outruns the header still tracks. Released on pointerup.
+  // px→% deltas against the LIVE container (read at gesture start); window-level
+  // listeners so a fast drag that outruns the header still tracks. Released on up.
   const beginDrag = (e: RPointerEvent) => {
-    e.preventDefault()
+    e.preventDefault() // NOT stopPropagation — must bubble to outer onGestureStart
     start.current = { x: e.clientX, y: e.clientY }
-    const move = (ev: PointerEvent) => emit(ev, false)
-    const up = (ev: PointerEvent) => { emit(ev, true); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
+    const c = getContainer()
     const emit = (ev: PointerEvent, commit: boolean) => {
       if (!start.current) return
-      onDragMove(((ev.clientX - start.current.x) / container.w) * 100, ((ev.clientY - start.current.y) / container.h) * 100, commit)
+      onDragMove(((ev.clientX - start.current.x) / c.w) * 100, ((ev.clientY - start.current.y) / c.h) * 100, commit)
     }
+    const move = (ev: PointerEvent) => emit(ev, false)
+    const up = (ev: PointerEvent) => { emit(ev, true); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
   }
 
   const beginResize = (handle: ResizeHandle) => (e: RPointerEvent) => {
-    e.preventDefault(); e.stopPropagation()
+    e.preventDefault(); e.stopPropagation() // stop drag; bubbling is suppressed, so fire gesture start ourselves
+    onGestureStart()
     start.current = { x: e.clientX, y: e.clientY }
+    const c = getContainer()
     const emit = (ev: PointerEvent, commit: boolean) => {
       if (!start.current) return
-      onResizeMove(handle, ((ev.clientX - start.current.x) / container.w) * 100, ((ev.clientY - start.current.y) / container.h) * 100, commit)
+      onResizeMove(handle, ((ev.clientX - start.current.x) / c.w) * 100, ((ev.clientY - start.current.y) / c.h) * 100, commit)
     }
     const move = (ev: PointerEvent) => emit(ev, false)
     const up = (ev: PointerEvent) => { emit(ev, true); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
@@ -667,7 +663,7 @@ export function Window({ node, rect, container, onDragMove, onResizeMove, onFocu
   return (
     <div
       data-testid={`window-${node.id}`}
-      onPointerDown={onFocus}
+      onPointerDown={onGestureStart}
       className="gc-hud pointer-events-auto absolute flex flex-col overflow-hidden rounded-gc-md"
       style={{ left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.w}%`, height: `${rect.h}%`, zIndex: rect.z }}
     >
@@ -802,6 +798,7 @@ export function FreeCanvas({ doc }: { doc: CanvasDoc }) {
   const boxRef = useRef<HTMLDivElement>(null)
   const [guides, setGuides] = useState<{ x?: number; y?: number }>({})
   const altRef = useRef(false)
+  const gestureBase = useRef<Record<string, WindowRect>>({})
 
   const seeds = useMemo(() => seedRects(doc), [doc])
 
@@ -811,47 +808,49 @@ export function FreeCanvas({ doc }: { doc: CanvasDoc }) {
 
   // Track Alt to suppress snapping for fine placement.
   useEffect(() => {
-    const set = (e: KeyboardEvent) => { altRef.current = e.altKey }
-    window.addEventListener('keydown', set); window.addEventListener('keyup', set)
-    return () => { window.removeEventListener('keydown', set); window.removeEventListener('keyup', set) }
+    const track = (e: KeyboardEvent) => { altRef.current = e.altKey }
+    window.addEventListener('keydown', track); window.addEventListener('keyup', track)
+    return () => { window.removeEventListener('keydown', track); window.removeEventListener('keyup', track) }
   }, [])
 
-  const container = () => {
+  // LIVE container size — read per gesture, never snapshotted (boxRef is null on
+  // first render; a snapshot would corrupt every delta with {1,1}).
+  const getContainer = () => {
     const r = boxRef.current?.getBoundingClientRect()
     return { w: r?.width || 1, h: r?.height || 1 }
   }
   const rectOf = (id: string): WindowRect => store.get(id) ?? seeds[id]
+  const baseOf = (id: string): WindowRect => gestureBase.current[id] ?? rectOf(id)
   const others = (id: string) => doc.components.filter(c => c.id !== id).map(c => rectOf(c.id))
 
-  const commitDrag = (id: string) => (dxPct: number, dyPct: number, commit: boolean) => {
-    let next = applyDrag(seedOrOverride(id), dxPct, dyPct)
-    if (!altRef.current) {
-      const c = container()
-      const snapped = snapDrag(next, snapTargets(others(id), GRID_PCT), (SNAP_PX / c.w) * 100)
-      next = snapped.rect
-      setGuides(commit ? {} : { x: snapped.guideX, y: snapped.guideY })
-    }
-    next = clampToBounds(next, MARGIN_PCT)
-    store.set(id, next)
-    if (commit) setGuides({})
+  // Gesture start (pointerdown, drag OR resize): snapshot the rect and raise it to
+  // the front so the whole gesture — and the committed override — carries the front
+  // z. No store write here, so a pure click never pins a seed window; stickiness
+  // begins on the first move. Each move re-bases on this fixed snapshot (Window
+  // sends cumulative deltas), so drags/resizes never compound.
+  const beginGesture = (id: string) => () => {
+    const maxZ = Math.max(0, ...doc.components.map(c => rectOf(c.id).z))
+    const cur = rectOf(id)
+    gestureBase.current[id] = { ...cur, z: cur.z >= maxZ ? cur.z : maxZ + 1 }
   }
-
-  const commitResize = (id: string) => (handle: ResizeHandle, dxPct: number, dyPct: number, commit: boolean) => {
-    const node = doc.components.find(c => c.id === id)!
-    const next = applyResize(seedOrOverride(id), handle, dxPct, dyPct, minSizePct(node.type, container()))
-    store.set(id, clampToBounds(next, MARGIN_PCT))
-    if (commit) setGuides({})
-  }
-
-  // Drag/resize deltas are relative to where the window was when the gesture began.
-  // We snapshot that rect on first delta of a gesture so a live (uncommitted) drag
-  // doesn't compound. Simplest correct form: base each delta on the last committed
-  // rect captured at pointerdown — tracked per-id here.
-  const gestureBase = useRef<Record<string, WindowRect>>({})
-  const seedOrOverride = (id: string) => gestureBase.current[id] ?? rectOf(id)
-
-  const beginGesture = (id: string) => () => { gestureBase.current[id] = rectOf(id); store.bringToFront(id) }
   const endGesture = (id: string) => { delete gestureBase.current[id] }
+
+  const onDrag = (id: string) => (dxPct: number, dyPct: number, commit: boolean) => {
+    let next = applyDrag(baseOf(id), dxPct, dyPct)
+    if (!altRef.current) {
+      const snapped = snapDrag(next, snapTargets(others(id), GRID_PCT), (SNAP_PX / getContainer().w) * 100)
+      next = snapped.rect
+      setGuides({ x: snapped.guideX, y: snapped.guideY })
+    }
+    store.set(id, clampToBounds(next, MARGIN_PCT))
+    if (commit) { setGuides({}); endGesture(id) }
+  }
+
+  const onResize = (id: string, type: string) => (handle: ResizeHandle, dxPct: number, dyPct: number, commit: boolean) => {
+    const next = applyResize(baseOf(id), handle, dxPct, dyPct, minSizePct(type, getContainer()))
+    store.set(id, clampToBounds(next, MARGIN_PCT))
+    if (commit) endGesture(id)
+  }
 
   const ordered = [...doc.components].sort((a, b) => rectOf(a.id).z - rectOf(b.id).z)
 
@@ -862,10 +861,10 @@ export function FreeCanvas({ doc }: { doc: CanvasDoc }) {
           key={node.id}
           node={node}
           rect={rectOf(node.id)}
-          container={container()}
-          onFocus={beginGesture(node.id)}
-          onDragMove={(dx, dy, commit) => { commitDrag(node.id)(dx, dy, commit); if (commit) endGesture(node.id) }}
-          onResizeMove={(h, dx, dy, commit) => { commitResize(node.id)(h, dx, dy, commit); if (commit) endGesture(node.id) }}
+          getContainer={getContainer}
+          onGestureStart={beginGesture(node.id)}
+          onDragMove={onDrag(node.id)}
+          onResizeMove={onResize(node.id, node.type)}
         >
           {renderNode(node)}
         </Window>
@@ -892,6 +891,16 @@ it('a multi-move drag lands at the net offset (no compounding)', () => {
   const x = parseFloat(screen.getByTestId('window-lg').style.left)
   expect(x).toBeGreaterThan(60)
   expect(x).toBeLessThan(68)
+})
+
+it('dragging the map raises it above other windows (front z)', () => {
+  render(<Harness doc={doc} />)
+  fireEvent.pointerDown(screen.getByTestId('window-header-m'), { clientX: 100, clientY: 50 })
+  fireEvent.pointerMove(window, { clientX: 140, clientY: 50 })
+  fireEvent.pointerUp(window, { clientX: 140, clientY: 50 })
+  const mZ = Number(screen.getByTestId('window-m').style.zIndex)   // seed z 0 → raised
+  const lgZ = Number(screen.getByTestId('window-lg').style.zIndex) // seed z 2
+  expect(mZ).toBeGreaterThan(lgZ)
 })
 ```
 
@@ -1028,8 +1037,12 @@ git commit -m "feat(canvas): render FreeCanvas + Reset layout control"
 
 ## Self-Review
 
-- **Spec coverage:** hybrid snap (Task 3, 6) ✓; sticky user-wins overrides (Task 4, 6 prune-not-reset) ✓; map full-bleed then draggable (seed z0 + Window on map, Task 1/5/6) ✓; session-ephemeral, agent never reads (Task 4) ✓; min-size (Task 1/2), bounds (Task 2), new-panel placement (seed + prune; nearest-open-space is out of scope per design non-goals — seeds may overlap, user resolves), overlap/z (bringToFront), attribution (RESERVE_PCT), Reset (Task 7) ✓.
+- **Spec coverage:** hybrid snap on drag (Task 3, 6) ✓; sticky user-wins overrides (Task 4, 6 prune-not-reset) ✓; map full-bleed then draggable (seed z0 + Window on map, Task 1/5/6) ✓; session-ephemeral, agent never reads (Task 4) ✓; min-size (Task 1/2), bounds (Task 2), new-panel placement (seed + prune; nearest-open-space is out of scope per design non-goals — seeds may overlap, user resolves), overlap/z via front-z computed in `FreeCanvas.beginGesture` and raised on first move (Task 6), attribution (RESERVE_PCT), Reset (Task 7) ✓.
 - **Placeholder scan:** `GridLayer` body is "unchanged — copy verbatim" (explicit instruction, not a placeholder); all new code is complete.
 - **Type consistency:** `WindowRect` fields `x/y/w/h/z` used identically across `window-layout`, `window-snap`, store, `Window`, `FreeCanvas`; `ResizeHandle`/`HANDLES` shared from `window-layout`; store method names (`get/set/bringToFront/prune/reset/isEmpty`) consistent between hook, provider, and consumers.
-- **Known simplification (flag for review):** `RESERVE_PCT = 3` approximates the old 22px attribution strip in `%`; acceptable because the user immediately owns layout. The design's "nearest-open-space nudge" for new panels is deferred (non-goal) — new agent panels seed at their auto-shell spot and may overlap until the user moves them.
+- **Known simplifications (flag for review):**
+  - `RESERVE_PCT = 3` approximates the old 22px attribution strip in `%`; acceptable because the user immediately owns layout.
+  - The design's "nearest-open-space nudge" for new panels is deferred (non-goal) — new agent panels seed at their auto-shell spot and may overlap until the user moves them.
+  - **Snapping is drag-only in v1.** Resize is free (clamped to per-type min + bounds); edge-snapping during resize is a follow-up. Recorded so the whole-branch review reads it as a conscious scope line, not a spec gap. (Design §4 amended to match.)
+  - Front-z is raised on the **first move** of a gesture, not on a bare click — a pure click never creates an override, so it never pins a seed window (keeps "stickiness begins on interaction").
 ```
