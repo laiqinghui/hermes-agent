@@ -9,9 +9,24 @@ up directly. Ordered by impact.
 All `server.py` line numbers are `tui_gateway/server.py` as of this writing — re-grep before editing,
 they drift.
 
+> **STATUS (updated 2026-07-20):** #1 **DONE** — but the root-cause hypothesis below was **wrong**; see
+> the resolution note under #1. #2 **DONE** (`max_len` 80→240→**1200**). #3 **CANCELLED by the user** —
+> no longer needed. #4 **DONE** (Phase C). All merged to `gis/main` (tip `c5bfa8d4e`).
+
 ---
 
 ## 1. Real reasoning (`reasoning.available` summaries) does not reach the canvas session
+
+> **RESOLVED 2026-07-20 (merge `c5bfa8d4e`) — the hypothesis below was WRONG; do not apply it.** A live
+> probe (temp logging in `_on_tool_progress` + `conversation_loop.py` + `_emit`, since reverted) showed
+> the configured model is **gpt-5.5**, which emits **no interstitial assistant `content`** between tool
+> calls — so `reasoning.available` (derived from content at `conversation_loop.py:~4164`) only fires for
+> the FINAL answer. The model's REAL between-step reasoning ("**Planning data query and visualization**")
+> streams as **`reasoning.delta`** (`reasoning_callback` → `server.py:~3619`, via `_fire_reasoning_delta`),
+> which the SPA never consumed. **Fix was FRONTEND-ONLY:** add `reasoning.delta` to `App.tsx`
+> `LOGGED_EVENTS` + a `deriveActivity` case → reasoning items (skip empty gaps); `stripInlineMarkdown`
+> unwraps the `**…**`. The canvas already builds at `medium` (config `agent.reasoning_effort`), so passing
+> `reasoning_effort` on `session.create` (the "try first" below) would have been a **no-op**.
 
 ### Symptom
 The canvas "thinking star" cannot show the agent's real reasoning. The desktop Hermes UI, on an
@@ -96,6 +111,10 @@ change is needed once the events flow** — the fallback simply stops triggering
 
 ## 2. Tool `context` is truncated to 80 characters
 
+> **DONE 2026-07-20.** `_tool_ctx` `max_len` raised 80 → 240 (merge `bc71bb464`) → **1200** (merge
+> `c5bfa8d4e`) so the canvas shows the full step intent; the current-step card wraps + scrolls
+> (`max-h-[45vh]`). The trailing "…" seen mid-fix was the gateway's own ellipsis, not the frontend.
+
 ### Symptom
 The step description shown on the canvas (and the dock) is cut off mid-word, e.g.
 `"…retrieve the latest 20 position records for vess…"`. The canvas star (via the context fallback) and
@@ -123,6 +142,10 @@ Dock ticker and canvas star show the full intent sentence, no `…` mid-word.
 ---
 
 ## 3. `data_query` 401 → the agent hand-rolls a raw `execute_code`/PKCE storm
+
+> **CANCELLED by the user 2026-07-20 — no longer needed. Do not re-open unless the user asks.** (The
+> plaintext client-secret scrub flagged below in the denodo-skill brief is a separate security cleanup;
+> address it independently if still relevant.)
 
 ### Symptom
 On a data prompt, `data_query` returns `[TOOL_ERROR] … 401 Unauthorized`; the agent then abandons the
@@ -168,7 +191,7 @@ also lives outside the Phase-A frontend branch.
 
 | # | Item | Key location | Fix size |
 |---|------|--------------|----------|
-| 1 | Real reasoning not reaching canvas | `server.py:3409/3424/3601/4206/4929`; SPA `session.create` | investigate → small |
-| 2 | 80-char context cap | `server.py:3197` (`_tool_ctx` `max_len`) | 1 line |
-| 3 | 401 → execute_code storm | `apps/gis-canvas-bff/` (auth) + `2026-07-17-denodo-skill-tuning-brief.md` (skill) | medium |
-| 4 | render_view composition guidance | `plugins/gis-canvas/tools_canvas.py` | small (Phase C) |
+| 1 | Real reasoning not reaching canvas | **frontend** `App.tsx` `LOGGED_EVENTS` + `deriveActivity` (consume `reasoning.delta`) | ✅ DONE (`c5bfa8d4e`) |
+| 2 | context cap | `server.py` `_tool_ctx` `max_len` 80→240→1200 | ✅ DONE (`c5bfa8d4e`) |
+| 3 | 401 → execute_code storm | `apps/gis-canvas-bff/` (auth) + `2026-07-17-denodo-skill-tuning-brief.md` (skill) | ❌ CANCELLED (user, 2026-07-20) |
+| 4 | render_view composition guidance | `plugins/gis-canvas/tools_canvas.py` | ✅ DONE (Phase C, `e39d22e2c`) |
