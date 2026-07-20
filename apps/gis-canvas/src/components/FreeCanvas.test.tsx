@@ -74,13 +74,33 @@ describe('FreeCanvas', () => {
     expect(x).toBeLessThan(68)
   })
 
-  it('dragging the map raises it above other windows (front z)', () => {
+  it('dragging the map keeps it behind the panels (base stays at back)', () => {
     render(<Harness doc={doc} />)
     fireEvent.pointerDown(screen.getByTestId('window-header-m'), { clientX: 100, clientY: 50 })
     fireEvent.pointerMove(window, { clientX: 140, clientY: 50 })
     fireEvent.pointerUp(window, { clientX: 140, clientY: 50 })
-    const mZ = Number(screen.getByTestId('window-m').style.zIndex)   // seed z 0 → raised
+    const mZ = Number(screen.getByTestId('window-m').style.zIndex)   // base — must NOT be raised
     const lgZ = Number(screen.getByTestId('window-lg').style.zIndex) // seed z 2
-    expect(mZ).toBeGreaterThan(lgZ)
+    expect(mZ).toBe(0)            // map kept at the back
+    expect(mZ).toBeLessThan(lgZ)  // panels stay on top of the map
+  })
+
+  it('dragging a panel raises it above the other panels (front z)', () => {
+    const threePane: CanvasDoc = {
+      canvasVersion: 1, rev: 1, layout: { type: 'grid', cols: 12 },
+      components: [
+        { id: 'm', type: 'esri:map', layer: 'base' },
+        { id: 's', type: 'stat', layer: 'dock', edge: 'left' },   // seed z 2
+        { id: 'lg', type: 'esri:legend', layer: 'dock', edge: 'right' }, // seed z 3
+      ],
+    }
+    render(<Harness doc={threePane} />)
+    // drag the lower-z stat; it should jump above the legend
+    fireEvent.pointerDown(screen.getByTestId('window-header-s'), { clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(window, { clientX: 160, clientY: 100 })
+    fireEvent.pointerUp(window, { clientX: 160, clientY: 100 })
+    const sZ = Number(screen.getByTestId('window-s').style.zIndex)
+    const lgZ = Number(screen.getByTestId('window-lg').style.zIndex)
+    expect(sZ).toBeGreaterThan(lgZ)
   })
 })

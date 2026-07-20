@@ -50,9 +50,13 @@ export function FreeCanvas({ doc }: { doc: CanvasDoc }) {
   // z. No store write here, so a pure click never pins a seed window; stickiness
   // begins on the first move. Each move re-bases on this fixed snapshot (Window
   // sends cumulative deltas), so drags/resizes never compound.
+  // EXCEPTION: the base layer (map) is the background — never raise it above the
+  // panels, even when dragged/resized, so molecules stay visible on top of it.
   const beginGesture = (id: string) => () => {
-    const maxZ = Math.max(0, ...doc.components.map(c => rectOf(c.id).z))
     const cur = rectOf(id)
+    const node = doc.components.find(c => c.id === id)
+    if (node?.layer === 'base') { gestureBase.current[id] = { ...cur }; return }
+    const maxZ = Math.max(0, ...doc.components.map(c => rectOf(c.id).z))
     gestureBase.current[id] = { ...cur, z: cur.z >= maxZ ? cur.z : maxZ + 1 }
   }
   const endGesture = (id: string) => { delete gestureBase.current[id] }
