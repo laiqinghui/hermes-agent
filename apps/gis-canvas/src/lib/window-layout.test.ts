@@ -40,6 +40,20 @@ describe('seedRects', () => {
     expect(rects.f.w).toBe(20)
     expect(rects.f.h).toBe(15)
   })
+
+  it('exercises auto-shell inference: bare map + data-table infers base + bottom dock', () => {
+    // BARE doc: no explicit layer/edge anywhere. applyAutoShell promotes map to base
+    // and infers data-table as bottom dock via edgeForType fallback.
+    const rects = seedRects(doc([
+      { id: 'm', type: 'esri:map' },
+      { id: 'tb', type: 'data-table' },
+    ]))
+    // Map promoted to base: full-bleed at z 0
+    expect(rects.m).toEqual({ x: 0, y: 0, w: 100, h: 100, z: 0 })
+    // Table inferred as bottom dock: respects attribution strip
+    expect(rects.tb.y + rects.tb.h).toBeCloseTo(100 - RESERVE_PCT, 5)
+    expect(rects.tb.z).toBeGreaterThan(0)
+  })
 })
 
 describe('minSizePct', () => {

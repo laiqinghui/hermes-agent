@@ -1,23 +1,12 @@
 import type { Anchor, CanvasDoc, ComponentNode, Edge, WindowRect } from './types'
 import { applyAutoShell, edgeForType } from './auto-shell'
+import { defaultDockSize, defaultSize } from './anchor'
 
 // Attribution strip reserved at the canvas bottom on first render, as a % of
 // height (the map's "Map data ©…" must stay visible). Approximates the old 22px
 // px reserve; the user can nudge windows afterward, so exact px is not critical.
 export const RESERVE_PCT = 3
 
-// Dock rail thickness as a % of the canvas box, mirroring anchor.ts DOCK_DEFAULTS.
-const DOCK_PCT: Record<Edge, { w: number; h: number }> = {
-  left: { w: 26, h: 100 }, right: { w: 26, h: 100 },
-  top: { w: 100, h: 10 }, bottom: { w: 100, h: 34 },
-}
-// Float default size + anchor placement, mirroring anchor.ts FLOAT_DEFAULTS.
-const FLOAT_PCT: Record<Anchor, { w: number; h: number }> = {
-  'top-left': { w: 24, h: 40 }, 'top-right': { w: 24, h: 40 },
-  'bottom-left': { w: 24, h: 40 }, 'bottom-right': { w: 24, h: 40 },
-  left: { w: 24, h: 60 }, right: { w: 24, h: 60 },
-  top: { w: 60, h: 22 }, bottom: { w: 60, h: 22 }, center: { w: 60, h: 60 },
-}
 const GAP_PCT = 1.5
 
 export const MIN_SIZE_PX: Record<string, { w: number; h: number }> = {
@@ -37,7 +26,7 @@ export function minSizePct(type: string, container: { w: number; h: number }): {
 }
 
 function dockRect(edge: Edge, size?: { w: number; h: number }): Omit<WindowRect, 'z'> {
-  const s = size ?? DOCK_PCT[edge]
+  const s = size ?? defaultDockSize(edge)
   const bottom = 100 - RESERVE_PCT
   switch (edge) {
     case 'left': return { x: 0, y: 0, w: s.w, h: bottom }
@@ -48,7 +37,7 @@ function dockRect(edge: Edge, size?: { w: number; h: number }): Omit<WindowRect,
 }
 
 function floatRect(anchor: Anchor, size?: { w: number; h: number }): Omit<WindowRect, 'z'> {
-  const s = size ?? FLOAT_PCT[anchor]
+  const s = size ?? defaultSize(anchor)
   const g = GAP_PCT
   const midX = (100 - s.w) / 2, midY = (100 - s.h) / 2
   const rightX = 100 - s.w - g, bottomY = 100 - s.h - g - RESERVE_PCT
