@@ -19,6 +19,8 @@ import type { CanvasActions } from './lib/handlers'
 import { resolveBffUrl, authMe, loginUrl, bindSessions, logout, type AuthState } from './lib/auth'
 import { SelectionProvider } from './components/SelectionContext'
 import { collectNodesBySource } from './lib/selection'
+import { LayoutProvider } from './components/LayoutProvider'
+import { useLayoutStore } from './lib/use-layout-store'
 
 // reasoning.delta carries the model's real between-step reasoning (gpt-5.5 et al.);
 // reasoning.available is only the final answer for such models. Both feed the star.
@@ -44,6 +46,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const [auth, setAuth] = useState<AuthState | null>(null)
   const bffUrl = useMemo(() => resolveBffUrl(import.meta.env as Record<string, string | undefined>), [])
   const [theme, toggleTheme] = useTheme()
+  const layout = useLayoutStore()
   const [overlayOpen, setOverlayOpen] = useOverlayShortcut()
   const [approval, setApproval] = useState<PendingApproval | null>(null)
 
@@ -174,13 +177,16 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
 
   return (
     <div className="flex h-screen flex-col bg-canvas font-sans text-primary">
-      <TopBar theme={theme} onToggleTheme={toggleTheme} connected={connected} isBusy={isBusy} onLogout={handleLogout} />
+      <TopBar theme={theme} onToggleTheme={toggleTheme} connected={connected} isBusy={isBusy}
+        onLogout={handleLogout} onResetLayout={layout.reset} canReset={!layout.isEmpty} />
       <main className="relative min-h-0 flex-1 overflow-auto gc-canvas-grid-bg p-4">
         <CanvasHeader rev={mergedDoc?.rev} isBusy={isBusy} />
         {mergedDoc ? (
           <SelectionProvider nodesBySource={nodesBySource} onMirror={mirrorSelection}>
             <HandlerProvider actions={actions}>
-              <CanvasGrid doc={mergedDoc} />
+              <LayoutProvider store={layout}>
+                <CanvasGrid doc={mergedDoc} />
+              </LayoutProvider>
             </HandlerProvider>
           </SelectionProvider>
         ) : !isBusy ? (

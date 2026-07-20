@@ -5,13 +5,17 @@ export function TopBar({
   onToggleTheme,
   connected,
   isBusy,
-  onLogout
+  onLogout,
+  onResetLayout,
+  canReset
 }: {
   theme: ThemeMode
   onToggleTheme: () => void
   connected: boolean
   isBusy: boolean
   onLogout: () => void
+  onResetLayout: () => void
+  canReset: boolean
 }) {
   const statusLabel = isBusy ? 'COMPOSING' : connected ? 'AGENT · LIVE' : 'CONNECTING…'
   const statusColor = isBusy ? 'text-accent' : connected ? 'text-positive' : 'text-tertiary'
@@ -31,6 +35,15 @@ export function TopBar({
       </div>
 
       <div className="flex items-center gap-2.5">
+        {canReset && (
+          <button
+            data-testid="reset-layout"
+            onClick={onResetLayout}
+            className="rounded-gc-sm border border-hairline bg-surface px-2.5 py-1.5 font-sans text-[11.5px] text-secondary hover:text-primary"
+          >
+            ⤢ Reset layout
+          </button>
+        )}
         <button
           onClick={onToggleTheme}
           className="rounded-gc-sm border border-hairline bg-surface px-2.5 py-1.5 font-sans text-[11.5px] text-secondary hover:text-primary"
