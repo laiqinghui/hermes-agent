@@ -48,7 +48,9 @@ function CurrentStepCard({ step, showContext }: { step: BuildStep; showContext: 
       className="relative flex items-start gap-2.5 overflow-hidden rounded-gc-md border border-hairline-strong bg-surface/95 px-3 py-2.5 shadow-gc-overlay backdrop-blur"
     >
       <span className={`shrink-0 font-mono text-[13px] leading-5 ${OUTCOME_TEXT[n.outcome]}`}>{n.glyph}</span>
-      <span className="min-w-0 flex-1 font-sans text-[12.5px] leading-5 text-primary [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] overflow-hidden">
+      {/* Show the FULL step context — never truncate; the card grows to fit
+          (context is bounded to ~240 chars upstream, so a few lines at most). */}
+      <span className="min-w-0 flex-1 whitespace-normal break-words font-sans text-[12.5px] leading-5 text-primary">
         {humanizeLabel(step.label)}
         {detail ? <span className="text-tertiary"> · {detail}</span> : null}
       </span>
