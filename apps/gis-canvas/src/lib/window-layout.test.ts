@@ -1,0 +1,57 @@
+import { describe, it, expect } from 'vitest'
+import { seedRects, minSizePct, MIN_SIZE_PX, RESERVE_PCT } from './window-layout'
+import type { CanvasDoc } from './types'
+
+const doc = (components: CanvasDoc['components']): CanvasDoc => ({
+  canvasVersion: 1, rev: 1, layout: { type: 'grid', cols: 12 }, components,
+})
+
+describe('seedRects', () => {
+  it('seeds a lone map as full-bleed at z 0', () => {
+    const rects = seedRects(doc([{ id: 'm', type: 'esri:map', layer: 'base' }]))
+    expect(rects.m).toEqual({ x: 0, y: 0, w: 100, h: 100, z: 0 })
+  })
+
+  it('seeds a right-docked legend as a right rail above z 0', () => {
+    const rects = seedRects(doc([
+      { id: 'm', type: 'esri:map', layer: 'base' },
+      { id: 'lg', type: 'esri:legend', layer: 'dock', edge: 'right' },
+    ]))
+    expect(rects.lg.x + rects.lg.w).toBeCloseTo(100, 5) // pinned to right edge
+    expect(rects.lg.y).toBe(0)
+    expect(rects.lg.z).toBeGreaterThan(0)
+  })
+
+  it('reserves the attribution strip: a bottom dock stops short of the bottom', () => {
+    const rects = seedRects(doc([
+      { id: 'm', type: 'esri:map', layer: 'base' },
+      { id: 'tb', type: 'data-table', layer: 'dock', edge: 'bottom' },
+    ]))
+    expect(rects.tb.y + rects.tb.h).toBeCloseTo(100 - RESERVE_PCT, 5)
+  })
+
+  it('seeds a float from its anchor + size', () => {
+    const rects = seedRects(doc([
+      { id: 'm', type: 'esri:map', layer: 'base' },
+      { id: 'f', type: 'stat', layer: 'float', anchor: 'top-left', size: { w: 20, h: 15 } },
+    ]))
+    expect(rects.f.x).toBeGreaterThanOrEqual(0)
+    expect(rects.f.y).toBeGreaterThanOrEqual(0)
+    expect(rects.f.w).toBe(20)
+    expect(rects.f.h).toBe(15)
+  })
+})
+
+describe('minSizePct', () => {
+  it('converts per-type px minimums against the container', () => {
+    expect(MIN_SIZE_PX['esri:map']).toEqual({ w: 280, h: 220 })
+    const min = minSizePct('esri:map', { w: 1000, h: 800 })
+    expect(min.w).toBeCloseTo(28, 5)
+    expect(min.h).toBeCloseTo(27.5, 5)
+  })
+  it('falls back to the default minimum for unknown types', () => {
+    const min = minSizePct('mystery', { w: 1000, h: 1000 })
+    expect(min.w).toBeCloseTo(16, 5)
+    expect(min.h).toBeCloseTo(10, 5)
+  })
+})
