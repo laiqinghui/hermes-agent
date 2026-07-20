@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { seedRects, minSizePct, MIN_SIZE_PX, RESERVE_PCT } from './window-layout'
+import { seedRects, minSizePct, MIN_SIZE_PX, RESERVE_PCT, applyDrag, applyResize, clampToBounds } from './window-layout'
 import type { CanvasDoc } from './types'
 
 const doc = (components: CanvasDoc['components']): CanvasDoc => ({
@@ -67,5 +67,33 @@ describe('minSizePct', () => {
     const min = minSizePct('mystery', { w: 1000, h: 1000 })
     expect(min.w).toBeCloseTo(16, 5)
     expect(min.h).toBeCloseTo(10, 5)
+  })
+})
+
+describe('applyDrag', () => {
+  it('translates by a percent delta', () => {
+    expect(applyDrag({ x: 10, y: 10, w: 20, h: 20, z: 1 }, 5, -3))
+      .toEqual({ x: 15, y: 7, w: 20, h: 20, z: 1 })
+  })
+})
+
+describe('applyResize', () => {
+  const r = { x: 20, y: 20, w: 40, h: 40, z: 1 }
+  const min = { w: 10, h: 10 }
+  it('se handle grows width/height, keeps origin', () => {
+    expect(applyResize(r, 'se', 5, 5, min)).toMatchObject({ x: 20, y: 20, w: 45, h: 45 })
+  })
+  it('nw handle moves origin and shrinks, clamped to min size', () => {
+    expect(applyResize(r, 'nw', 100, 100, min)).toMatchObject({ w: 10, h: 10 })
+  })
+})
+
+describe('clampToBounds', () => {
+  it('keeps the top edge on-canvas so the header stays reachable', () => {
+    expect(clampToBounds({ x: 10, y: -50, w: 20, h: 20, z: 1 }, 8).y).toBe(0)
+  })
+  it('allows partial off-right but keeps a visible margin', () => {
+    const c = clampToBounds({ x: 130, y: 10, w: 20, h: 20, z: 1 }, 8)
+    expect(c.x).toBe(92) // 100 - marginPct
   })
 })

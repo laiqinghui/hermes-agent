@@ -71,3 +71,31 @@ export function seedRects(doc: CanvasDoc): Record<string, WindowRect> {
   })
   return out
 }
+
+export type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
+export const HANDLES: ResizeHandle[] = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']
+
+export function applyDrag(r: WindowRect, dxPct: number, dyPct: number): WindowRect {
+  return { ...r, x: r.x + dxPct, y: r.y + dyPct }
+}
+
+/** Resize along a handle. West/north edges move the origin and shrink; min size clamps so a
+ * window never inverts or collapses below its per-type floor. */
+export function applyResize(
+  r: WindowRect, h: ResizeHandle, dxPct: number, dyPct: number, min: { w: number; h: number },
+): WindowRect {
+  let { x, y, w, hgt } = { x: r.x, y: r.y, w: r.w, hgt: r.h }
+  if (h.includes('e')) w = Math.max(min.w, r.w + dxPct)
+  if (h.includes('s')) hgt = Math.max(min.h, r.h + dyPct)
+  if (h.includes('w')) { const nw = Math.max(min.w, r.w - dxPct); x = r.x + (r.w - nw); w = nw }
+  if (h.includes('n')) { const nh = Math.max(min.h, r.h - dyPct); y = r.y + (r.h - nh); hgt = nh }
+  return { ...r, x, y, w, h: hgt }
+}
+
+/** Keep at least `marginPct` of the window on-canvas on each side, and never let
+ * the top edge (the drag header) leave the top — so no window is ever lost. */
+export function clampToBounds(r: WindowRect, marginPct: number): WindowRect {
+  const x = Math.min(Math.max(r.x, marginPct - r.w), 100 - marginPct)
+  const y = Math.min(Math.max(r.y, 0), 100 - marginPct)
+  return { ...r, x, y }
+}
