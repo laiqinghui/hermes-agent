@@ -21,4 +21,25 @@ describe('useLayoutStore', () => {
     act(() => result.current.reset())
     expect(result.current.isEmpty).toBe(true)
   })
+
+  it('prune with all existing ids returns same reference (React bailout)', () => {
+    const { result } = renderHook(() => useLayoutStore())
+    act(() => result.current.set('a', { x: 0, y: 0, w: 10, h: 10, z: 1 }))
+    const before = result.current.overrides
+    act(() => result.current.prune(['a']))
+    expect(result.current.overrides).toBe(before)
+
+    // Contrast: prune that removes an id returns a different reference
+    act(() => result.current.set('b', { x: 0, y: 0, w: 10, h: 10, z: 1 }))
+    const beforeWithTwo = result.current.overrides
+    act(() => result.current.prune(['a']))
+    expect(result.current.overrides).not.toBe(beforeWithTwo)
+  })
+
+  it('get reads fresh state even when captured earlier', () => {
+    const { result } = renderHook(() => useLayoutStore())
+    const get = result.current.get
+    act(() => result.current.set('a', { x: 1, y: 2, w: 3, h: 4, z: 1 }))
+    expect(get('a')).toEqual({ x: 1, y: 2, w: 3, h: 4, z: 1 })
+  })
 })
