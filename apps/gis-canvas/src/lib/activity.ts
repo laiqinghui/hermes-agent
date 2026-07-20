@@ -2,6 +2,8 @@
 // stream into what the AgentPanel needs: a conversation thread, an enriched
 // tool-call trace (with inputs/outputs the gateway already sends), the agent's
 // reasoning, and a chronological timeline for the verbose inspector.
+import { stripInlineMarkdown } from './plain-text'
+
 export interface ActivityItem {
   id: number
   kind: string
@@ -91,6 +93,19 @@ export function deriveActivity(items: ActivityItem[]): DerivedActivity {
     }
   }
 
+  // Record a reasoning item across the global list, the current turn, its
+  // interleaved items, and the timeline (shared by reasoning.available and the
+  // real streamed reasoning.delta). Reasoning arrives as markdown (`**Planning…**`);
+  // unwrap emphasis so the terminal-style star/rows read clean.
+  const pushReasoning = (id: number, raw: string) => {
+    const text = stripInlineMarkdown(raw)
+    const r = { id, text }
+    reasoning.push(r)
+    cur.reasoning.push(r)
+    cur.items.push({ kind: 'reasoning', id, text })
+    timeline.push({ id, kind: 'reasoning', text })
+  }
+
   for (const item of items) {
     switch (item.kind) {
       case 'you':
@@ -104,12 +119,15 @@ export function deriveActivity(items: ActivityItem[]): DerivedActivity {
         cur.answers.push(item.text)
         timeline.push({ id: item.id, kind: 'message', role: 'agent', text: item.text })
         break
-      case 'reasoning.available': {
-        const r = { id: item.id, text: item.text }
-        reasoning.push(r)
-        cur.reasoning.push(r)
-        cur.items.push({ kind: 'reasoning', id: item.id, text: item.text })
-        timeline.push({ id: item.id, kind: 'reasoning', text: item.text })
+      case 'reasoning.available':
+        pushReasoning(item.id, item.text)
+        break
+      case 'reasoning.delta': {
+        // The model's real between-step reasoning arrives as reasoning.delta
+        // (gpt-5.5 et al.); for those models reasoning.available carries only the
+        // final answer. Skip the empty/decorative gaps; treat substantive deltas
+        // as reasoning items so the thinking star shows real reasoning per step.
+        if (item.text?.trim()) pushReasoning(item.id, item.text)
         break
       }
       case 'tool.start': {

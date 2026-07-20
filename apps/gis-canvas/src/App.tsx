@@ -20,7 +20,9 @@ import { resolveBffUrl, authMe, loginUrl, bindSessions, logout, type AuthState }
 import { SelectionProvider } from './components/SelectionContext'
 import { collectNodesBySource } from './lib/selection'
 
-const LOGGED_EVENTS = new Set(['message.complete', 'tool.start', 'tool.complete', 'reasoning.available', 'error'])
+// reasoning.delta carries the model's real between-step reasoning (gpt-5.5 et al.);
+// reasoning.available is only the final answer for such models. Both feed the star.
+const LOGGED_EVENTS = new Set(['message.complete', 'tool.start', 'tool.complete', 'reasoning.available', 'reasoning.delta', 'error'])
 
 export interface AppProps {
   client?: GatewayLike
