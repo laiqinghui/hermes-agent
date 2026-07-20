@@ -7,7 +7,9 @@ export interface SnapTargets { xs: number[]; ys: number[] }
 export function snapTargets(others: WindowRect[], gridPct: number): SnapTargets {
   const xs = new Set<number>([0, 100])
   const ys = new Set<number>([0, 100])
-  for (let v = gridPct; v < 100; v += gridPct) { xs.add(v); ys.add(v) }
+  if (gridPct > 0) {
+    for (let v = gridPct; v < 100; v += gridPct) { xs.add(v); ys.add(v) }
+  }
   for (const o of others) {
     xs.add(o.x); xs.add(o.x + o.w); xs.add(o.x + o.w / 2)
     ys.add(o.y); ys.add(o.y + o.h); ys.add(o.y + o.h / 2)

@@ -14,6 +14,11 @@ describe('snapTargets', () => {
     expect(t.xs).toContain(100)
     expect(t.xs).toContain(10)        // grid line
   })
+  it('guards against non-positive gridPct (does not hang, returns only canvas edges)', () => {
+    const t = snapTargets([], 0)
+    expect(t.xs).toEqual([0, 100])
+    expect(t.ys).toEqual([0, 100])
+  })
 })
 
 describe('snapDrag', () => {
@@ -27,5 +32,17 @@ describe('snapDrag', () => {
     const res = snapDrag(R(55, 30), targets, 3)
     expect(res.rect.x).toBe(55)
     expect(res.guideX).toBeUndefined()
+  })
+  it('snaps a near-top edge to the neighbour on y-axis and reports a guide', () => {
+    const targetsY = snapTargets([R(10, 41.5)], 10)
+    const res = snapDrag(R(20, 43), targetsY, 3)
+    expect(res.rect.y).toBe(41.5)
+    expect(res.guideY).toBe(41.5)
+  })
+  it('leaves rects outside the y-axis threshold untouched', () => {
+    const targetsY = snapTargets([R(10, 41.5)], 10)
+    const res = snapDrag(R(20, 36.5), targetsY, 3)
+    expect(res.rect.y).toBe(36.5)
+    expect(res.guideY).toBeUndefined()
   })
 })
