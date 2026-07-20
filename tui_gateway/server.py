@@ -3194,7 +3194,11 @@ def _tool_ctx(name: str, args: dict) -> str:
     try:
         from agent.display import build_tool_label
 
-        return build_tool_label(name, args, max_len=80) or ""
+        # 240 (was 80): this label is the ONLY human description of an in-flight
+        # step the canvas/dock receives (raw args only arrive on tool.complete),
+        # and 80 chars cut the intent sentence off mid-word. build_tool_label just
+        # truncates to max_len, so a larger cap only lets more of it through.
+        return build_tool_label(name, args, max_len=240) or ""
     except Exception:
         return ""
 
