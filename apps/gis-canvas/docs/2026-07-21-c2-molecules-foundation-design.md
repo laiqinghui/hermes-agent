@@ -86,13 +86,14 @@ Three approaches were considered:
 
 ### Integration mechanics
 
-- **Dependencies:** `class-variance-authority`, `clsx`, `tailwind-merge`,
-  `tw-animate-css` (Tailwind-v4 successor to `tailwindcss-animate`), plus Radix
-  packages per seeded primitive (e.g. `@radix-ui/react-tabs`,
+- **Dependencies:** `class-variance-authority`, `clsx`, `tailwind-merge`, plus
+  Radix packages per seeded primitive (`@radix-ui/react-tabs`,
   `@radix-ui/react-tooltip`, `@radix-ui/react-scroll-area`,
-  `@radix-ui/react-separator`). These are **not** added to
-  `vite.config.ts` `optimizeDeps.exclude` — only the ESRI/Polymer subtree needs
-  excluding; Radix pre-bundles fine.
+  `@radix-ui/react-separator`, `@radix-ui/react-slot`). No animation library is
+  needed — the vendored primitives use no animate utilities (the app already has
+  its own keyframes). These are **not** added to `vite.config.ts`
+  `optimizeDeps.exclude` — only the ESRI/Polymer subtree needs excluding; Radix
+  pre-bundles fine.
 - **Path alias:** add `@/*` → `src/*` to **both** `tsconfig.json` (`paths`) and
   `vite.config.ts` (`resolve.alias`). It does not exist yet and ShadCN's
   generated imports assume it. Vitest reads `vite.config.ts`, so the alias
@@ -107,32 +108,43 @@ Three approaches were considered:
 
 ---
 
-## Section 2 — Theming bridge + primitive seed set
+## Section 2 — Theming + primitive seed set
 
-### Theming bridge
+### Theming: primitives styled on gc- utilities (no parallel token layer)
 
-Add one bridge block to `index.css`, next to the existing Calcite bridge,
-defining ShadCN's semantic tokens as `var(--color-…)` aliases and registering
-them into Tailwind v4's utility space with `@theme inline` (so `bg-background`,
-`text-muted-foreground`, `border-border`, `ring-ring`, etc. resolve to `gc-`
-tokens):
+**Why not an `@theme inline` bridge:** the gc- system already defines
+`--color-primary`, `--color-secondary`, and `--color-accent` (meanings: primary
+text, secondary text, brand teal), which generate the utilities `text-primary`,
+`bg-accent`, etc. used throughout the app. ShadCN's stock primitives reference
+utilities of the **same names** with **different** meanings (`bg-primary` = brand
+button, `bg-accent` = hover surface). A parallel `@theme inline` bridge under
+those names would collide and reassign existing utilities app-wide — a real
+breakage. (This corrects the original bridge idea after discovering the name
+collision.)
 
-| ShadCN token | → maps to | Note |
-|---|---|---|
-| `--background` / `--foreground` | `--color-surface` / `--color-primary` | primitive base surface + text |
-| `--card` / `--popover` (+ `-foreground`) | `--color-surface` / `--color-surface-raised` / `--color-primary` | |
-| `--primary` / `--primary-foreground` | `--color-accent` / `--color-accent-fg` | brand = teal accent |
-| `--secondary` / `--muted` (+ `-foreground`) | `--color-surface-raised` / `--color-secondary` / `--color-tertiary` | |
-| `--accent` / `--accent-foreground` | subtle hover of `--color-surface-raised` / `--color-primary` | ShadCN `--accent` is the *hover bg*, **not** brand — kept distinct on purpose |
-| `--destructive` (+ `-foreground`) | `--color-negative` / `--color-alert-fg` | |
-| `--border` / `--input` / `--ring` | `--color-hairline` / `--color-hairline-strong` / `--color-accent` | |
-| `--radius` | `--radius-gc-md` (10px) | ShadCN derives sm/lg from it |
+**Resolution:** vendor the ShadCN/Radix primitives — their Radix structure,
+`cva` variants, `data-slot` attributes, and `cn()` composition — but style their
+color classes with the **existing gc- utilities**. One token system, no
+collisions, and theme-awareness (light + `:root.dark`) comes for free because
+gc- utilities already flip under `.dark`. Mapping used when vendoring each
+primitive:
 
-Because the existing `:root.dark` block re-points every `gc-` token, **dark mode
-comes for free** — no duplicate ShadCN dark block, exactly the trick the Calcite
-bridge already uses. Fonts inherit `--font-sans` / `--font-display`.
-`tw-animate-css` animations are gated behind the existing `prefers-reduced-motion`
-guards.
+| ShadCN role | gc- utility(ies) |
+|---|---|
+| brand / primary | `bg-accent text-accent-fg` (hover `bg-accent/90`) |
+| secondary / muted surface | `bg-surface-raised` + `text-secondary` / `text-tertiary` |
+| hover/active surface (ShadCN "accent") | `bg-surface-raised` / `hover:bg-surface-raised` |
+| background / foreground | `bg-surface` / `text-primary` |
+| popover / card | `bg-surface-raised` / `bg-surface` |
+| border / input / ring | `border-hairline` / `border-hairline-strong` / `ring-accent` |
+| destructive | `bg-negative text-alert-fg` |
+| radius | `rounded-gc-sm` / `rounded-gc-md` |
+
+No new `--color-*` tokens, no `@theme inline` block, no duplicate dark-mode
+block. Fonts inherit `--font-sans` / `--font-display`.
+`src/components/ui/README.md` documents this restyle rule so primitives added
+later via `shadcn add` (which emits stock `bg-primary` / `bg-muted` classes) are
+converted to the gc- utilities above consistently.
 
 ### Primitive seed set (`src/components/ui/`)
 
@@ -226,10 +238,12 @@ order:
 
 ## Risks & mitigations
 
-- **ShadCN CLI assumes Tailwind v3 config** — under v4 there is no
-  `tailwind.config.js` (tokens live in `@theme`). Mitigation: hand-author
-  `components.json` + `cn()`, pull primitives with the v4-aware `shadcn add` or by
-  copying source; assert no v3 `tailwind.config.*` is introduced.
+- **ShadCN CLI assumes Tailwind v3 config + emits colliding class names** — under
+  v4 there is no `tailwind.config.js` (tokens live in `@theme`), and stock CLI
+  output references `bg-primary`/`bg-muted`/`bg-accent` which collide with gc-
+  meanings. Mitigation: hand-author `components.json` + `cn()`, **vendor**
+  primitive source and restyle its color classes onto gc- utilities per
+  `ui/README.md` (see Section 2); assert no v3 `tailwind.config.*` is introduced.
 - **`.gc-hud` re-tint** — the shell's glass panels re-point `--color-surface` to
   transparent for descendants; primitives must fill with `bg-card` / `bg-background`
   (→ `--color-surface`) so they glass correctly inside docks/floats rather than
