@@ -11,6 +11,8 @@ def _fmt_state(node: dict) -> str:
     parts = []
     if "value" in st:
         parts.append(f"value={st['value']}")
+    if "active" in st:
+        parts.append(f"active={st['active']}")
     if "rowSelection" in st and isinstance(st["rowSelection"], list):
         ids = st["rowSelection"]
         parts.append("rowSelection=[" + ",".join(map(str, ids[:8])) + ("...]" if len(ids) > 8 else "]"))

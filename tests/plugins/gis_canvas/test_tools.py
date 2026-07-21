@@ -38,6 +38,25 @@ def test_render_view_applies_layout_and_version_defaults(plugin):
     assert out["doc"]["canvasVersion"] == 1
 
 
+def test_render_view_accepts_tabs(plugin):
+    spec = {
+        "canvasVersion": 1,
+        "layout": {"type": "grid", "cols": 12, "rowHeight": 80, "gap": 8},
+        "components": [
+            {
+                "id": "insp",
+                "type": "tabs",
+                "area": {"col": 1, "colSpan": 6, "row": 1, "rowSpan": 3},
+                "props": {"tabs": [{"id": "overview", "label": "Overview"}]},
+                "slots": {"overview": [{"id": "s1", "type": "stat", "props": {"label": "A", "value": 1}}]},
+            }
+        ],
+    }
+    out = json.loads(plugin.tools_canvas.render_view({"spec": spec}, task_id="t1"))
+    assert out["ok"] is True
+    assert any(c["type"] == "tabs" for c in out["components_index"])
+
+
 def test_render_view_invalid_spec_returns_errors_not_render(plugin):
     spec = _spec()
     spec["components"][0]["type"] = "bogus"

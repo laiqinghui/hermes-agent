@@ -286,3 +286,41 @@ def test_bad_edge_value_rejected(plugin):
         "edge": "north", "bindings": {"source": "mock://x"},  # not in enum
     })
     assert plugin.validator.validate_doc(doc)  # schema enum rejects
+
+
+def _tabs_node():
+    return {
+        "id": "insp",
+        "type": "tabs",
+        "area": {"col": 1, "colSpan": 6, "row": 2, "rowSpan": 3},
+        "props": {"tabs": [{"id": "overview", "label": "Overview"},
+                           {"id": "props", "label": "Properties"}]},
+        "slots": {
+            "overview": [{"id": "t1", "type": "stat", "props": {"label": "A", "value": 1}}],
+            "props": [{"id": "t2", "type": "stat", "props": {"label": "B", "value": 2}}],
+        },
+    }
+
+
+def test_tabs_valid_doc_passes(plugin):
+    doc = _minimal_doc()
+    doc["components"].append(_tabs_node())
+    assert plugin.validator.validate_doc(doc) == []
+
+
+def test_tabs_missing_tabs_prop_rejected(plugin):
+    doc = _minimal_doc()
+    node = _tabs_node()
+    node["props"] = {}
+    doc["components"].append(node)
+    errors = plugin.validator.validate_doc(doc)
+    assert any("tabs" in e for e in errors)
+
+
+def test_tabs_slot_without_matching_tab_rejected(plugin):
+    doc = _minimal_doc()
+    node = _tabs_node()
+    node["slots"]["ghost"] = [{"id": "t3", "type": "stat", "props": {"label": "C", "value": 3}}]
+    doc["components"].append(node)
+    errors = plugin.validator.validate_doc(doc)
+    assert any("ghost" in e for e in errors)

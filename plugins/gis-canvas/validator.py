@@ -41,6 +41,13 @@ CATALOG: dict[str, dict] = {
         "required_props": ["field", "options"],
         "required_bindings": [],
     },
+    "tabs": {
+        "container": True,
+        "slots": set(),          # dynamic: one slot per props.tabs id (see dynamic_slots)
+        "dynamic_slots": True,
+        "required_props": ["tabs"],
+        "required_bindings": [],
+    },
     "esri:map": {
         "container": False, "slots": set(),
         "required_props": [], "required_bindings": ["layers"],
@@ -62,6 +69,7 @@ STATE_KEYS: dict[str, set[str]] = {
     "stat": set(),
     "data-table": {"rowSelection", "sort", "columnFilters", "columnVisibility", "page", "filter"},
     "select": {"value"},
+    "tabs": {"active"},
     "esri:map": {"selection", "extent"},
     "esri:legend": set(),
     "esri:feature-table": {"selection"},
@@ -126,9 +134,18 @@ def validate_doc(doc: dict) -> list[str]:
         slots = node.get("slots", {})
         if not entry["container"] and (kids or slots):
             errors.append(f"'{node_id}' ({node_type}): not a container, may not have children/slots")
+        tab_ids = None
+        if entry.get("dynamic_slots"):
+            tab_ids = {t.get("id") for t in props.get("tabs", []) if isinstance(t, dict)}
         for slot_name, slot_kids in slots.items():
-            if entry["container"] and slot_name not in entry["slots"]:
-                errors.append(f"'{node_id}' ({node_type}): unknown slot '{slot_name}'")
+            if entry["container"]:
+                if entry.get("dynamic_slots"):
+                    if slot_name not in tab_ids:
+                        errors.append(
+                            f"'{node_id}' ({node_type}): slot '{slot_name}' has no matching tab in props.tabs"
+                        )
+                elif slot_name not in entry["slots"]:
+                    errors.append(f"'{node_id}' ({node_type}): unknown slot '{slot_name}'")
             kids.extend(slot_kids)
         for kid in kids:
             walk(kid, depth + 1, top_level=False)
