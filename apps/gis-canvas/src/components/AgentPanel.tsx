@@ -6,7 +6,7 @@ import { TurnView } from './TurnView'
 import { ApprovalCard } from './ApprovalCard'
 
 // Domain-neutral defaults — this panel is shared chrome, not tied to any one dataset.
-const SUGGESTED_PROMPTS = ['Build a dashboard', 'Summarize the data', 'Add a map']
+const SUGGESTED_PROMPTS = ['Compose the situation picture', 'Summarize the data', 'Add a map']
 
 export function AgentPanel({
   open,
@@ -127,7 +127,7 @@ export function AgentPanel({
             ref={inputRef}
             className="min-w-0 flex-1 rounded-gc-sm border border-hairline bg-surface px-2.5 py-2 font-sans text-[12.5px] text-primary outline-none focus:ring-2 focus:ring-accent"
             value={text}
-            placeholder="Ask the agent to build a dashboard…"
+            placeholder="Ask the agent to compose the situation picture…"
             onChange={e => setText(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && submit()}
           />

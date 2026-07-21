@@ -191,7 +191,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
           </SelectionProvider>
         ) : !isBusy ? (
           <div className="flex h-full items-center justify-center text-sm text-tertiary">
-            No canvas yet — ask the agent to build a dashboard.
+            No canvas yet — ask the agent to compose the situation picture from your data.
           </div>
         ) : null}
         <CognitionPlane turn={turnActive ? lastTurn : undefined} />

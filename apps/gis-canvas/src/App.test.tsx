@@ -130,7 +130,7 @@ test('surfaces an approval request, responds scoped to the session, and clears i
   await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
 
   // open the agent panel (collapsed dock → overlay)
-  fireEvent.click(screen.getByRole('button', { name: /ask the agent to build a dashboard/i }))
+  fireEvent.click(screen.getByRole('button', { name: /ask the agent to compose the situation picture/i }))
 
   // gateway requests approval to run a gated command
   act(() => client.emit({ type: 'approval.request', payload: { command: 'python - <<EOF' } }))

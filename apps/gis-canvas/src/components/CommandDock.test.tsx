@@ -5,7 +5,7 @@ import { CommandDock } from './CommandDock'
 describe('CommandDock', () => {
   it('shows the prompt pill when idle', () => {
     render(<CommandDock latest={undefined} onOpen={() => {}} />)
-    expect(screen.getByText(/ask the agent to build a dashboard/i)).toBeInTheDocument()
+    expect(screen.getByText(/ask the agent to compose the situation picture/i)).toBeInTheDocument()
     expect(screen.queryByTestId('dock-ticker')).toBeNull()
   })
 

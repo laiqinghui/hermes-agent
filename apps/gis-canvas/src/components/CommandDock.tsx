@@ -35,7 +35,7 @@ export function CommandDock({
       ) : (
         <>
           <span className="min-w-0 flex-1 truncate font-sans text-[12.5px] text-secondary">
-            {latest?.text ?? 'Ask the agent to build a dashboard…'}
+            {latest?.text ?? 'Ask the agent to compose the situation picture…'}
           </span>
           <span className="shrink-0 rounded-md border border-hairline px-1.5 py-0.5 font-mono text-[10.5px] text-tertiary">/</span>
         </>

@@ -24,13 +24,13 @@ export function TopBar({
     <div className="flex shrink-0 items-center justify-between border-b border-hairline bg-rail px-5 py-2.5">
       <div className="flex items-center gap-3.5">
         <div className="flex h-[30px] w-[30px] items-center justify-center rounded-gc-sm bg-accent font-display text-[15px] font-bold text-accent-fg">
-          H
+          T
         </div>
         <div className="flex flex-col leading-tight">
           <span className="font-display text-sm font-semibold tracking-wide text-primary">
-            HERMES <span className="text-accent">// GIS CANVAS</span>
+            Thoughts <span className="text-accent">Canvas</span>
           </span>
-          <span className="mt-0.5 font-mono text-[10.5px] text-tertiary">Generative Situation Picture</span>
+          <span className="mt-0.5 font-mono text-[10.5px] text-tertiary">Reasoning, made visual</span>
         </div>
       </div>
 
