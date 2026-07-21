@@ -2,7 +2,7 @@ import { MOLECULE_TYPES } from './types'
 import type { CanvasDoc } from './types'
 
 test('catalog includes all registered molecule types', () => {
-  expect([...MOLECULE_TYPES]).toEqual(['card', 'stat', 'data-table', 'select', 'esri:map', 'esri:legend', 'esri:feature-table'])
+  expect([...MOLECULE_TYPES]).toEqual(['card', 'stat', 'data-table', 'select', 'tabs', 'esri:map', 'esri:legend', 'esri:feature-table'])
 })
 
 test('a canonical doc typechecks', () => {

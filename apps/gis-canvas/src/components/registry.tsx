@@ -4,6 +4,7 @@ import { CardMolecule } from './molecules/CardMolecule'
 import { StatMolecule } from './molecules/StatMolecule'
 import { DataTableMolecule } from './molecules/DataTableMolecule'
 import { SelectMolecule } from './molecules/SelectMolecule'
+import { TabsMolecule } from './molecules/TabsMolecule'
 
 export interface MoleculeProps {
   node: ComponentNode
@@ -49,6 +50,7 @@ export const COMPONENT_REGISTRY: Record<string, ComponentType<MoleculeProps>> = 
   stat: StatMolecule,
   'data-table': DataTableMolecule,
   select: SelectMolecule,
+  tabs: TabsMolecule,
   'esri:map': EsriMap,
   'esri:legend': EsriLegend,
   'esri:feature-table': FeatureTableAsDataTable
