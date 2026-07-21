@@ -5,6 +5,8 @@ import { isDataHandle } from '../../lib/data-plane'
 import { useCanvasActions } from '../HandlerContext'
 import { useLinkedSelection } from '../SelectionContext'
 import { resolveIdField } from '../../lib/selection'
+import { detectGeoFields } from '../../lib/esri/graphics'
+import { containedKeys } from '../../lib/esri/spatial'
 import { EsriFrame } from './EsriFrame'
 import { Skeleton } from '../atoms/Skeleton'
 import type { MoleculeProps } from '../registry'
@@ -19,8 +21,12 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   const ref = useRef<HTMLElement | null>(null)
   const [ready, setReady] = useState(false)
   const layerRefs = asArray(node.bindings?.layers)
-  const props = (node.props ?? {}) as { basemap?: string; center?: [number, number]; zoom?: number }
+  const props = (node.props ?? {}) as {
+    basemap?: string; center?: [number, number]; zoom?: number
+    render?: 'points' | 'heatmap'; spatialFilter?: boolean; basemapToggle?: boolean; basemapAlt?: string
+  }
   const basemap = props.basemap ?? 'osm'
+  const render = props.render === 'heatmap' ? 'heatmap' : 'points'
   // Linked selection: the map's data-layer handle is the shared source.
   const source = layerRefs.find(isDataHandle) ?? ''
   const [selected, setSelected] = useLinkedSelection(source)
@@ -30,6 +36,10 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   useEffect(() => { setSelectedRef.current = setSelected }, [setSelected])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapCtx = useRef<{ view: any; layer: any; idField: string; keyByOid: Map<number, string> } | null>(null)
+  const sketchRef = useRef<HTMLElement | null>(null)
+  // Rows for the spatial filter, populated even without a live view (jsdom-testable),
+  // unlike mapCtx which needs the real view for highlight/goTo.
+  const dataRef = useRef<{ rows: Record<string, unknown>[]; idField: string; lngField: string; latField: string } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -54,7 +64,13 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
             // The legend shows the layer title — prefer the map's human title
             // over the raw data:// handle (Phase C lets the agent title layers).
             const layerTitle = (node.props?.title as string | undefined) ?? r
-            layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, layerTitle)
+            if (r === source) {
+              const rows = page.rows as Record<string, unknown>[]
+              const idField = resolveIdField(page.schema as { name: string }[], rows)
+              const { latField, lngField } = detectGeoFields(page.schema as never)
+              dataRef.current = { rows, idField, lngField: lngField ?? 'lng', latField: latField ?? 'lat' }
+            }
+            layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, layerTitle, render)
             if (view && r === source) {
               const rows = page.rows as Record<string, unknown>[]
               const idField = resolveIdField(page.schema as { name: string }[], rows)
@@ -65,7 +81,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
               mapCtx.current = { view, layer, idField, keyByOid }
             }
           } else {
-            layer = buildLayer(r, esri)
+            layer = buildLayer(r, esri, render)
           }
           if (view) view.map.add(layer)
         } catch (e) { console.error('layer build failed', r, e) }
@@ -133,6 +149,28 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
     return () => { cancelled = true; handle?.remove() }
   }, [selected, ready])
 
+  // Draw a geofence/radius/polygon → select the contained rows (client-side, over the
+  // loaded data source rows). Reuses the shared selection, so a linked table highlights too.
+  useEffect(() => {
+    const el = sketchRef.current
+    if (!ready || !props.spatialFilter || !el) return
+    const onCreate = async (ev: Event) => {
+      const detail = (ev as CustomEvent).detail as { state?: string; graphic?: { geometry?: unknown } } | undefined
+      const data = dataRef.current
+      if (detail?.state !== 'complete' || !detail.graphic?.geometry || !data) return
+      const esri = await loadEsri()
+      // SR gotcha: the view/sketch draw in Web Mercator; project to geographic (4326)
+      // to match the rows-layer points, else contains() matches nothing.
+      const geo = esri.webMercatorUtils.webMercatorToGeographic(detail.graphic.geometry)
+      const predicate = (lng: number, lat: number) =>
+        esri.geometryEngine.contains(geo, new esri.Point({ x: lng, y: lat, spatialReference: { wkid: 4326 } }))
+      const keys = containedKeys(data.rows, data.idField, data.lngField, data.latField, predicate)
+      setSelectedRef.current(keys)
+    }
+    el.addEventListener('arcgisCreate', onCreate)
+    return () => el.removeEventListener('arcgisCreate', onCreate)
+  }, [ready, props.spatialFilter])
+
   const center = props.center ? `${props.center[0]}, ${props.center[1]}` : undefined
   const selectionSummary = selected.length ? `${selected.length} selected` : undefined
 
@@ -146,7 +184,17 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
         {...(center ? { center } : {})}
         {...(props.zoom != null ? { zoom: String(props.zoom) } : {})}
         style={{ display: 'block', width: '100%', height: '100%' }}
-      />
+      >
+        {props.spatialFilter ? (
+          /* @ts-expect-error custom element */
+          <arcgis-sketch ref={sketchRef} slot="top-right" creation-mode="single" />
+        ) : null}
+        {props.basemapToggle ? (
+          /* @ts-expect-error custom element */
+          <arcgis-basemap-toggle slot="bottom-right" next-basemap={props.basemapAlt ?? 'satellite'} />
+        ) : null}
+        {/* @ts-expect-error — arcgis-map closing tag (custom element typed loosely for React) */}
+      </arcgis-map>
       {!ready ? (
         <div data-testid="map-skeleton" className="absolute inset-0 z-10 transition-opacity duration-300">
           <Skeleton className="h-full w-full" />
