@@ -167,8 +167,15 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
       const keys = containedKeys(data.rows, data.idField, data.lngField, data.latField, predicate)
       setSelectedRef.current(keys)
     }
+    // Clearing/deleting the drawn fence must also clear the shared selection,
+    // else a linked table stays highlighted with no fence on the map.
+    const onDelete = () => { setSelectedRef.current([]) }
     el.addEventListener('arcgisCreate', onCreate)
-    return () => el.removeEventListener('arcgisCreate', onCreate)
+    el.addEventListener('arcgisDelete', onDelete)
+    return () => {
+      el.removeEventListener('arcgisCreate', onCreate)
+      el.removeEventListener('arcgisDelete', onDelete)
+    }
   }, [ready, props.spatialFilter])
 
   const center = props.center ? `${props.center[0]}, ${props.center[1]}` : undefined

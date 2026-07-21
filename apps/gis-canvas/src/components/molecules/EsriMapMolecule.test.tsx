@@ -129,3 +129,33 @@ test('a completed sketch selects the contained rows via linked selection', async
   // a,b are lng<0 → contained; c is not
   await waitFor(() => expect(container.textContent).toMatch(/2 selected/i))
 })
+
+test('deleting the sketch fence clears the shared selection', async () => {
+  const page = {
+    ok: true, total: 3, page: 0, pageSize: 5000,
+    schema: [{ name: 'id', type: 'string' }, { name: 'lng', type: 'number' }, { name: 'lat', type: 'number' }],
+    rows: [
+      { id: 'a', lng: -70.1, lat: 41.3 },
+      { id: 'b', lng: -70.2, lat: 41.4 },
+      { id: 'c', lng: 12.0, lat: 50.0 }
+    ]
+  }
+  const fetchData = vi.fn().mockResolvedValue(page)
+  const actions: CanvasActions = { setLocalState() {}, reportInteraction() {}, sendPrompt() {}, fetchData }
+  const mapNode: ComponentNode = { id: 'ms2', type: 'esri:map', bindings: { layers: ['data://x'] }, props: { spatialFilter: true } }
+  const { container } = render(
+    <SelectionProvider nodesBySource={{ 'data://x': ['ms2'] }} onMirror={() => {}}>
+      <HandlerProvider actions={actions}>
+        <EsriMapMolecule node={mapNode} renderChild={() => null} />
+      </HandlerProvider>
+    </SelectionProvider>
+  )
+  const mapEl = container.querySelector('arcgis-map')!
+  mapEl.dispatchEvent(new CustomEvent('arcgisViewReadyChange'))
+  await waitFor(() => expect(fetchData).toHaveBeenCalled())
+  const sketch = container.querySelector('arcgis-sketch')!
+  sketch.dispatchEvent(new CustomEvent('arcgisCreate', { detail: { state: 'complete', graphic: { geometry: {} } } }))
+  await waitFor(() => expect(container.textContent).toMatch(/2 selected/i))
+  sketch.dispatchEvent(new CustomEvent('arcgisDelete'))
+  await waitFor(() => expect(screen.queryByText(/selected/i)).toBeNull())
+})
