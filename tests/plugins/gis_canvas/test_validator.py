@@ -314,7 +314,7 @@ def test_tabs_missing_tabs_prop_rejected(plugin):
     node["props"] = {}
     doc["components"].append(node)
     errors = plugin.validator.validate_doc(doc)
-    assert any("tabs" in e for e in errors)
+    assert any("missing required props.tabs" in e for e in errors)
 
 
 def test_tabs_slot_without_matching_tab_rejected(plugin):
