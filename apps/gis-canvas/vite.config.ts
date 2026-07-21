@@ -2,9 +2,13 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) }
+  },
   // ESRI ships native ESM, but its widgets pull a legacy ESM subtree
   // (@arcgis/core -> @vaadin/grid -> @polymer/polymer, used by the feature-table).
   // Vite 8's Rolldown dep-optimizer mangles that code — e.g. Polymer's valid
