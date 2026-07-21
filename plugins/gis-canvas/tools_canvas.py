@@ -142,7 +142,10 @@ _CATALOG_HELP = (
     "state:{active:'<tabId>'}, slots:{'<tabId>':[...child nodes]}} — a tabbed "
     "container; each slot key MUST equal a props.tabs id and holds that tab's "
     "children; the shown tab is tracked client-side in state.active (no agent "
-    "turn); optional handlers.onChange fires on tab switch."
+    "turn); optional handlers.onChange fires on tab switch. USE type:'tabs' (NOT a "
+    "card) whenever the user asks for tabs / a tabbed panel, or to hold several "
+    "views in one panel showing ONE at a time (put each view's nodes in its "
+    "matching slot); use a card only when the children should all show stacked together."
     " (Phase 3 GIS) esri:map (bindings.layers = a layer handle or array of handles; each handle is "
     "a 'data://…' handle from data_query (rows plotted client-side from lng/lat), a 'mock://<name>' "
     "dev source, or a public ArcGIS FeatureServer URL like "
@@ -203,8 +206,9 @@ RENDER_VIEW_SCHEMA = {
         "box, and never leave a mostly-empty oversized one. You have authority to choose each panel's "
         "placement and size to use the real estate efficiently within these principles: give substantial "
         "content (tables, multi-field cards) a rail or a generously-sized panel; give a single metric a "
-        "compact float, or group related metrics into ONE panel (a dock rail of stats, or a card with stat "
-        "children) rather than scattering separate floats that collide. Prefer docking supporting panels "
+        "compact float, or group related metrics into ONE panel (a dock rail of stats, a card with stat "
+        "children, or a tabs panel when the user wants to switch between grouped views) rather than "
+        "scattering separate floats that collide. Prefer docking supporting panels "
         "to the edges and keep the map's centre clear."
     ),
     "parameters": {
