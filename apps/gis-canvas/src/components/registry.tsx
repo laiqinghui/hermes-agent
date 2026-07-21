@@ -29,6 +29,15 @@ function EsriLegend(props: MoleculeProps) {
   )
 }
 
+const EsriLayerListLazy = lazy(() => import('./molecules/EsriLayerListMolecule').then(m => ({ default: m.EsriLayerListMolecule })))
+function EsriLayerList(props: MoleculeProps) {
+  return (
+    <Suspense fallback={<div className="p-2 text-xs text-neutral-400">Loading layers…</div>}>
+      <EsriLayerListLazy {...props} />
+    </Suspense>
+  )
+}
+
 // The native ESRI feature-table pulls a Vaadin/Polymer subtree Vite mis-bundles,
 // and duplicates the DataTable for the same data. Render feature-table nodes as a
 // DataTable over their layer handle instead (bindings.layer -> source).
@@ -53,6 +62,7 @@ export const COMPONENT_REGISTRY: Record<string, ComponentType<MoleculeProps>> = 
   tabs: TabsMolecule,
   'esri:map': EsriMap,
   'esri:legend': EsriLegend,
+  'esri:layer-list': EsriLayerList,
   'esri:feature-table': FeatureTableAsDataTable
 }
 
