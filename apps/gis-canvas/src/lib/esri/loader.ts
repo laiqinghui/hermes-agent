@@ -2,6 +2,10 @@ export interface EsriBag {
   esriConfig: { apiKey?: string; assetsPath?: string }
   FeatureLayer: new (o: unknown) => unknown
   reactiveUtils: { on: (getter: () => unknown, event: string, cb: (e: unknown) => void) => { remove(): void } }
+  HeatmapRenderer: new (o: unknown) => unknown
+  Point: new (o: unknown) => unknown
+  geometryEngine: { contains(container: unknown, inside: unknown): boolean }
+  webMercatorUtils: { webMercatorToGeographic(geometry: unknown): unknown }
 }
 
 // @arcgis/core loads Web Workers/WASM/assets at runtime from esriConfig.assetsPath.
@@ -27,15 +31,30 @@ export function loadEsri(): Promise<EsriBag> {
   cached = (async () => {
     await import('@arcgis/map-components/components/arcgis-map')
     await import('@arcgis/map-components/components/arcgis-legend')
-    const [{ default: esriConfig }, { default: FeatureLayer }, reactiveUtils] = await Promise.all([
+    await import('@arcgis/map-components/components/arcgis-layer-list')
+    await import('@arcgis/map-components/components/arcgis-sketch')
+    await import('@arcgis/map-components/components/arcgis-basemap-toggle')
+    const [
+      { default: esriConfig },
+      { default: FeatureLayer },
+      reactiveUtils,
+      { default: HeatmapRenderer },
+      { default: Point },
+      geometryEngine,
+      webMercatorUtils
+    ] = await Promise.all([
       import('@arcgis/core/config.js'),
       import('@arcgis/core/layers/FeatureLayer.js'),
-      import('@arcgis/core/core/reactiveUtils.js')
+      import('@arcgis/core/core/reactiveUtils.js'),
+      import('@arcgis/core/renderers/HeatmapRenderer.js'),
+      import('@arcgis/core/geometry/Point.js'),
+      import('@arcgis/core/geometry/geometryEngine.js'),
+      import('@arcgis/core/geometry/support/webMercatorUtils.js')
     ])
     esriConfig.assetsPath = ARCGIS_ASSETS_CDN
     const key = (import.meta.env as Record<string, string | undefined>).VITE_ARCGIS_API_KEY
     if (key) esriConfig.apiKey = key
-    return { esriConfig, FeatureLayer, reactiveUtils } as unknown as EsriBag
+    return { esriConfig, FeatureLayer, reactiveUtils, HeatmapRenderer, Point, geometryEngine, webMercatorUtils } as unknown as EsriBag
   })()
   return cached
 }

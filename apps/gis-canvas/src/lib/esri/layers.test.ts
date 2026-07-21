@@ -42,3 +42,28 @@ test('buildLayer(rows) constructs a client-side FeatureLayer with source graphic
   expect(calls[0].objectIdField).toBe('__oid')
   expect(calls[0].geometryType).toBe('point')
 })
+
+test('buildRowsLayer uses a HeatmapRenderer when render=heatmap', () => {
+  const calls: any[] = []
+  class FeatureLayer { constructor(o: any) { calls.push(o) } }
+  class HeatmapRenderer { type = 'heatmap'; constructor(_o: any) {} }
+  const esri = { FeatureLayer, HeatmapRenderer }
+  buildRowsLayer(
+    { schema: [{ name: 'lng', type: 'number' }, { name: 'lat', type: 'number' }], rows: [{ lng: -70, lat: 41 }] },
+    esri as any,
+    'incidents',
+    'heatmap'
+  )
+  expect(calls[0].renderer).toBeInstanceOf(HeatmapRenderer)
+})
+
+test('buildRowsLayer keeps the simple marker renderer by default', () => {
+  const calls: any[] = []
+  const esri = { FeatureLayer: class { constructor(o: any) { calls.push(o) } } }
+  buildRowsLayer(
+    { schema: [{ name: 'lng', type: 'number' }, { name: 'lat', type: 'number' }], rows: [{ lng: -70, lat: 41 }] },
+    esri as any,
+    'incidents'
+  )
+  expect(calls[0].renderer.type).toBe('simple')
+})

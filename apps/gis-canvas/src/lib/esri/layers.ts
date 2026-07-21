@@ -16,19 +16,31 @@ export function parseLayerRef(ref: string): LayerRef {
  * Geometry is synthesized from lng/lat columns — Data Agent / Denodo rows are tabular. */
 export function buildRowsLayer(
   source: MockSource,
-  esri: { FeatureLayer: new (o: unknown) => unknown },
-  title?: string
+  esri: { FeatureLayer: new (o: unknown) => unknown; HeatmapRenderer?: new (o: unknown) => unknown },
+  title?: string,
+  render: 'points' | 'heatmap' = 'points'
 ): unknown {
+  const renderer =
+    render === 'heatmap' && esri.HeatmapRenderer
+      ? new esri.HeatmapRenderer({
+          radius: 18,
+          colorStops: [
+            { ratio: 0, color: 'rgba(13,140,130,0)' },
+            { ratio: 0.4, color: 'rgba(13,140,130,0.55)' },
+            { ratio: 1, color: 'rgba(224,104,91,0.9)' }
+          ]
+        })
+      : {
+          type: 'simple',
+          symbol: { type: 'simple-marker', color: '#e0685b', size: 8, outline: { color: '#fff', width: 1 } }
+        }
   return new esri.FeatureLayer({
     source: graphicsFromMockSource(source),
     fields: fieldsFromSchema(source.schema),
     objectIdField: '__oid',
     geometryType: 'point',
     spatialReference: { wkid: 4326 },
-    renderer: {
-      type: 'simple',
-      symbol: { type: 'simple-marker', color: '#e0685b', size: 8, outline: { color: '#fff', width: 1 } }
-    },
+    renderer,
     popupTemplate: { title: 'Feature {__oid}', content: 'Row {__oid}' },
     title: title ?? 'layer'
   })
@@ -36,7 +48,11 @@ export function buildRowsLayer(
 
 /** `esri` is the lazily-loaded module bag: { FeatureLayer }. Returns a FeatureLayer instance.
  * data:// handles must be fetched first (see buildRowsLayer) — they throw here. */
-export function buildLayer(ref: string, esri: { FeatureLayer: new (o: unknown) => unknown }): unknown {
+export function buildLayer(
+  ref: string,
+  esri: { FeatureLayer: new (o: unknown) => unknown; HeatmapRenderer?: new (o: unknown) => unknown },
+  render: 'points' | 'heatmap' = 'points'
+): unknown {
   const parsed = parseLayerRef(ref)
   if (parsed.kind === 'service') {
     return new esri.FeatureLayer({ url: parsed.url })
@@ -46,5 +62,5 @@ export function buildLayer(ref: string, esri: { FeatureLayer: new (o: unknown) =
   }
   const source = resolveMockSource(ref)
   if (!source) throw new Error(`unknown mock source: ${ref}`)
-  return buildRowsLayer(source, esri, parsed.name)
+  return buildRowsLayer(source, esri, parsed.name, render)
 }
