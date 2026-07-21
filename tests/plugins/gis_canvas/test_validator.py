@@ -324,3 +324,13 @@ def test_tabs_slot_without_matching_tab_rejected(plugin):
     doc["components"].append(node)
     errors = plugin.validator.validate_doc(doc)
     assert any("ghost" in e for e in errors)
+
+
+def test_tabs_non_list_tabs_prop_does_not_crash(plugin):
+    doc = _minimal_doc()
+    node = _tabs_node()
+    node["props"] = {"tabs": 5}  # malformed: scalar, not a list
+    node["slots"] = {}
+    doc["components"].append(node)
+    errors = plugin.validator.validate_doc(doc)  # must NOT raise
+    assert isinstance(errors, list)

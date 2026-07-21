@@ -61,4 +61,13 @@ describe('TabsMolecule', () => {
     )
     expect(screen.getByText(/no tabs/i)).toBeInTheDocument()
   })
+
+  it('renders the placeholder when props.tabs is not an array', () => {
+    render(
+      <HandlerProvider actions={actionsMock()}>
+        <TabsMolecule node={{ id: 'bad', type: 'tabs', props: { tabs: 5 as unknown as [] } }} renderChild={() => null} />
+      </HandlerProvider>
+    )
+    expect(screen.getByText(/no tabs/i)).toBeInTheDocument()
+  })
 })

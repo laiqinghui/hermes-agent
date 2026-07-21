@@ -136,7 +136,8 @@ def validate_doc(doc: dict) -> list[str]:
             errors.append(f"'{node_id}' ({node_type}): not a container, may not have children/slots")
         tab_ids = None
         if entry.get("dynamic_slots"):
-            tab_ids = {t.get("id") for t in props.get("tabs", []) if isinstance(t, dict)}
+            raw_tabs = props.get("tabs")
+            tab_ids = {t.get("id") for t in (raw_tabs if isinstance(raw_tabs, list) else []) if isinstance(t, dict)}
         for slot_name, slot_kids in slots.items():
             if entry["container"]:
                 if entry.get("dynamic_slots"):

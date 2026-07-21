@@ -12,7 +12,8 @@ interface TabDef {
 
 export function TabsMolecule({ node, renderChild }: MoleculeProps) {
   const actions = useCanvasActions()
-  const tabs = ((node.props?.tabs as TabDef[] | undefined) ?? []).filter(t => t && t.id)
+  const rawTabs = node.props?.tabs
+  const tabs = (Array.isArray(rawTabs) ? (rawTabs as TabDef[]) : []).filter(t => t && t.id)
   const slots = node.slots ?? {}
 
   if (!tabs.length) {
