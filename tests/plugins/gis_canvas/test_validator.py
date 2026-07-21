@@ -334,3 +334,16 @@ def test_tabs_non_list_tabs_prop_does_not_crash(plugin):
     doc["components"].append(node)
     errors = plugin.validator.validate_doc(doc)  # must NOT raise
     assert isinstance(errors, list)
+
+
+def test_esri_layer_list_valid_doc_passes(plugin):
+    doc = _minimal_doc()
+    doc["components"].append(
+        {
+            "id": "ll1",
+            "type": "esri:layer-list",
+            "area": {"col": 10, "colSpan": 3, "row": 1, "rowSpan": 3},
+            "bindings": {"mapRef": "map1"},
+        }
+    )
+    assert plugin.validator.validate_doc(doc) == []

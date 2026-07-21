@@ -56,6 +56,10 @@ CATALOG: dict[str, dict] = {
         "container": False, "slots": set(),
         "required_props": [], "required_bindings": [],
     },
+    "esri:layer-list": {
+        "container": False, "slots": set(),
+        "required_props": [], "required_bindings": [],
+    },
     "esri:feature-table": {
         "container": False, "slots": set(),
         "required_props": [], "required_bindings": ["layer"],
@@ -72,6 +76,7 @@ STATE_KEYS: dict[str, set[str]] = {
     "tabs": {"active"},
     "esri:map": {"selection", "extent"},
     "esri:legend": set(),
+    "esri:layer-list": set(),
     "esri:feature-table": {"selection"},
 }
 
