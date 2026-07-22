@@ -1,6 +1,6 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, test } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { SelectionProvider, useLinkedSelection } from './SelectionContext'
+import { SelectionProvider, useLinkedSelection, useSelectionActions, useSelectionState } from './SelectionContext'
 
 function Consumer({ source, label }: { source: string; label: string }) {
   const [sel, setSel] = useLinkedSelection(source)
@@ -34,4 +34,25 @@ describe('SelectionContext', () => {
     fireEvent.click(screen.getByText('x-set')) // must not throw
     expect(screen.getByTestId('x-sel')).toHaveTextContent('')
   })
+})
+
+function MultiProbe() {
+  const actions = useSelectionActions()
+  const state = useSelectionState()
+  return (
+    <div>
+      <button onClick={() => { actions.set('data://a', ['1']); actions.set('data://b', ['2', '3']) }}>set-two</button>
+      <span data-testid="sig">{Object.entries(state).map(([k, v]) => `${k}:${v.join(',')}`).join('|')}</span>
+    </div>
+  )
+}
+
+test('useSelectionActions writes multiple sources; useSelectionState reflects them', () => {
+  render(
+    <SelectionProvider nodesBySource={{}} onMirror={() => {}}>
+      <MultiProbe />
+    </SelectionProvider>
+  )
+  fireEvent.click(screen.getByText('set-two'))
+  expect(screen.getByTestId('sig').textContent).toBe('data://a:1|data://b:2,3')
 })

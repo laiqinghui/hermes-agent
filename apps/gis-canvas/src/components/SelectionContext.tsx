@@ -3,12 +3,14 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 interface SelectionContextValue {
   get: (source: string) => string[]
   set: (source: string, ids: string[]) => void
+  state: Record<string, string[]>
 }
 
 // Stable empty reference so consumers with no selection don't see a new array
 // identity every render (which would re-run their selection effects needlessly).
 const EMPTY: string[] = []
-const NOOP: SelectionContextValue = { get: () => EMPTY, set: () => {} }
+const EMPTY_STATE: Record<string, string[]> = {}
+const NOOP: SelectionContextValue = { get: () => EMPTY, set: () => {}, state: EMPTY_STATE }
 const Ctx = createContext<SelectionContextValue>(NOOP)
 
 /** Holds selection keyed by data source and mirrors every change onto the
@@ -29,7 +31,7 @@ export function SelectionProvider({
     setSelection(prev => ({ ...prev, [source]: ids }))
     for (const nodeId of nodesBySource[source] ?? []) onMirror(nodeId, ids)
   }, [nodesBySource, onMirror])
-  const value = useMemo(() => ({ get, set }), [get, set])
+  const value = useMemo(() => ({ get, set, state: selection }), [get, set, selection])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
@@ -40,4 +42,15 @@ export function useLinkedSelection(source: string | undefined): [string[], (ids:
   const selected = source ? ctx.get(source) : EMPTY
   const setSelected = useCallback((ids: string[]) => { if (source) ctx.set(source, ids) }, [ctx, source])
   return [selected, setSelected]
+}
+
+/** Read/write selection for arbitrary sources (multi-layer maps). */
+export function useSelectionActions(): Pick<SelectionContextValue, 'get' | 'set'> {
+  const { get, set } = useContext(Ctx)
+  return { get, set }
+}
+
+/** The full selection record; re-renders when any source's selection changes. */
+export function useSelectionState(): Record<string, string[]> {
+  return useContext(Ctx).state
 }
