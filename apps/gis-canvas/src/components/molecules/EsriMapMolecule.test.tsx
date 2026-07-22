@@ -2,7 +2,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { describe, it, vi } from 'vitest'
 import type { ComponentNode } from '../../lib/types'
 import { HandlerProvider } from '../HandlerContext'
-import { SelectionProvider, useLinkedSelection, useSelectionState } from '../SelectionContext'
+import { SelectionProvider, useLinkedSelection, useSelectionState, useSelectionActions } from '../SelectionContext'
 import type { CanvasActions } from '../../lib/handlers'
 
 const built: string[] = []
@@ -68,10 +68,16 @@ function Selector({ source }: { source: string }) {
 }
 
 describe('EsriMapMolecule linked selection', () => {
-  it('shows the selected count from the shared selection for its data source', () => {
-    const actions: CanvasActions = { setLocalState() {}, reportInteraction() {}, sendPrompt() {}, fetchData: vi.fn() }
+  it('shows the selected count from the shared selection for its data source', async () => {
+    const fetchData = vi.fn().mockResolvedValue({
+      ok: true, total: 1, page: 0, pageSize: 5000,
+      schema: [{ name: 'id', type: 'string' }, { name: 'lng', type: 'number' }, { name: 'lat', type: 'number' }],
+      rows: [{ id: 'a', lng: -70, lat: 41 }]
+    })
+    const actions: CanvasActions = { setLocalState() {}, reportInteraction() {}, sendPrompt() {}, fetchData }
     const mapNode: ComponentNode = { id: 'm', type: 'esri:map', bindings: { layers: ['data://x'] }, props: {} }
-    render(
+    const fakeView = { map: { add() {}, removeMany() {} }, popupEnabled: true, on: () => ({ remove() {} }) }
+    const { container } = render(
       <SelectionProvider nodesBySource={{ 'data://x': ['m'] }} onMirror={() => {}}>
         <HandlerProvider actions={actions}>
           <Selector source="data://x" />
@@ -79,9 +85,48 @@ describe('EsriMapMolecule linked selection', () => {
         </HandlerProvider>
       </SelectionProvider>
     )
+    const mapEl = container.querySelector('arcgis-map') as any
+    mapEl.view = fakeView
+    mapEl.dispatchEvent(new CustomEvent('arcgisViewReadyChange'))
+    await waitFor(() => expect(fetchData).toHaveBeenCalled())
     expect(screen.queryByText(/selected/i)).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('select-2'))
     expect(screen.getByText(/2 selected/i)).toBeInTheDocument()
+  })
+})
+
+function UnrelatedSelector({ source }: { source: string }) {
+  const actions = useSelectionActions()
+  return <button onClick={() => actions.set(source, ['x', 'y'])}>select-unrelated-2</button>
+}
+
+describe('EsriMapMolecule selection scoping', () => {
+  it('does not inflate the selected count from an unrelated source', async () => {
+    const fetchData = vi.fn().mockResolvedValue({
+      ok: true, total: 1, page: 0, pageSize: 5000,
+      schema: [{ name: 'id', type: 'string' }, { name: 'lng', type: 'number' }, { name: 'lat', type: 'number' }],
+      rows: [{ id: 'a', lng: -70, lat: 41 }]
+    })
+    const actions: CanvasActions = { setLocalState() {}, reportInteraction() {}, sendPrompt() {}, fetchData }
+    const mapNode: ComponentNode = { id: 'ms2', type: 'esri:map', bindings: { layers: ['data://a'] }, props: {} }
+    const fakeView = { map: { add() {}, removeMany() {} }, popupEnabled: true, on: () => ({ remove() {} }) }
+    const { container } = render(
+      <SelectionProvider nodesBySource={{ 'data://a': ['ms2'] }} onMirror={() => {}}>
+        <HandlerProvider actions={actions}>
+          <UnrelatedSelector source="data://other" />
+          <EsriMapMolecule node={mapNode} renderChild={() => null} />
+        </HandlerProvider>
+      </SelectionProvider>
+    )
+    const mapEl = container.querySelector('arcgis-map') as any
+    mapEl.view = fakeView
+    mapEl.dispatchEvent(new CustomEvent('arcgisViewReadyChange'))
+    await waitFor(() => expect(fetchData).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByText('select-unrelated-2'))
+
+    // an unrelated source's selection must not surface as this map's badge
+    expect(screen.queryByText(/selected/i)).not.toBeInTheDocument()
   })
 })
 

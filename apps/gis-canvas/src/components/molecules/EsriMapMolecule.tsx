@@ -196,7 +196,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   }, [ready, props.spatialFilter])
 
   const center = props.center ? `${props.center[0]}, ${props.center[1]}` : undefined
-  const selectedTotal = Object.values(selState).reduce((n, ids) => n + ids.length, 0)
+  const selectedTotal = layersRef.current.reduce((n, lc) => n + (selState[lc.source]?.length ?? 0), 0)
   const selectionSummary = selectedTotal ? `${selectedTotal} selected` : undefined
 
   return (
