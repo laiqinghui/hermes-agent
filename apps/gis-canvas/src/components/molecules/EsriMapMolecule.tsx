@@ -156,26 +156,23 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
     if (!ready || !props.spatialFilter || !el) return
     const onCreate = async (ev: Event) => {
       const detail = (ev as CustomEvent).detail as { state?: string; graphic?: { geometry?: unknown } } | undefined
+      const graphic = detail?.graphic
       const data = dataRef.current
-      if (detail?.state !== 'complete' || !detail.graphic?.geometry || !data) return
+      if (detail?.state !== 'complete' || !graphic?.geometry || !data) return
       const esri = await loadEsri()
       // SR gotcha: the view/sketch draw in Web Mercator; project to geographic (4326)
       // to match the rows-layer points, else contains() matches nothing.
-      const geo = esri.webMercatorUtils.webMercatorToGeographic(detail.graphic.geometry)
+      const geo = esri.webMercatorUtils.webMercatorToGeographic(graphic.geometry)
       const predicate = (lng: number, lat: number) =>
         esri.geometryEngine.contains(geo, new esri.Point({ x: lng, y: lat, spatialReference: { wkid: 4326 } }))
       const keys = containedKeys(data.rows, data.idField, data.lngField, data.latField, predicate)
       setSelectedRef.current(keys)
+      // Transient: remove the drawn region from the sketch's own graphics layer so
+      // it isn't a persisted annotation — the gesture reads as a rubber-band select.
+      ;(el as unknown as { layer?: { remove(g: unknown): void } }).layer?.remove(graphic)
     }
-    // Clearing/deleting the drawn fence must also clear the shared selection,
-    // else a linked table stays highlighted with no fence on the map.
-    const onDelete = () => { setSelectedRef.current([]) }
     el.addEventListener('arcgisCreate', onCreate)
-    el.addEventListener('arcgisDelete', onDelete)
-    return () => {
-      el.removeEventListener('arcgisCreate', onCreate)
-      el.removeEventListener('arcgisDelete', onDelete)
-    }
+    return () => el.removeEventListener('arcgisCreate', onCreate)
   }, [ready, props.spatialFilter])
 
   const center = props.center ? `${props.center[0]}, ${props.center[1]}` : undefined
