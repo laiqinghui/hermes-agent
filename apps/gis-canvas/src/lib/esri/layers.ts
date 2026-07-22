@@ -18,7 +18,8 @@ export function buildRowsLayer(
   source: MockSource,
   esri: { FeatureLayer: new (o: unknown) => unknown; HeatmapRenderer?: new (o: unknown) => unknown },
   title?: string,
-  render: 'points' | 'heatmap' = 'points'
+  render: 'points' | 'heatmap' = 'points',
+  color = '#e0685b'
 ): unknown {
   const renderer =
     render === 'heatmap' && esri.HeatmapRenderer
@@ -32,7 +33,7 @@ export function buildRowsLayer(
         })
       : {
           type: 'simple',
-          symbol: { type: 'simple-marker', color: '#e0685b', size: 8, outline: { color: '#fff', width: 1 } }
+          symbol: { type: 'simple-marker', color, size: 8, outline: { color: '#fff', width: 1 } }
         }
   return new esri.FeatureLayer({
     source: graphicsFromMockSource(source),
@@ -51,7 +52,8 @@ export function buildRowsLayer(
 export function buildLayer(
   ref: string,
   esri: { FeatureLayer: new (o: unknown) => unknown; HeatmapRenderer?: new (o: unknown) => unknown },
-  render: 'points' | 'heatmap' = 'points'
+  render: 'points' | 'heatmap' = 'points',
+  color = '#e0685b'
 ): unknown {
   const parsed = parseLayerRef(ref)
   if (parsed.kind === 'service') {
@@ -62,5 +64,5 @@ export function buildLayer(
   }
   const source = resolveMockSource(ref)
   if (!source) throw new Error(`unknown mock source: ${ref}`)
-  return buildRowsLayer(source, esri, parsed.name, render)
+  return buildRowsLayer(source, esri, parsed.name, render, color)
 }

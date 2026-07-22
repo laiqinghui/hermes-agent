@@ -67,3 +67,13 @@ test('buildRowsLayer keeps the simple marker renderer by default', () => {
   )
   expect(calls[0].renderer.type).toBe('simple')
 })
+
+test('buildRowsLayer applies a per-layer color to the marker symbol', () => {
+  const calls: any[] = []
+  const esri = { FeatureLayer: class { constructor(o: any) { calls.push(o) } } }
+  buildRowsLayer(
+    { schema: [{ name: 'lng', type: 'number' }, { name: 'lat', type: 'number' }], rows: [{ lng: -70, lat: 41 }] },
+    esri as any, 'layer-a', 'points', '#123456'
+  )
+  expect(calls[0].renderer.symbol.color).toBe('#123456')
+})
