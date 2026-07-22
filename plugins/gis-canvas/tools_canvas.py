@@ -154,7 +154,7 @@ _CATALOG_HELP = (
     "For MULTIPLE layers, give each a name + optional color via props.layers "
     "(positional to bindings.layers): props.layers:[{title,color?}] — color is "
     "auto-assigned distinctly when omitted; ALSO author an esri:layer-list (not "
-    "just a legend) so the user can distinguish/toggle them. "
+    "just a legend) so the user can distinguish/toggle them."
     " esri:legend (bindings.mapRef = the "
     "esri:map component id it describes). esri:feature-table (bindings.layer = a layer handle; "
     "optional bindings.mapRef = an esri:map id to highlight selected rows on that map; state.selection). "
