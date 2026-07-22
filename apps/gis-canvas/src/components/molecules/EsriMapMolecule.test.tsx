@@ -2,7 +2,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { describe, it, vi } from 'vitest'
 import type { ComponentNode } from '../../lib/types'
 import { HandlerProvider } from '../HandlerContext'
-import { SelectionProvider, useLinkedSelection } from '../SelectionContext'
+import { SelectionProvider, useLinkedSelection, useSelectionState } from '../SelectionContext'
 import type { CanvasActions } from '../../lib/handlers'
 
 const built: string[] = []
@@ -100,6 +100,42 @@ test('renders the sketch + basemap-toggle children when the props are set', asyn
   expect(container.querySelector('arcgis-sketch')).toBeTruthy()
   const toggle = container.querySelector('arcgis-basemap-toggle')
   expect(toggle?.getAttribute('next-basemap')).toBe('hybrid')
+})
+
+test('a geofence selects contained rows across ALL data layers', async () => {
+  function SelSig() {
+    const s = useSelectionState()
+    return <span data-testid="sel">{Object.entries(s).map(([k, v]) => `${k}=${v.join(',')}`).sort().join('|')}</span>
+  }
+  const pageFor = (ids: Array<{ id: string; lng: number; lat: number }>) => ({
+    ok: true, total: ids.length, page: 0, pageSize: 5000,
+    schema: [{ name: 'id', type: 'string' }, { name: 'lng', type: 'number' }, { name: 'lat', type: 'number' }],
+    rows: ids
+  })
+  const fetchData = vi.fn().mockImplementation((h: string) =>
+    Promise.resolve(h === 'data://a'
+      ? pageFor([{ id: 'a1', lng: -70, lat: 41 }, { id: 'a2', lng: 5, lat: 40 }])
+      : pageFor([{ id: 'b1', lng: -71, lat: 42 }])))
+  const actions: CanvasActions = { setLocalState() {}, reportInteraction() {}, sendPrompt() {}, fetchData }
+  const node: ComponentNode = { id: 'mu', type: 'esri:map', bindings: { layers: ['data://a', 'data://b'] }, props: { spatialFilter: true } }
+  const fakeView = { map: { add() {}, removeMany() {} }, popupEnabled: true, on: () => ({ remove() {} }) }
+  const { container } = render(
+    <SelectionProvider nodesBySource={{ 'data://a': ['mu'], 'data://b': ['mu'] }} onMirror={() => {}}>
+      <HandlerProvider actions={actions}>
+        <SelSig />
+        <EsriMapMolecule node={node} renderChild={() => null} />
+      </HandlerProvider>
+    </SelectionProvider>
+  )
+  const mapEl = container.querySelector('arcgis-map') as any
+  mapEl.view = fakeView
+  mapEl.dispatchEvent(new CustomEvent('arcgisViewReadyChange'))
+  await waitFor(() => expect(fetchData).toHaveBeenCalledTimes(2))
+  const sketch = container.querySelector('arcgis-sketch') as any
+  sketch.layer = { remove() {} }
+  // fake contains = western hemisphere (lng < 0): a1 and b1 in, a2 out
+  sketch.dispatchEvent(new CustomEvent('arcgisCreate', { detail: { state: 'complete', graphic: { geometry: {} } } }))
+  await waitFor(() => expect(screen.getByTestId('sel').textContent).toBe('data://a=a1|data://b=b1'))
 })
 
 test('a completed sketch selects the contained rows via linked selection', async () => {

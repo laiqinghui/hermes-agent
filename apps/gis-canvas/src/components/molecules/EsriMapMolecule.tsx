@@ -4,7 +4,7 @@ import { buildLayer, buildRowsLayer } from '../../lib/esri/layers'
 import { resolveLayerColor } from '../../lib/esri/layer-color'
 import { isDataHandle } from '../../lib/data-plane'
 import { useCanvasActions } from '../HandlerContext'
-import { useLinkedSelection } from '../SelectionContext'
+import { useSelectionActions, useSelectionState } from '../SelectionContext'
 import { resolveIdField } from '../../lib/selection'
 import { detectGeoFields } from '../../lib/esri/graphics'
 import { containedKeys } from '../../lib/esri/spatial'
@@ -28,19 +28,19 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   }
   const basemap = props.basemap ?? 'osm'
   const render = props.render === 'heatmap' ? 'heatmap' : 'points'
-  // Linked selection: the map's data-layer handle is the shared source.
+  const selActions = useSelectionActions()
+  const selState = useSelectionState()
+  const selActionsRef = useRef(selActions)
+  useEffect(() => { selActionsRef.current = selActions }, [selActions])
+  // The primary data layer still drives the map-click hitTest ctx (mapCtx).
   const source = layerRefs.find(isDataHandle) ?? ''
-  const [selected, setSelected] = useLinkedSelection(source)
-  const selectedRef = useRef<string[]>(selected)
-  useEffect(() => { selectedRef.current = selected }, [selected])
-  const setSelectedRef = useRef(setSelected)
-  useEffect(() => { setSelectedRef.current = setSelected }, [setSelected])
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapCtx = useRef<{ view: any; layer: any; idField: string; keyByOid: Map<number, string> } | null>(null)
   const sketchRef = useRef<HTMLElement | null>(null)
   // Rows for the spatial filter, populated even without a live view (jsdom-testable),
   // unlike mapCtx which needs the real view for highlight/goTo.
   const dataRef = useRef<{ rows: Record<string, unknown>[]; idField: string; lngField: string; latField: string } | null>(null)
+  const layersRef = useRef<Array<{ source: string; rows: Record<string, unknown>[]; idField: string; lngField: string; latField: string }>>([])
   const addedLayersRef = useRef<unknown[]>([])
   const [buildTick, setBuildTick] = useState(0)
 
@@ -72,6 +72,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
         addedLayersRef.current = []
       }
       dataRef.current = null
+      layersRef.current = []
       mapCtx.current = null
       for (let i = 0; i < layerRefs.length; i++) {
         const r = layerRefs[i]
@@ -90,6 +91,12 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
               dataRef.current = { rows, idField, lngField: lngField ?? 'lng', latField: latField ?? 'lat' }
             }
             layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, title, render, color)
+            {
+              const rows = page.rows as Record<string, unknown>[]
+              const idField = resolveIdField(page.schema as { name: string }[], rows)
+              const { latField, lngField } = detectGeoFields(page.schema as never)
+              layersRef.current.push({ source: r, rows, idField, lngField: lngField ?? 'lng', latField: latField ?? 'lat' })
+            }
             if (view && r === source) {
               const rows = page.rows as Record<string, unknown>[]
               const idField = resolveIdField(page.schema as { name: string }[], rows)
@@ -126,9 +133,10 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
         .map(oid => ctx.keyByOid?.get(Number(oid)))
         .filter((x: unknown): x is string => x != null)
       if (!ids.length) return
-      // toggle the clicked ids into the current shared selection
-      const next = ids.reduce<string[]>((acc, id) => acc.includes(id) ? acc.filter(x => x !== id) : [...acc, id], selectedRef.current)
-      setSelectedRef.current(next)
+      // toggle the clicked ids into the PRIMARY source's selection (mapCtx tracks the primary layer)
+      const current = selActionsRef.current.get(source)
+      const next = ids.reduce<string[]>((acc, id) => acc.includes(id) ? acc.filter(x => x !== id) : [...acc, id], current)
+      selActionsRef.current.set(source, next)
     }) as { remove(): void }
     return () => handle.remove()
   }, [ready, buildTick])
@@ -136,6 +144,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   // React to the shared selection: highlight the matching features and recenter.
   useEffect(() => {
     const ctx = mapCtx.current
+    const selected = selState[source] ?? []
     if (!ready || !ctx || !selected.length) return // nothing selected → prior cleanup already cleared the highlight
     let handle: { remove(): void } | null = null
     let cancelled = false
@@ -157,7 +166,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
       }
     })().catch(() => {})
     return () => { cancelled = true; handle?.remove() }
-  }, [selected, ready, buildTick])
+  }, [selState, ready, buildTick])
 
   // Draw a geofence/radius/polygon → select the contained rows (client-side, over the
   // loaded data source rows). Reuses the shared selection, so a linked table highlights too.
@@ -167,16 +176,17 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
     const onCreate = async (ev: Event) => {
       const detail = (ev as CustomEvent).detail as { state?: string; graphic?: { geometry?: unknown } } | undefined
       const graphic = detail?.graphic
-      const data = dataRef.current
-      if (detail?.state !== 'complete' || !graphic?.geometry || !data) return
+      if (detail?.state !== 'complete' || !graphic?.geometry || !layersRef.current.length) return
       const esri = await loadEsri()
       // SR gotcha: the view/sketch draw in Web Mercator; project to geographic (4326)
       // to match the rows-layer points, else contains() matches nothing.
       const geo = esri.webMercatorUtils.webMercatorToGeographic(graphic.geometry)
       const predicate = (lng: number, lat: number) =>
         esri.geometryEngine.contains(geo, new esri.Point({ x: lng, y: lat, spatialReference: { wkid: 4326 } }))
-      const keys = containedKeys(data.rows, data.idField, data.lngField, data.latField, predicate)
-      setSelectedRef.current(keys)
+      for (const lc of layersRef.current) {
+        const keys = containedKeys(lc.rows, lc.idField, lc.lngField, lc.latField, predicate)
+        selActionsRef.current.set(lc.source, keys)
+      }
       // Transient: remove the drawn region from the sketch's own graphics layer so
       // it isn't a persisted annotation — the gesture reads as a rubber-band select.
       ;(el as unknown as { layer?: { remove(g: unknown): void } }).layer?.remove(graphic)
@@ -186,7 +196,8 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   }, [ready, props.spatialFilter])
 
   const center = props.center ? `${props.center[0]}, ${props.center[1]}` : undefined
-  const selectionSummary = selected.length ? `${selected.length} selected` : undefined
+  const selectedTotal = Object.values(selState).reduce((n, ids) => n + ids.length, 0)
+  const selectionSummary = selectedTotal ? `${selectedTotal} selected` : undefined
 
   return (
     <EsriFrame title={(node.props?.title as string | undefined) ?? 'Map'} meta={basemap} corners>
