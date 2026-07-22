@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadEsri } from '../../lib/esri/loader'
 import { buildLayer, buildRowsLayer } from '../../lib/esri/layers'
+import { resolveLayerColor } from '../../lib/esri/layer-color'
 import { isDataHandle } from '../../lib/data-plane'
 import { useCanvasActions } from '../HandlerContext'
 import { useLinkedSelection } from '../SelectionContext'
@@ -40,64 +41,73 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   // Rows for the spatial filter, populated even without a live view (jsdom-testable),
   // unlike mapCtx which needs the real view for highlight/goTo.
   const dataRef = useRef<{ rows: Record<string, unknown>[]; idField: string; lngField: string; latField: string } | null>(null)
+  const addedLayersRef = useRef<unknown[]>([])
+  const [buildTick, setBuildTick] = useState(0)
 
+  const layerMeta = (node.props?.layers as Array<{ title?: string; color?: string }> | undefined) ?? []
+  const layersSig = JSON.stringify({ layers: layerRefs, meta: layerMeta, render })
+
+  // View-ready: flip `ready` once the arcgis-map view exists.
   useEffect(() => {
-    let cancelled = false
-    let clickHandle: { remove(): void } | null = null
-    const el = ref.current as (HTMLElement & Record<string, unknown>) | null
+    const el = ref.current as HTMLElement | null
     if (!el) return
-
-    // Trigger ESRI load immediately so the custom element gets defined before the ready event
     void loadEsri()
+    const onReady = () => setReady(true)
+    el.addEventListener('arcgisViewReadyChange', onReady)
+    return () => el.removeEventListener('arcgisViewReadyChange', onReady)
+  }, [node.id])
 
-    const onReady = async () => {
+  // Build (and rebuild) layers whenever the layer set changes. Clears the
+  // previously-added layers first so a same-id rev change doesn't go stale/accumulate.
+  useEffect(() => {
+    if (!ready) return
+    let cancelled = false
+    const el = ref.current as (HTMLElement & { view?: { map: { add(l: unknown): void; removeMany(ls: unknown[]): void }; popupEnabled?: boolean } }) | null
+    const view = el?.view
+    ;(async () => {
       const esri = await loadEsri()
       if (cancelled) return
-      const view = el.view as { map: { add(layer: unknown): void } } | undefined
-      if (!view) console.warn('esri:map view not ready; layers not added', node.id)
-      for (const r of layerRefs) {
+      if (view && addedLayersRef.current.length) {
+        view.map.removeMany(addedLayersRef.current)
+        addedLayersRef.current = []
+      }
+      dataRef.current = null
+      mapCtx.current = null
+      for (let i = 0; i < layerRefs.length; i++) {
+        const r = layerRefs[i]
+        const meta = layerMeta[i] ?? {}
+        const title = meta.title ?? (node.props?.title as string | undefined) ?? r
+        const color = meta.color ?? resolveLayerColor(i)
         try {
           let layer: unknown
           if (isDataHandle(r)) {
             const page = await actions.fetchData(r, { pageSize: 5000 })
             if (cancelled) return
-            // The legend shows the layer title — prefer the map's human title
-            // over the raw data:// handle (Phase C lets the agent title layers).
-            const layerTitle = (node.props?.title as string | undefined) ?? r
             if (r === source) {
               const rows = page.rows as Record<string, unknown>[]
               const idField = resolveIdField(page.schema as { name: string }[], rows)
               const { latField, lngField } = detectGeoFields(page.schema as never)
               dataRef.current = { rows, idField, lngField: lngField ?? 'lng', latField: latField ?? 'lat' }
             }
-            layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, layerTitle, render)
+            layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, title, render, color)
             if (view && r === source) {
               const rows = page.rows as Record<string, unknown>[]
               const idField = resolveIdField(page.schema as { name: string }[], rows)
-              // __oid is i+1 (see graphicsFromMockSource). Map it to the shared row key,
-              // because ESRI hitTest graphics carry only the objectId, not the fields.
               const keyByOid = new Map<number, string>()
-              rows.forEach((row, i) => keyByOid.set(i + 1, String(row[idField])))
+              rows.forEach((row, idx) => keyByOid.set(idx + 1, String(row[idField])))
               mapCtx.current = { view, layer, idField, keyByOid }
             }
           } else {
-            layer = buildLayer(r, esri, render)
+            layer = buildLayer(r, esri, render, color)
           }
-          if (view) view.map.add(layer)
+          if (view) { view.map.add(layer); addedLayersRef.current.push(layer) }
         } catch (e) { console.error('layer build failed', r, e) }
       }
-      // A click on the map is a selection here, not an info request — disable the popup.
-      if (view) (view as unknown as { popupEnabled?: boolean }).popupEnabled = false
-      if (!cancelled) setReady(true)
-    }
-
-    el.addEventListener('arcgisViewReadyChange', onReady)
-    return () => {
-      cancelled = true
-      el.removeEventListener('arcgisViewReadyChange', onReady)
-    }
-    // node.id/layers are stable for a given rendered node; actions is stable (useMemo in App)
-  }, [node.id]) // eslint-disable-line react-hooks/exhaustive-deps
+      if (view) view.popupEnabled = false
+      if (!cancelled) setBuildTick(t => t + 1)
+    })().catch(() => {})
+    return () => { cancelled = true }
+  }, [ready, layersSig]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Map click → shared selection. Kept in its own ready-keyed effect (not inside the
   // one-time onReady) so it (re)attaches whenever the view is ready — including after
@@ -121,7 +131,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
       setSelectedRef.current(next)
     }) as { remove(): void }
     return () => handle.remove()
-  }, [ready])
+  }, [ready, buildTick])
 
   // React to the shared selection: highlight the matching features and recenter.
   useEffect(() => {
@@ -147,7 +157,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
       }
     })().catch(() => {})
     return () => { cancelled = true; handle?.remove() }
-  }, [selected, ready])
+  }, [selected, ready, buildTick])
 
   // Draw a geofence/radius/polygon → select the contained rows (client-side, over the
   // loaded data source rows). Reuses the shared selection, so a linked table highlights too.

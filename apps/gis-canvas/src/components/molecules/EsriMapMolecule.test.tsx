@@ -6,6 +6,7 @@ import { SelectionProvider, useLinkedSelection } from '../SelectionContext'
 import type { CanvasActions } from '../../lib/handlers'
 
 const built: string[] = []
+const builtColors: string[] = []
 vi.mock('../../lib/esri/loader', () => ({
   loadEsri: async () => ({
     esriConfig: {},
@@ -20,7 +21,8 @@ vi.mock('../../lib/esri/loader', () => ({
 }))
 vi.mock('../../lib/esri/layers', () => ({
   parseLayerRef: (r: string) => ({ kind: 'rows', name: r }),
-  buildLayer: (ref: string) => { built.push(ref); return { ref } }
+  buildLayer: (ref: string) => { built.push(ref); return { ref } },
+  buildRowsLayer: (_s: any, _e: any, _t?: string, _r?: string, color = '#e0685b') => { builtColors.push(color); return { color } }
 }))
 
 import { EsriMapMolecule } from './EsriMapMolecule'
@@ -132,4 +134,69 @@ test('a completed sketch selects the contained rows via linked selection', async
   // a,b are lng<0 → contained; c is not
   await waitFor(() => expect(container.textContent).toMatch(/2 selected/i))
   expect(removeSpy).toHaveBeenCalledWith(graphic) // drawn shape removed (transient)
+})
+
+test('rebuilds layers when the layer set changes (removes old, adds new)', async () => {
+  const added: any[] = []
+  const removed: any[] = []
+  const fakeView = {
+    map: { add: (l: any) => added.push(l), removeMany: (ls: any[]) => removed.push(...ls) },
+    popupEnabled: true,
+    // click-selection effect (unrelated to this test) re-attaches after every rebuild
+    // (buildTick dep) — stub `.on` so it doesn't throw when it registers the listener.
+    on: () => ({ remove() {} })
+  }
+  const fetchData = vi.fn().mockResolvedValue({
+    ok: true, total: 1, page: 0, pageSize: 5000,
+    schema: [{ name: 'id', type: 'string' }, { name: 'lng', type: 'number' }, { name: 'lat', type: 'number' }],
+    rows: [{ id: 'a', lng: -70, lat: 41 }]
+  })
+  const actions: CanvasActions = { setLocalState() {}, reportInteraction() {}, sendPrompt() {}, fetchData }
+  const nodeA: ComponentNode = { id: 'mm', type: 'esri:map', bindings: { layers: ['data://a'] }, props: {} }
+  const nodeB: ComponentNode = { id: 'mm', type: 'esri:map', bindings: { layers: ['data://a', 'data://b'] }, props: {} }
+
+  const { container, rerender } = render(
+    <HandlerProvider actions={actions}><EsriMapMolecule node={nodeA} renderChild={() => null} /></HandlerProvider>
+  )
+  const mapEl = container.querySelector('arcgis-map') as any
+  mapEl.view = fakeView
+  mapEl.dispatchEvent(new CustomEvent('arcgisViewReadyChange'))
+  await waitFor(() => expect(added.length).toBe(1)) // layer A built
+
+  const beforeRemoved = removed.length
+  rerender(<HandlerProvider actions={actions}><EsriMapMolecule node={nodeB} renderChild={() => null} /></HandlerProvider>)
+  // layer set changed → old cleared, new set (2) added
+  await waitFor(() => expect(removed.length).toBeGreaterThan(beforeRemoved))
+  await waitFor(() => expect(added.length).toBe(3)) // 1 (A) + 2 (A,B rebuilt)
+})
+
+test('applies a distinct color per layer', async () => {
+  builtColors.length = 0
+  const added: any[] = []
+  const fakeView = {
+    map: { add: (l: any) => added.push(l), removeMany: () => {} },
+    popupEnabled: true,
+    on: () => ({ remove() {} })
+  }
+  // capture the color passed to buildRowsLayer via the layers mock
+  const fetchData = vi.fn().mockResolvedValue({
+    ok: true, total: 1, page: 0, pageSize: 5000,
+    schema: [{ name: 'id', type: 'string' }, { name: 'lng', type: 'number' }, { name: 'lat', type: 'number' }],
+    rows: [{ id: 'a', lng: -70, lat: 41 }]
+  })
+  const actions: CanvasActions = { setLocalState() {}, reportInteraction() {}, sendPrompt() {}, fetchData }
+  const node: ComponentNode = {
+    id: 'mc', type: 'esri:map', bindings: { layers: ['data://a', 'data://b'] },
+    props: { layers: [{ title: 'Alpha' }, { title: 'Bravo' }] }
+  }
+  const { container } = render(
+    <HandlerProvider actions={actions}><EsriMapMolecule node={node} renderChild={() => null} /></HandlerProvider>
+  )
+  const mapEl = container.querySelector('arcgis-map') as any
+  mapEl.view = fakeView
+  mapEl.dispatchEvent(new CustomEvent('arcgisViewReadyChange'))
+  await waitFor(() => expect(added.length).toBe(2))
+  // the two layers were built with different colors (see the buildRowsLayer mock in this file)
+  expect(builtColors.length).toBe(2)
+  expect(builtColors[0]).not.toBe(builtColors[1])
 })
