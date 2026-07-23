@@ -2,7 +2,7 @@ import type { MockSource, MockField } from '../mock-data'
 
 export interface EsriFieldSpec { name: string; alias: string; type: 'oid' | 'string' | 'double' }
 export interface EsriGraphic {
-  geometry: { type: 'point'; x: number; y: number }
+  geometry: { type: 'point'; x: number; y: number; spatialReference: { wkid: number } }
   attributes: Record<string, string | number>
 }
 
@@ -48,12 +48,20 @@ export function graphicsFromMockSource(source: MockSource): EsriGraphic[] {
   const { latField, lngField } = detectGeoFields(source.schema ?? [])
   const latKey = latField ?? 'lat'
   const lngKey = lngField ?? 'lng'
-  return source.rows.map((row, i) => {
+  const out: EsriGraphic[] = []
+  source.rows.forEach((row, i) => {
     const typedRow = row as Record<string, string | number>
     const { [latKey]: latVal, [lngKey]: lngVal, ...rest } = typedRow
-    return {
-      geometry: { type: 'point', x: Number(lngVal), y: Number(latVal) },
+    const x = Number(lngVal)
+    const y = Number(latVal)
+    // Skip rows without a finite coordinate: a single NaN point geometry poisons
+    // the whole client-side FeatureLayer (null extent → nothing renders). __oid stays
+    // the original row index so it still aligns with keyByOid for selection.
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return
+    out.push({
+      geometry: { type: 'point', x, y, spatialReference: { wkid: 4326 } },
       attributes: { [OID]: i + 1, ...rest }
-    }
+    })
   })
+  return out
 }

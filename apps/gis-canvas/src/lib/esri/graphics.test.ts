@@ -58,6 +58,30 @@ test('graphicsFromMockSource plots real Denodo rows with title-case Latitude/Lon
   expect(g[0].attributes.Longitude).toBeUndefined()
 })
 
+test('graphicsFromMockSource stamps each point geometry with a wgs84 spatialReference', () => {
+  // Without an explicit SR on the geometry, ESRI mis-computes a client FeatureLayer's
+  // extent (varying points → [0,0]) and the layer fails to render.
+  const g = graphicsFromMockSource(REAL_DENODO_SOURCE)
+  expect(g[0].geometry.spatialReference).toEqual({ wkid: 4326 })
+})
+
+test('graphicsFromMockSource skips rows with a non-finite coordinate, keeping __oid at the source row index', () => {
+  // A single NaN point geometry poisons the whole client-side FeatureLayer (null
+  // extent → nothing renders), so rows without a finite lng/lat are dropped.
+  const src: MockSource = {
+    schema: REAL_DENODO_SCHEMA,
+    rows: [
+      { 'Vessel Name': 'A', Latitude: 1.5, Longitude: 103.0 },
+      { 'Vessel Name': 'B', Latitude: 1.6 }, // Longitude missing → Number(undefined)=NaN → skipped
+      { 'Vessel Name': 'C', Latitude: 1.7, Longitude: 104.2 }
+    ]
+  }
+  const g = graphicsFromMockSource(src)
+  expect(g.length).toBe(2)
+  expect(g.map(x => x.attributes.__oid)).toEqual([1, 3])
+  expect(g.every(x => Number.isFinite(x.geometry.x) && Number.isFinite(x.geometry.y))).toBe(true)
+})
+
 test('graphicsFromMockSource still works for mock-style lowercase lat/lng (regression)', () => {
   const g = graphicsFromMockSource(resolveMockSource('mock://incidents')!)
   expect(g[0].geometry.x).toBe(-122.676)
