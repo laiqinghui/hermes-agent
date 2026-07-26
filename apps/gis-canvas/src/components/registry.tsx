@@ -38,6 +38,15 @@ function EsriLayerList(props: MoleculeProps) {
   )
 }
 
+const EsriTimeSliderLazy = lazy(() => import('./molecules/EsriTimeSliderMolecule').then(m => ({ default: m.EsriTimeSliderMolecule })))
+function EsriTimeSlider(props: MoleculeProps) {
+  return (
+    <Suspense fallback={<div className="p-2 text-xs text-neutral-400">Loading timeline…</div>}>
+      <EsriTimeSliderLazy {...props} />
+    </Suspense>
+  )
+}
+
 // The native ESRI feature-table pulls a Vaadin/Polymer subtree Vite mis-bundles,
 // and duplicates the DataTable for the same data. Render feature-table nodes as a
 // DataTable over their layer handle instead (bindings.layer -> source).
@@ -63,6 +72,7 @@ export const COMPONENT_REGISTRY: Record<string, ComponentType<MoleculeProps>> = 
   'esri:map': EsriMap,
   'esri:legend': EsriLegend,
   'esri:layer-list': EsriLayerList,
+  'esri:time-slider': EsriTimeSlider,
   'esri:feature-table': FeatureTableAsDataTable
 }
 

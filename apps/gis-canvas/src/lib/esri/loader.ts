@@ -34,6 +34,7 @@ export function loadEsri(): Promise<EsriBag> {
     await import('@arcgis/map-components/components/arcgis-layer-list')
     await import('@arcgis/map-components/components/arcgis-sketch')
     await import('@arcgis/map-components/components/arcgis-basemap-toggle')
+    await import('@arcgis/map-components/components/arcgis-time-slider')
     const [
       { default: esriConfig },
       { default: FeatureLayer },

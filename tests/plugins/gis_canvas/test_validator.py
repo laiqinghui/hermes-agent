@@ -347,3 +347,20 @@ def test_esri_layer_list_valid_doc_passes(plugin):
         }
     )
     assert plugin.validator.validate_doc(doc) == []
+
+
+def test_esri_time_slider_valid_doc_passes(plugin):
+    doc = _minimal_doc()
+    doc["components"].append(
+        {
+            "id": "ts1",
+            "type": "esri:time-slider",
+            "area": {"col": 1, "colSpan": 12, "row": 4, "rowSpan": 1},
+            "bindings": {"mapRef": "map1"},
+        }
+    )
+    assert plugin.validator.validate_doc(doc) == []
+
+
+def test_esri_time_slider_state_keys_registered(plugin):
+    assert "esri:time-slider" in plugin.validator.STATE_KEYS

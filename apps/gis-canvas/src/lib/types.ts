@@ -2,7 +2,7 @@
  * TypeScript mirror of plugins/gis-canvas/schema/canvas.schema.json (v1).
  * Keep in sync when the schema changes.
  */
-export const MOLECULE_TYPES = ['card', 'stat', 'data-table', 'select', 'tabs', 'esri:map', 'esri:legend', 'esri:layer-list', 'esri:feature-table'] as const
+export const MOLECULE_TYPES = ['card', 'stat', 'data-table', 'select', 'tabs', 'esri:map', 'esri:legend', 'esri:layer-list', 'esri:time-slider', 'esri:feature-table'] as const
 export type MoleculeType = (typeof MOLECULE_TYPES)[number]
 
 export interface Area {
