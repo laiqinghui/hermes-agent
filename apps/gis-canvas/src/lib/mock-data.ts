@@ -37,6 +37,28 @@ const SOURCES: Record<string, MockSource> = {
       { district: 'Midtown', population: 33400 },
       { district: 'Harbor', population: 12100 }
     ]
+  },
+  'mock://vessel-track': {
+    schema: [
+      { name: 'mmsi', type: 'string' },
+      { name: 'vessel_name', type: 'string' },
+      { name: 'ts', type: 'string' },
+      { name: 'lat', type: 'number' },
+      { name: 'lng', type: 'number' },
+      { name: 'cog', type: 'number' }
+    ],
+    rows: [
+      { mmsi: '563123000', vessel_name: 'WONDER VEGA', ts: '2026-01-05T00:00:00Z', lat: 1.230, lng: 103.700, cog: 75 },
+      { mmsi: '563123000', vessel_name: 'WONDER VEGA', ts: '2026-01-05T01:00:00Z', lat: 1.245, lng: 103.760, cog: 72 },
+      { mmsi: '563123000', vessel_name: 'WONDER VEGA', ts: '2026-01-05T02:00:00Z', lat: 1.268, lng: 103.815, cog: 66 },
+      { mmsi: '563123000', vessel_name: 'WONDER VEGA', ts: '2026-01-05T03:00:00Z', lat: 1.300, lng: 103.860, cog: 55 },
+      { mmsi: '563123000', vessel_name: 'WONDER VEGA', ts: '2026-01-05T04:00:00Z', lat: 1.345, lng: 103.895, cog: 40 },
+      { mmsi: '440111222', vessel_name: 'ORION PEARL', ts: '2026-01-05T00:00:00Z', lat: 1.420, lng: 104.020, cog: 250 },
+      { mmsi: '440111222', vessel_name: 'ORION PEARL', ts: '2026-01-05T01:00:00Z', lat: 1.395, lng: 103.955, cog: 245 },
+      { mmsi: '440111222', vessel_name: 'ORION PEARL', ts: '2026-01-05T02:00:00Z', lat: 1.360, lng: 103.900, cog: 235 },
+      { mmsi: '440111222', vessel_name: 'ORION PEARL', ts: '2026-01-05T03:00:00Z', lat: 1.318, lng: 103.855, cog: 228 },
+      { mmsi: '440111222', vessel_name: 'ORION PEARL', ts: '2026-01-05T04:00:00Z', lat: 1.270, lng: 103.820, cog: 220 }
+    ]
   }
 }
 
