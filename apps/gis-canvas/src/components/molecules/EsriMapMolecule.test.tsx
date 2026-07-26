@@ -22,7 +22,9 @@ vi.mock('../../lib/esri/loader', () => ({
 vi.mock('../../lib/esri/layers', () => ({
   parseLayerRef: (r: string) => ({ kind: 'rows', name: r }),
   buildLayer: (ref: string) => { built.push(ref); return { ref } },
-  buildRowsLayer: (_s: any, _e: any, _t?: string, _r?: string, color = '#e0685b') => { builtColors.push(color); return { color } }
+  buildRowsLayer: (_s: any, _e: any, _t?: string, _r?: string, color = '#e0685b') => { builtColors.push(color); return { color } },
+  // one fake ESRI layer per group point-set (line omitted for the single-point fakes here)
+  trackLayersFromGroups: (groups: any[]) => groups.map((g: any) => ({ track: g.trackId, colorIndex: g.colorIndex }))
 }))
 
 import { EsriMapMolecule } from './EsriMapMolecule'
@@ -280,4 +282,58 @@ test('applies a distinct color per layer', async () => {
   // the two layers were built with different colors (see the buildRowsLayer mock in this file)
   expect(builtColors.length).toBe(2)
   expect(builtColors[0]).not.toBe(builtColors[1])
+})
+
+test('render:track builds track layers per group and shows the resolved-roles caption', async () => {
+  const added: any[] = []
+  const fakeView = { map: { add: (l: any) => added.push(l), removeMany: () => {} }, popupEnabled: true, on: () => ({ remove() {} }) }
+  const fetchData = vi.fn().mockResolvedValue({
+    ok: true, total: 3, page: 0, pageSize: 5000,
+    schema: [
+      { name: 'mmsi', type: 'string' }, { name: 'ts', type: 'string' },
+      { name: 'lat', type: 'number' }, { name: 'lng', type: 'number' }, { name: 'cog', type: 'number' }
+    ],
+    rows: [
+      { mmsi: 'A', ts: '2026-01-01T00:00Z', lat: 0, lng: 0, cog: 10 },
+      { mmsi: 'A', ts: '2026-01-01T01:00Z', lat: 1, lng: 1, cog: 20 },
+      { mmsi: 'B', ts: '2026-01-01T00:00Z', lat: 5, lng: 5, cog: 30 }
+    ]
+  })
+  const actions: CanvasActions = { setLocalState() {}, reportInteraction() {}, sendPrompt() {}, fetchData }
+  const node: ComponentNode = { id: 'trk', type: 'esri:map', bindings: { layers: ['data://v'] }, props: { render: 'track' } }
+  const { container } = render(
+    <HandlerProvider actions={actions}><EsriMapMolecule node={node} renderChild={() => null} /></HandlerProvider>
+  )
+  const mapEl = container.querySelector('arcgis-map') as any
+  mapEl.view = fakeView
+  mapEl.dispatchEvent(new CustomEvent('arcgisViewReadyChange'))
+  await waitFor(() => expect(fetchData).toHaveBeenCalled())
+  // two groups (A, B) → the fake factory returns one layer per group
+  await waitFor(() => expect(added.length).toBe(2))
+  // resolved-roles caption auto-detected from the AIS-ish schema
+  expect(container.textContent).toMatch(/temporal ts/i)
+  expect(container.textContent).toMatch(/track mmsi/i)
+})
+
+test('render:track honours explicit field overrides in the caption', async () => {
+  const fakeView = { map: { add: () => {}, removeMany: () => {} }, popupEnabled: true, on: () => ({ remove() {} }) }
+  const fetchData = vi.fn().mockResolvedValue({
+    ok: true, total: 1, page: 0, pageSize: 5000,
+    schema: [{ name: 'name', type: 'string' }, { name: 'when', type: 'string' }, { name: 'y', type: 'number' }, { name: 'x', type: 'number' }],
+    rows: [{ name: 'A', when: '2026-01-01T00:00Z', y: 0, x: 0 }]
+  })
+  const actions: CanvasActions = { setLocalState() {}, reportInteraction() {}, sendPrompt() {}, fetchData }
+  const node: ComponentNode = {
+    id: 'trk2', type: 'esri:map', bindings: { layers: ['data://v'] },
+    props: { render: 'track', timeField: 'when', trackIdField: 'name', latField: 'y', lngField: 'x' }
+  }
+  const { container } = render(
+    <HandlerProvider actions={actions}><EsriMapMolecule node={node} renderChild={() => null} /></HandlerProvider>
+  )
+  const mapEl = container.querySelector('arcgis-map') as any
+  mapEl.view = fakeView
+  mapEl.dispatchEvent(new CustomEvent('arcgisViewReadyChange'))
+  await waitFor(() => expect(fetchData).toHaveBeenCalled())
+  await waitFor(() => expect(container.textContent).toMatch(/temporal when/i))
+  expect(container.textContent).toMatch(/track name/i)
 })

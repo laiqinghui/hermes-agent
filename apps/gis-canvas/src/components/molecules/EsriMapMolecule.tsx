@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadEsri } from '../../lib/esri/loader'
-import { buildLayer, buildRowsLayer } from '../../lib/esri/layers'
+import { buildLayer, buildRowsLayer, trackLayersFromGroups } from '../../lib/esri/layers'
+import { resolveTrackFields, buildTrackGroups, type TrackFields } from '../../lib/esri/tracks'
 import { resolveLayerColor } from '../../lib/esri/layer-color'
 import { isDataHandle } from '../../lib/data-plane'
 import { useCanvasActions } from '../HandlerContext'
@@ -24,10 +25,12 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   const layerRefs = asArray(node.bindings?.layers)
   const props = (node.props ?? {}) as {
     basemap?: string; center?: [number, number]; zoom?: number
-    render?: 'points' | 'heatmap'; spatialFilter?: boolean; basemapToggle?: boolean; basemapAlt?: string
+    render?: 'points' | 'heatmap' | 'track'; spatialFilter?: boolean; basemapToggle?: boolean; basemapAlt?: string
+    timeField?: string; trackIdField?: string; headingField?: string; latField?: string; lngField?: string
   }
   const basemap = props.basemap ?? 'osm'
-  const render = props.render === 'heatmap' ? 'heatmap' : 'points'
+  const render = props.render === 'heatmap' ? 'heatmap' : props.render === 'track' ? 'track' : 'points'
+  const baseRender = render === 'heatmap' ? 'heatmap' : 'points' // for the non-track layer builders
   const selActions = useSelectionActions()
   const selState = useSelectionState()
   const selActionsRef = useRef(selActions)
@@ -43,6 +46,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   const layersRef = useRef<Array<{ source: string; rows: Record<string, unknown>[]; idField: string; lngField: string; latField: string }>>([])
   const addedLayersRef = useRef<unknown[]>([])
   const [buildTick, setBuildTick] = useState(0)
+  const [roles, setRoles] = useState<TrackFields | null>(null)
 
   const layerMeta = (node.props?.layers as Array<{ title?: string; color?: string }> | undefined) ?? []
   const layersSig = JSON.stringify({ layers: layerRefs, meta: layerMeta, render })
@@ -74,12 +78,29 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
       dataRef.current = null
       layersRef.current = []
       mapCtx.current = null
+      setRoles(null)
+      let trackColorBase = 0
       for (let i = 0; i < layerRefs.length; i++) {
         const r = layerRefs[i]
         const meta = layerMeta[i] ?? {}
         const title = meta.title ?? (node.props?.title as string | undefined) ?? r
         const color = meta.color ?? resolveLayerColor(i)
         try {
+          if (render === 'track' && isDataHandle(r)) {
+            const page = await actions.fetchData(r, { pageSize: 5000 })
+            if (cancelled) return
+            const rows = page.rows as Record<string, unknown>[]
+            const fields = resolveTrackFields(page.schema as never, {
+              timeField: props.timeField, trackIdField: props.trackIdField, headingField: props.headingField,
+              latField: props.latField, lngField: props.lngField
+            })
+            if (r === source) setRoles(fields)
+            const groups = buildTrackGroups(rows, fields, trackColorBase)
+            trackColorBase += groups.length
+            const trackLayers = trackLayersFromGroups(groups, esri, page.schema as never, meta.title ?? title)
+            if (view) for (const tl of trackLayers) { view.map.add(tl); addedLayersRef.current.push(tl) }
+            continue
+          }
           let layer: unknown
           if (isDataHandle(r)) {
             const page = await actions.fetchData(r, { pageSize: 5000 })
@@ -90,7 +111,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
               const { latField, lngField } = detectGeoFields(page.schema as never)
               dataRef.current = { rows, idField, lngField: lngField ?? 'lng', latField: latField ?? 'lat' }
             }
-            layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, title, render, color)
+            layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, title, baseRender, color)
             {
               const rows = page.rows as Record<string, unknown>[]
               const idField = resolveIdField(page.schema as { name: string }[], rows)
@@ -105,7 +126,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
               mapCtx.current = { view, layer, idField, keyByOid }
             }
           } else {
-            layer = buildLayer(r, esri, render, color)
+            layer = buildLayer(r, esri, baseRender, color)
           }
           if (view) { view.map.add(layer); addedLayersRef.current.push(layer) }
         } catch (e) { console.error('layer build failed', r, e) }
@@ -229,6 +250,13 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
         <div className="absolute bottom-2 left-2 z-6 flex flex-col gap-0.5 rounded-gc-sm border border-hairline bg-surface/80 px-2 py-1 backdrop-blur-sm">
           <span className="font-mono text-[9px] uppercase tracking-wide text-tertiary">Selected</span>
           <span className="font-mono text-[11px] font-medium text-accent">{selectionSummary}</span>
+        </div>
+      ) : null}
+      {render === 'track' && roles ? (
+        <div className="absolute top-2 left-2 z-6 flex max-w-[90%] flex-wrap items-center gap-x-2 rounded-gc-sm border border-hairline bg-surface/80 px-2 py-1 font-mono text-[10px] text-tertiary backdrop-blur-sm">
+          <span>◇ spatial {roles.latField ?? 'lat'}/{roles.lngField ?? 'lng'}</span>
+          <span>◷ temporal {roles.timeField ?? '—'}</span>
+          {roles.trackIdField ? <span>⛓ track {roles.trackIdField}</span> : null}
         </div>
       ) : null}
     </EsriFrame>

@@ -1,6 +1,6 @@
 import type { MockSource, MockField } from '../mock-data'
 
-export interface EsriFieldSpec { name: string; alias: string; type: 'oid' | 'string' | 'double' }
+export interface EsriFieldSpec { name: string; alias: string; type: 'oid' | 'string' | 'double' | 'date' }
 export interface EsriGraphic {
   geometry: { type: 'point'; x: number; y: number; spatialReference: { wkid: number } }
   attributes: Record<string, string | number>

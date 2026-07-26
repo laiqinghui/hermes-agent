@@ -1,5 +1,7 @@
-import { resolveMockSource, type MockSource } from '../mock-data'
+import { resolveMockSource, type MockSource, type MockField } from '../mock-data'
 import { graphicsFromMockSource, fieldsFromSchema } from './graphics'
+import { resolveLayerColor } from './layer-color'
+import type { TrackGroup } from './tracks'
 
 export type LayerRef =
   | { kind: 'rows'; name: string }
@@ -65,4 +67,60 @@ export function buildLayer(
   const source = resolveMockSource(ref)
   if (!source) throw new Error(`unknown mock source: ${ref}`)
   return buildRowsLayer(source, esri, parsed.name, render, color)
+}
+
+/** Turn pure TrackGroups into ESRI client-side FeatureLayers: a track line
+ * (when there are >=2 vertices) + a heading-rotated, time-aware point layer,
+ * per group, each colored by its colorIndex. */
+export function trackLayersFromGroups(
+  groups: TrackGroup[],
+  esri: { FeatureLayer: new (o: unknown) => unknown },
+  schema: MockField[],
+  titlePrefix?: string
+): unknown[] {
+  const out: unknown[] = []
+  // point fields = the source (non-geo) fields + synthetic __time (date) + heading (double)
+  const baseFields = fieldsFromSchema(schema)
+  const hasHeading = baseFields.some(f => f.name === 'heading')
+  const pointFields = [
+    ...baseFields,
+    { name: '__time', alias: '__time', type: 'date' as const },
+    ...(hasHeading ? [] : [{ name: 'heading', alias: 'heading', type: 'double' as const }])
+  ]
+
+  for (const g of groups) {
+    const color = resolveLayerColor(g.colorIndex)
+    const name = g.trackId ? `${titlePrefix ?? 'track'} · ${g.trackId}` : (titlePrefix ?? 'track')
+
+    if (g.path.length >= 2) {
+      out.push(new esri.FeatureLayer({
+        source: [{
+          geometry: { type: 'polyline', paths: [g.path], spatialReference: { wkid: 4326 } },
+          attributes: { __oid: 1 }
+        }],
+        fields: [{ name: '__oid', alias: '__oid', type: 'oid' }],
+        objectIdField: '__oid',
+        geometryType: 'polyline',
+        spatialReference: { wkid: 4326 },
+        renderer: { type: 'simple', symbol: { type: 'simple-line', color, width: 2 } },
+        title: `${name} · line`
+      }))
+    }
+
+    out.push(new esri.FeatureLayer({
+      source: g.points,
+      fields: pointFields,
+      objectIdField: '__oid',
+      geometryType: 'point',
+      spatialReference: { wkid: 4326 },
+      timeInfo: { startField: '__time' },
+      renderer: {
+        type: 'simple',
+        symbol: { type: 'simple-marker', style: 'triangle', color, size: 10, outline: { color: '#fff', width: 1 } },
+        visualVariables: [{ type: 'rotation', field: 'heading', rotationType: 'geographic' }]
+      },
+      title: name
+    }))
+  }
+  return out
 }
