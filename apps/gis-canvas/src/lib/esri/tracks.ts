@@ -97,7 +97,7 @@ export function buildTrackGroups(
     const gid = trackIdField != null ? String(row[trackIdField]) : ''
     const rest: Record<string, string | number> = {}
     for (const [k, v] of Object.entries(row)) {
-      if (k === latKey || k === lngKey || k === timeField) continue
+      if (k === latKey || k === lngKey || k === timeField || (headingField != null && k === headingField)) continue
       if (typeof v === 'string' || typeof v === 'number') rest[k] = v
     }
     const h = headingField != null ? Number(row[headingField]) : Number.NaN

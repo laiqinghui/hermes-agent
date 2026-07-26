@@ -112,6 +112,30 @@ describe('buildTrackGroups', () => {
   test('returns [] when no time field is resolved', () => {
     expect(buildTrackGroups(rows, { latField: 'lat', lngField: 'lng' })).toEqual([])
   })
+
+  test('the resolved heading field (default alias "heading") is not shadowed by its own raw column in rest', () => {
+    // The raw column is a numeric STRING (as real tabular data often is) while the
+    // computed attribute is coerced to a number via Number(row[headingField]) — if
+    // `rest` (spread AFTER the computed key) still carries the raw column, the
+    // string clobbers the number even though they "look" the same.
+    const g = buildTrackGroups(
+      [{ mmsi: 'A', ts: '2026-01-01T00:00Z', lat: 0, lng: 0, heading: '77' }],
+      { timeField: 'ts', trackIdField: 'mmsi', headingField: 'heading', latField: 'lat', lngField: 'lng' }
+    )
+    const attrs = g[0].points[0].attributes as Record<string, unknown>
+    expect(attrs.heading).toBe(77) // normalized number, not the raw '77' string
+    expect(typeof attrs.heading).toBe('number')
+  })
+
+  test('an overridden headingField is excluded from rest so it cannot shadow the computed heading', () => {
+    const g = buildTrackGroups(
+      [{ mmsi: 'A', ts: '2026-01-01T00:00Z', lat: 0, lng: 0, course: '123' }],
+      { timeField: 'ts', trackIdField: 'mmsi', headingField: 'course', latField: 'lat', lngField: 'lng' }
+    )
+    const attrs = g[0].points[0].attributes as Record<string, unknown>
+    expect(attrs.heading).toBe(123) // normalized number, not the raw '123' string
+    expect(attrs.course).toBeUndefined() // the resolved heading source column is excluded from rest
+  })
 })
 
 describe('timeExtentOf', () => {

@@ -4,6 +4,7 @@ import { buildLayer, buildRowsLayer, trackLayersFromGroups } from '../../lib/esr
 import { resolveTrackFields, buildTrackGroups, type TrackFields } from '../../lib/esri/tracks'
 import { resolveLayerColor } from '../../lib/esri/layer-color'
 import { isDataHandle } from '../../lib/data-plane'
+import { resolveMockSource } from '../../lib/mock-data'
 import { useCanvasActions } from '../HandlerContext'
 import { useSelectionActions, useSelectionState } from '../SelectionContext'
 import { resolveIdField } from '../../lib/selection'
@@ -80,24 +81,35 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
       mapCtx.current = null
       setRoles(null)
       let trackColorBase = 0
+      let rolesSet = false
       for (let i = 0; i < layerRefs.length; i++) {
         const r = layerRefs[i]
         const meta = layerMeta[i] ?? {}
         const title = meta.title ?? (node.props?.title as string | undefined) ?? r
         const color = meta.color ?? resolveLayerColor(i)
         try {
-          if (render === 'track' && isDataHandle(r)) {
-            const page = await actions.fetchData(r, { pageSize: 5000 })
-            if (cancelled) return
-            const rows = page.rows as Record<string, unknown>[]
-            const fields = resolveTrackFields(page.schema as never, {
+          if (render === 'track' && (isDataHandle(r) || r.startsWith('mock://'))) {
+            let schema: unknown
+            let rows: Record<string, unknown>[]
+            if (isDataHandle(r)) {
+              const page = await actions.fetchData(r, { pageSize: 5000 })
+              if (cancelled) return
+              schema = page.schema
+              rows = page.rows as Record<string, unknown>[]
+            } else {
+              const src = resolveMockSource(r)
+              if (!src) continue
+              schema = src.schema
+              rows = src.rows as Record<string, unknown>[]
+            }
+            const fields = resolveTrackFields(schema as never, {
               timeField: props.timeField, trackIdField: props.trackIdField, headingField: props.headingField,
               latField: props.latField, lngField: props.lngField
             })
-            if (r === source) setRoles(fields)
+            if (!rolesSet) { setRoles(fields); rolesSet = true }
             const groups = buildTrackGroups(rows, fields, trackColorBase)
             trackColorBase += groups.length
-            const trackLayers = trackLayersFromGroups(groups, esri, page.schema as never, meta.title ?? title)
+            const trackLayers = trackLayersFromGroups(groups, esri, schema as never, meta.title ?? title)
             if (view) for (const tl of trackLayers) { view.map.add(tl); addedLayersRef.current.push(tl) }
             continue
           }

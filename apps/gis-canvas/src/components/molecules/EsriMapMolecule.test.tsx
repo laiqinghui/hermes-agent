@@ -315,6 +315,27 @@ test('render:track builds track layers per group and shows the resolved-roles ca
   expect(container.textContent).toMatch(/track mmsi/i)
 })
 
+test('render:track builds track layers for a mock:// source (no-Denodo demo path)', async () => {
+  const added: any[] = []
+  const fakeView = { map: { add: (l: any) => added.push(l), removeMany: () => {} }, popupEnabled: true, on: () => ({ remove() {} }) }
+  const actions: CanvasActions = { setLocalState() {}, reportInteraction() {}, sendPrompt() {}, fetchData: vi.fn() }
+  const node: ComponentNode = {
+    id: 'trkm', type: 'esri:map', bindings: { layers: ['mock://vessel-track'] }, props: { render: 'track' }
+  }
+  const { container } = render(
+    <HandlerProvider actions={actions}><EsriMapMolecule node={node} renderChild={() => null} /></HandlerProvider>
+  )
+  const mapEl = container.querySelector('arcgis-map') as any
+  mapEl.view = fakeView
+  mapEl.dispatchEvent(new CustomEvent('arcgisViewReadyChange'))
+  // two distinct platforms (WONDER VEGA + ORION PEARL) → the fake factory returns one layer per group
+  await waitFor(() => expect(added.length).toBe(2))
+  expect(actions.fetchData).not.toHaveBeenCalled()
+  // resolved-roles caption must show even though the source is mock:// (not a data:// handle)
+  expect(container.textContent).toMatch(/temporal ts/i)
+  expect(container.textContent).toMatch(/track mmsi/i)
+})
+
 test('render:track honours explicit field overrides in the caption', async () => {
   const fakeView = { map: { add: () => {}, removeMany: () => {} }, popupEnabled: true, on: () => ({ remove() {} }) }
   const fetchData = vi.fn().mockResolvedValue({
