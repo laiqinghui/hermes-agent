@@ -152,3 +152,9 @@ def test_tool_guidance_documents_tracks(plugin):
     text = plugin.tools_canvas.RENDER_VIEW_SCHEMA["description"] + plugin.tools_canvas._CATALOG_HELP
     for kw in ("render:'track'", "esri:time-slider", "timeField", "trackIdField", "spatio-temporal"):
         assert kw in text, f"track guidance missing {kw!r}"
+
+
+def test_tool_guidance_documents_ontology_and_entity_detail(plugin):
+    text = plugin.tools_canvas.RENDER_VIEW_SCHEMA["description"] + plugin.tools_canvas._CATALOG_HELP
+    for kw in ("entity-detail", "ontology", "links", "reverse"):
+        assert kw in text, f"ontology guidance missing {kw!r}"

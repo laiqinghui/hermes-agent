@@ -59,6 +59,28 @@ const SOURCES: Record<string, MockSource> = {
       { mmsi: '440111222', vessel_name: 'ORION PEARL', ts: '2026-01-05T03:00:00Z', lat: 1.318, lng: 103.855, cog: 228 },
       { mmsi: '440111222', vessel_name: 'ORION PEARL', ts: '2026-01-05T04:00:00Z', lat: 1.270, lng: 103.820, cog: 220 }
     ]
+  },
+  'mock://vessels': {
+    schema: [
+      { name: 'mmsi', type: 'string' }, { name: 'vessel_name', type: 'string' }, { name: 'flag', type: 'string' },
+      { name: 'length_m', type: 'number' }, { name: 'status', type: 'string' }, { name: 'operator_id', type: 'string' },
+      { name: 'lat', type: 'number' }, { name: 'lng', type: 'number' }
+    ],
+    rows: [
+      { mmsi: '563123000', vessel_name: 'WONDER VEGA', flag: 'SG', length_m: 229, status: 'under way', operator_id: 'OP1', lat: 1.264, lng: 103.84 },
+      { mmsi: '440111222', vessel_name: 'ORION PEARL', flag: 'KR', length_m: 183, status: 'moored', operator_id: 'OP2', lat: 1.29, lng: 103.85 },
+      { mmsi: '563998000', vessel_name: 'SILVER TERN', flag: 'SG', length_m: 199, status: 'under way', operator_id: 'OP1', lat: 1.31, lng: 103.79 }
+    ]
+  },
+  'mock://operators': {
+    schema: [
+      { name: 'op_id', type: 'string' }, { name: 'name', type: 'string' },
+      { name: 'country', type: 'string' }, { name: 'fleet_size', type: 'number' }
+    ],
+    rows: [
+      { op_id: 'OP1', name: 'ACME MARINE', country: 'SG', fleet_size: 12 },
+      { op_id: 'OP2', name: 'BOREAS LINES', country: 'KR', fleet_size: 7 }
+    ]
   }
 }
 
