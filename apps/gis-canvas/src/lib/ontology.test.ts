@@ -60,3 +60,45 @@ describe('resolveEntity', () => {
     expect(resolveEntity(ONT, 'ghost', VESSELS, 'WONDER VEGA')).toBeNull()
   })
 })
+
+import { resolveLinks } from './ontology'
+
+const OPERATORS: SourceData = {
+  schema: [{ name: 'op_id' }, { name: 'name' }, { name: 'country' }],
+  rows: [{ op_id: 'OP1', name: 'ACME MARINE', country: 'SG' }, { op_id: 'OP2', name: 'BOREAS LINES', country: 'KR' }]
+}
+const SOURCES = { 'mock://vessels': VESSELS, 'mock://operators': OPERATORS }
+
+describe('resolveLinks', () => {
+  test('forward link resolves the single target entity with its title + selection key', () => {
+    const focal = VESSELS.rows[0] // WONDER VEGA, operator_id OP1
+    const groups = resolveLinks(ONT, 'vessel', focal, SOURCES)
+    expect(groups).toHaveLength(1)
+    expect(groups[0]).toMatchObject({ name: 'operator', to: 'operator' })
+    expect(groups[0].entities).toHaveLength(1)
+    expect(groups[0].entities[0].title).toBe('ACME MARINE')
+    // operator source: op_id is the only distinct column -> resolveIdField picks op_id -> key 'OP1'
+    expect(groups[0].entities[0].ref).toEqual({ type: 'operator', source: 'mock://operators', id: 'OP1', key: 'OP1' })
+  })
+
+  test('reverse link scans the other source for rows pointing back', () => {
+    const focal = OPERATORS.rows[0] // OP1 -> owns WONDER VEGA (operator_id OP1)
+    const groups = resolveLinks(ONT, 'operator', focal, SOURCES)
+    expect(groups).toHaveLength(1)
+    expect(groups[0]).toMatchObject({ name: 'vessels', to: 'vessel' })
+    expect(groups[0].entities.map(e => e.title)).toEqual(['WONDER VEGA'])
+    // vessels source: vessel_name distinct -> selection key is the name
+    expect(groups[0].entities[0].ref.key).toBe('WONDER VEGA')
+    expect(groups[0].entities[0].ref.id).toBe('563123000')
+  })
+
+  test('omits a link whose target source is not loaded', () => {
+    const focal = VESSELS.rows[0]
+    expect(resolveLinks(ONT, 'vessel', focal, { 'mock://vessels': VESSELS })).toEqual([])
+  })
+
+  test('omits a forward link that resolves to no target row', () => {
+    const focal = { vessel_name: 'GHOST', mmsi: 'Z', operator_id: 'NOPE' }
+    expect(resolveLinks(ONT, 'vessel', focal, SOURCES)).toEqual([])
+  })
+})

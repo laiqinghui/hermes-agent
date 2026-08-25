@@ -1,5 +1,5 @@
 import { resolveIdField } from './selection'
-import type { Ontology } from './types'
+import type { Ontology, EntityType } from './types'
 
 export interface EntityRef { type: string; source: string; id: string; key: string }
 export interface ResolvedEntity {
@@ -42,4 +42,48 @@ export function resolveEntity(
     entity: { ref: { type, source: et.source, id: idVal, key }, title: title || idVal, typeLabel: type, props, provenance: { source: et.source } },
     row
   }
+}
+
+export interface RelatedEntity { ref: EntityRef; title: string }
+export interface LinkGroup { name: string; to: string; entities: RelatedEntity[] }
+
+function makeRelated(type: string, et: EntityType, row: Record<string, unknown>, idField: string): RelatedEntity {
+  const idVal = String(row[et.id] ?? '')
+  const title = et.title != null ? String(row[et.title] ?? '') : ''
+  return { ref: { type, source: et.source, id: idVal, key: String(row[idField] ?? '') }, title: title || idVal }
+}
+
+/** Resolve a focal row's declared links to related entities. `sources` holds the
+ * already-fetched data for every source a link may reach. */
+export function resolveLinks(
+  ontology: Ontology,
+  focalType: string,
+  focalRow: Record<string, unknown>,
+  sources: Record<string, SourceData>
+): LinkGroup[] {
+  const et = ontology[focalType]
+  if (!et?.links) return []
+  const focalId = String(focalRow[et.id] ?? '')
+  const groups: LinkGroup[] = []
+  for (const [name, link] of Object.entries(et.links)) {
+    const targetType = ontology[link.to]
+    if (!targetType) continue
+    const tdata = sources[targetType.source]
+    if (!tdata) continue // target source not loaded → omit
+    const tIdField = resolveIdField(tdata.schema, tdata.rows)
+    const entities: RelatedEntity[] = []
+    if (link.reverse) {
+      for (const r of tdata.rows) {
+        if (String(r[link.field] ?? '') === focalId) entities.push(makeRelated(link.to, targetType, r, tIdField))
+      }
+    } else {
+      const targetVal = String(focalRow[link.field] ?? '')
+      if (targetVal) {
+        const r = tdata.rows.find(x => String(x[targetType.id] ?? '') === targetVal)
+        if (r) entities.push(makeRelated(link.to, targetType, r, tIdField))
+      }
+    }
+    if (entities.length) groups.push({ name, to: link.to, entities })
+  }
+  return groups
 }
