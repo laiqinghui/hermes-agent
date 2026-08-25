@@ -21,9 +21,37 @@
     },
     "components": { "type": "array", "items": { "$ref": "#/$defs/componentNode" } },
     "overlays": { "type": "array", "items": { "$ref": "#/$defs/componentNode" } },
-    "focus": { "type": "string" }
+    "focus": { "type": "string" },
+    "ontology": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/entityType" }
+    }
   },
   "$defs": {
+    "entityType": {
+      "type": "object",
+      "required": ["source", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string" },
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "props": { "type": "array", "items": { "type": "string" } },
+        "links": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["to", "field"],
+            "additionalProperties": false,
+            "properties": {
+              "to": { "type": "string" },
+              "field": { "type": "string" },
+              "reverse": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
     "area": {
       "type": "object",
       "required": ["col", "colSpan", "row", "rowSpan"],

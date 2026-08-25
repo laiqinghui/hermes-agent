@@ -175,4 +175,15 @@ def validate_doc(doc: dict) -> list[str]:
     for overlay in doc.get("overlays", []):
         walk(overlay, 1, top_level=False)  # overlays are portals: no grid area
 
+    # Ontology cross-checks (source+id are enforced by the JSON schema; this catches
+    # dangling link targets, which the schema can't express).
+    ontology = doc.get("ontology") or {}
+    for type_name, entry in ontology.items():
+        for link_name, link in (entry.get("links") or {}).items():
+            target = link.get("to")
+            if target not in ontology:
+                errors.append(
+                    f"ontology '{type_name}'.links.{link_name}: 'to' references undeclared type '{target}'"
+                )
+
     return errors

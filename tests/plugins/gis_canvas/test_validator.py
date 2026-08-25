@@ -374,3 +374,31 @@ def test_esri_time_slider_valid_doc_passes(plugin):
 
 def test_esri_time_slider_state_keys_registered(plugin):
     assert "esri:time-slider" in plugin.validator.STATE_KEYS
+
+
+def _ontology_doc():
+    doc = _minimal_doc()
+    doc["ontology"] = {
+        "vessel": {"source": "data://v", "id": "mmsi", "title": "vessel_name",
+                   "links": {"operator": {"to": "operator", "field": "operator_id"}}},
+        "operator": {"source": "data://o", "id": "op_id", "title": "name"},
+    }
+    return doc
+
+
+def test_valid_ontology_doc_passes(plugin):
+    assert plugin.validator.validate_doc(_ontology_doc()) == []
+
+
+def test_ontology_entry_requires_source_and_id(plugin):
+    doc = _ontology_doc()
+    del doc["ontology"]["operator"]["id"]
+    errors = plugin.validator.validate_doc(doc)
+    assert any("operator" in e and "id" in e for e in errors)
+
+
+def test_ontology_link_to_must_name_a_declared_type(plugin):
+    doc = _ontology_doc()
+    doc["ontology"]["vessel"]["links"]["operator"]["to"] = "ghost"
+    errors = plugin.validator.validate_doc(doc)
+    assert any("ghost" in e for e in errors)
