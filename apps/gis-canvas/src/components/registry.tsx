@@ -5,6 +5,7 @@ import { StatMolecule } from './molecules/StatMolecule'
 import { DataTableMolecule } from './molecules/DataTableMolecule'
 import { SelectMolecule } from './molecules/SelectMolecule'
 import { TabsMolecule } from './molecules/TabsMolecule'
+import { EntityDetailMolecule } from './molecules/EntityDetailMolecule'
 
 export interface MoleculeProps {
   node: ComponentNode
@@ -69,6 +70,7 @@ export const COMPONENT_REGISTRY: Record<string, ComponentType<MoleculeProps>> = 
   'data-table': DataTableMolecule,
   select: SelectMolecule,
   tabs: TabsMolecule,
+  'entity-detail': EntityDetailMolecule,
   'esri:map': EsriMap,
   'esri:legend': EsriLegend,
   'esri:layer-list': EsriLayerList,

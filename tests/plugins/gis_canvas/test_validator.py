@@ -336,6 +336,16 @@ def test_tabs_non_list_tabs_prop_does_not_crash(plugin):
     assert isinstance(errors, list)
 
 
+def test_entity_detail_valid_doc_passes(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({"id": "ed", "type": "entity-detail", "layer": "dock", "edge": "right"})
+    assert plugin.validator.validate_doc(doc) == []
+
+
+def test_entity_detail_state_keys_registered(plugin):
+    assert "entity-detail" in plugin.validator.STATE_KEYS
+
+
 def test_esri_layer_list_valid_doc_passes(plugin):
     doc = _minimal_doc()
     doc["components"].append(

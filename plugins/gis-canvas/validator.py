@@ -64,6 +64,10 @@ CATALOG: dict[str, dict] = {
         "container": False, "slots": set(),
         "required_props": [], "required_bindings": [],
     },
+    "entity-detail": {
+        "container": False, "slots": set(),
+        "required_props": [], "required_bindings": [],
+    },
     "esri:feature-table": {
         "container": False, "slots": set(),
         "required_props": [], "required_bindings": ["layer"],
@@ -82,6 +86,7 @@ STATE_KEYS: dict[str, set[str]] = {
     "esri:legend": set(),
     "esri:layer-list": set(),
     "esri:time-slider": set(),
+    "entity-detail": set(),
     "esri:feature-table": {"selection"},
 }
 

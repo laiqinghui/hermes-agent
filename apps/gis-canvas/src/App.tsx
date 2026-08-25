@@ -19,6 +19,7 @@ import type { CanvasActions } from './lib/handlers'
 import { resolveBffUrl, authMe, loginUrl, bindSessions, logout, type AuthState } from './lib/auth'
 import { SelectionProvider } from './components/SelectionContext'
 import { TimeExtentProvider } from './components/TimeExtentContext'
+import { OntologyProvider } from './components/OntologyContext'
 import { collectNodesBySource } from './lib/selection'
 import { LayoutProvider } from './components/LayoutProvider'
 import { useLayoutStore } from './lib/use-layout-store'
@@ -185,11 +186,13 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         {mergedDoc ? (
           <SelectionProvider nodesBySource={nodesBySource} onMirror={mirrorSelection}>
             <TimeExtentProvider>
-              <HandlerProvider actions={actions}>
-                <LayoutProvider store={layout}>
-                  <CanvasGrid doc={mergedDoc} />
-                </LayoutProvider>
-              </HandlerProvider>
+              <OntologyProvider ontology={mergedDoc.ontology}>
+                <HandlerProvider actions={actions}>
+                  <LayoutProvider store={layout}>
+                    <CanvasGrid doc={mergedDoc} />
+                  </LayoutProvider>
+                </HandlerProvider>
+              </OntologyProvider>
             </TimeExtentProvider>
           </SelectionProvider>
         ) : !isBusy ? (
