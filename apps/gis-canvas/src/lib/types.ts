@@ -2,7 +2,7 @@
  * TypeScript mirror of plugins/gis-canvas/schema/canvas.schema.json (v1).
  * Keep in sync when the schema changes.
  */
-export const MOLECULE_TYPES = ['card', 'stat', 'data-table', 'select', 'tabs', 'esri:map', 'esri:legend', 'esri:layer-list', 'esri:time-slider', 'esri:feature-table'] as const
+export const MOLECULE_TYPES = ['card', 'stat', 'data-table', 'select', 'tabs', 'esri:map', 'esri:legend', 'esri:layer-list', 'esri:time-slider', 'entity-detail', 'esri:feature-table'] as const
 export type MoleculeType = (typeof MOLECULE_TYPES)[number]
 
 export interface Area {
@@ -55,6 +55,10 @@ export interface ComponentNode {
   handlers?: Record<string, Handler>
 }
 
+export interface LinkDef { to: string; field: string; reverse?: boolean }
+export interface EntityType { source: string; id: string; title?: string; props?: string[]; links?: Record<string, LinkDef> }
+export type Ontology = Record<string, EntityType>
+
 export interface GridLayout {
   type: 'grid'
   cols: number
@@ -69,6 +73,7 @@ export interface CanvasDoc {
   components: ComponentNode[]
   overlays?: ComponentNode[]
   focus?: string
+  ontology?: Ontology
 }
 
 /** Envelope carried in canvas tool results (see plugins/gis-canvas/tools_canvas.py). */
