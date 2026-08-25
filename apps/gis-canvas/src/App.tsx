@@ -18,6 +18,7 @@ import { fetchDataPage } from './lib/data-plane'
 import type { CanvasActions } from './lib/handlers'
 import { resolveBffUrl, authMe, loginUrl, bindSessions, logout, type AuthState } from './lib/auth'
 import { SelectionProvider } from './components/SelectionContext'
+import { TimeExtentProvider } from './components/TimeExtentContext'
 import { collectNodesBySource } from './lib/selection'
 import { LayoutProvider } from './components/LayoutProvider'
 import { useLayoutStore } from './lib/use-layout-store'
@@ -183,11 +184,13 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         <CanvasHeader rev={mergedDoc?.rev} isBusy={isBusy} />
         {mergedDoc ? (
           <SelectionProvider nodesBySource={nodesBySource} onMirror={mirrorSelection}>
-            <HandlerProvider actions={actions}>
-              <LayoutProvider store={layout}>
-                <CanvasGrid doc={mergedDoc} />
-              </LayoutProvider>
-            </HandlerProvider>
+            <TimeExtentProvider>
+              <HandlerProvider actions={actions}>
+                <LayoutProvider store={layout}>
+                  <CanvasGrid doc={mergedDoc} />
+                </LayoutProvider>
+              </HandlerProvider>
+            </TimeExtentProvider>
           </SelectionProvider>
         ) : !isBusy ? (
           <div className="flex h-full items-center justify-center text-sm text-tertiary">

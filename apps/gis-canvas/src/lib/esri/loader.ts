@@ -6,6 +6,7 @@ export interface EsriBag {
   Point: new (o: unknown) => unknown
   geometryEngine: { contains(container: unknown, inside: unknown): boolean }
   webMercatorUtils: { webMercatorToGeographic(geometry: unknown): unknown }
+  TimeExtent: new (o: unknown) => unknown
 }
 
 // @arcgis/core loads Web Workers/WASM/assets at runtime from esriConfig.assetsPath.
@@ -42,7 +43,8 @@ export function loadEsri(): Promise<EsriBag> {
       { default: HeatmapRenderer },
       { default: Point },
       geometryEngine,
-      webMercatorUtils
+      webMercatorUtils,
+      { default: TimeExtent }
     ] = await Promise.all([
       import('@arcgis/core/config.js'),
       import('@arcgis/core/layers/FeatureLayer.js'),
@@ -50,12 +52,13 @@ export function loadEsri(): Promise<EsriBag> {
       import('@arcgis/core/renderers/HeatmapRenderer.js'),
       import('@arcgis/core/geometry/Point.js'),
       import('@arcgis/core/geometry/geometryEngine.js'),
-      import('@arcgis/core/geometry/support/webMercatorUtils.js')
+      import('@arcgis/core/geometry/support/webMercatorUtils.js'),
+      import('@arcgis/core/time/TimeExtent.js')
     ])
     esriConfig.assetsPath = ARCGIS_ASSETS_CDN
     const key = (import.meta.env as Record<string, string | undefined>).VITE_ARCGIS_API_KEY
     if (key) esriConfig.apiKey = key
-    return { esriConfig, FeatureLayer, reactiveUtils, HeatmapRenderer, Point, geometryEngine, webMercatorUtils } as unknown as EsriBag
+    return { esriConfig, FeatureLayer, reactiveUtils, HeatmapRenderer, Point, geometryEngine, webMercatorUtils, TimeExtent } as unknown as EsriBag
   })()
   return cached
 }

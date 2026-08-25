@@ -3,6 +3,7 @@ import { describe, it, vi } from 'vitest'
 import type { ComponentNode } from '../../lib/types'
 import { HandlerProvider } from '../HandlerContext'
 import { SelectionProvider, useLinkedSelection, useSelectionState, useSelectionActions } from '../SelectionContext'
+import { TimeExtentProvider, useMapTimeExtent } from '../TimeExtentContext'
 import type { CanvasActions } from '../../lib/handlers'
 
 const built: string[] = []
@@ -357,4 +358,36 @@ test('render:track honours explicit field overrides in the caption', async () =>
   await waitFor(() => expect(fetchData).toHaveBeenCalled())
   await waitFor(() => expect(container.textContent).toMatch(/temporal when/i))
   expect(container.textContent).toMatch(/track name/i)
+})
+
+test('render:track publishes the union time extent for its map id', async () => {
+  const fakeView = { map: { add: () => {}, removeMany: () => {} }, popupEnabled: true, on: () => ({ remove() {} }) }
+  const fetchData = vi.fn().mockResolvedValue({
+    ok: true, total: 2, page: 0, pageSize: 5000,
+    schema: [{ name: 'mmsi', type: 'string' }, { name: 'ts', type: 'string' },
+             { name: 'lat', type: 'number' }, { name: 'lng', type: 'number' }, { name: 'cog', type: 'number' }],
+    rows: [
+      { mmsi: 'A', ts: '2026-01-01T00:00Z', lat: 0, lng: 0, cog: 10 },
+      { mmsi: 'A', ts: '2026-01-01T03:00Z', lat: 1, lng: 1, cog: 20 }
+    ]
+  })
+  const actions: CanvasActions = { setLocalState() {}, reportInteraction() {}, sendPrompt() {}, fetchData }
+  const node: ComponentNode = { id: 'trkx', type: 'esri:map', bindings: { layers: ['data://v'] }, props: { render: 'track' } }
+  function Probe() {
+    const ext = useMapTimeExtent('trkx')
+    return <span data-testid="pub">{ext ? `${ext.start}..${ext.end}` : 'none'}</span>
+  }
+  const { container } = render(
+    <TimeExtentProvider>
+      <HandlerProvider actions={actions}>
+        <Probe />
+        <EsriMapMolecule node={node} renderChild={() => null} />
+      </HandlerProvider>
+    </TimeExtentProvider>
+  )
+  const mapEl = container.querySelector('arcgis-map') as any
+  mapEl.view = fakeView
+  mapEl.dispatchEvent(new CustomEvent('arcgisViewReadyChange'))
+  const expected = `${Date.parse('2026-01-01T00:00Z')}..${Date.parse('2026-01-01T03:00Z')}`
+  await waitFor(() => expect(screen.getByTestId('pub').textContent).toBe(expected))
 })

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadEsri } from '../../lib/esri/loader'
 import { buildLayer, buildRowsLayer, trackLayersFromGroups } from '../../lib/esri/layers'
-import { resolveTrackFields, buildTrackGroups, type TrackFields } from '../../lib/esri/tracks'
+import { resolveTrackFields, buildTrackGroups, timeExtentOf, type TrackFields, type TrackGroup } from '../../lib/esri/tracks'
 import { resolveLayerColor } from '../../lib/esri/layer-color'
 import { isDataHandle } from '../../lib/data-plane'
 import { resolveMockSource } from '../../lib/mock-data'
 import { useCanvasActions } from '../HandlerContext'
 import { useSelectionActions, useSelectionState } from '../SelectionContext'
+import { useTimeExtentPublisher } from '../TimeExtentContext'
 import { resolveIdField } from '../../lib/selection'
 import { detectGeoFields } from '../../lib/esri/graphics'
 import { containedKeys } from '../../lib/esri/spatial'
@@ -48,6 +49,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   const addedLayersRef = useRef<unknown[]>([])
   const [buildTick, setBuildTick] = useState(0)
   const [roles, setRoles] = useState<TrackFields | null>(null)
+  const publishTimeExtent = useTimeExtentPublisher()
 
   const layerMeta = (node.props?.layers as Array<{ title?: string; color?: string }> | undefined) ?? []
   const layersSig = JSON.stringify({ layers: layerRefs, meta: layerMeta, render })
@@ -82,6 +84,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
       setRoles(null)
       let trackColorBase = 0
       let rolesSet = false
+      const allTrackGroups: TrackGroup[] = []
       for (let i = 0; i < layerRefs.length; i++) {
         const r = layerRefs[i]
         const meta = layerMeta[i] ?? {}
@@ -109,6 +112,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
             if (!rolesSet) { setRoles(fields); rolesSet = true }
             const groups = buildTrackGroups(rows, fields, trackColorBase)
             trackColorBase += groups.length
+            allTrackGroups.push(...groups)
             const trackLayers = trackLayersFromGroups(groups, esri, schema as never, meta.title ?? title)
             if (view) for (const tl of trackLayers) { view.map.add(tl); addedLayersRef.current.push(tl) }
             continue
@@ -144,7 +148,13 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
         } catch (e) { console.error('layer build failed', r, e) }
       }
       if (view) view.popupEnabled = false
-      if (!cancelled) setBuildTick(t => t + 1)
+      if (!cancelled) {
+        // Publish the union time extent so a linked esri:time-slider can set its
+        // own fullTimeExtent (the bare web component can't derive it from our
+        // client-synthesized layers). Null when this map isn't a track render.
+        publishTimeExtent(node.id, render === 'track' ? timeExtentOf(allTrackGroups) : null)
+        setBuildTick(t => t + 1)
+      }
     })().catch(() => {})
     return () => { cancelled = true }
   }, [ready, layersSig]) // eslint-disable-line react-hooks/exhaustive-deps
