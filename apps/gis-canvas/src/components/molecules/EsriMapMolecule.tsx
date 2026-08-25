@@ -49,6 +49,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   const addedLayersRef = useRef<unknown[]>([])
   const [buildTick, setBuildTick] = useState(0)
   const [roles, setRoles] = useState<TrackFields | null>(null)
+  const [trackEmpty, setTrackEmpty] = useState(false)
   const publishTimeExtent = useTimeExtentPublisher()
 
   const layerMeta = (node.props?.layers as Array<{ title?: string; color?: string }> | undefined) ?? []
@@ -82,6 +83,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
       layersRef.current = []
       mapCtx.current = null
       setRoles(null)
+      setTrackEmpty(false)
       let trackColorBase = 0
       let rolesSet = false
       const allTrackGroups: TrackGroup[] = []
@@ -153,6 +155,10 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
         // own fullTimeExtent (the bare web component can't derive it from our
         // client-synthesized layers). Null when this map isn't a track render.
         publishTimeExtent(node.id, render === 'track' ? timeExtentOf(allTrackGroups) : null)
+        // Surface a track render that produced nothing (no usable time field /
+        // coordinates) instead of leaving a silently-empty map.
+        const trackEligible = render === 'track' && layerRefs.some(r => isDataHandle(r) || r.startsWith('mock://'))
+        setTrackEmpty(trackEligible && allTrackGroups.length === 0)
         setBuildTick(t => t + 1)
       }
     })().catch(() => {})
@@ -279,6 +285,14 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
           <span>◇ spatial {roles.latField ?? 'lat'}/{roles.lngField ?? 'lng'}</span>
           <span>◷ temporal {roles.timeField ?? '—'}</span>
           {roles.trackIdField ? <span>⛓ track {roles.trackIdField}</span> : null}
+        </div>
+      ) : null}
+      {trackEmpty ? (
+        <div
+          data-testid="track-empty"
+          className="pointer-events-none absolute inset-x-4 top-1/2 z-6 -translate-y-1/2 rounded-gc-md border border-hairline bg-surface/90 px-3 py-2 text-center font-sans text-xs text-tertiary backdrop-blur-sm"
+        >
+          No track data — the source has no usable time field or coordinates. Check props.timeField / latField / lngField against the source columns.
         </div>
       ) : null}
     </EsriFrame>

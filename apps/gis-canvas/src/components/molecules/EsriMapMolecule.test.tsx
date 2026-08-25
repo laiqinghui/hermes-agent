@@ -391,3 +391,23 @@ test('render:track publishes the union time extent for its map id', async () => 
   const expected = `${Date.parse('2026-01-01T00:00Z')}..${Date.parse('2026-01-01T03:00Z')}`
   await waitFor(() => expect(screen.getByTestId('pub').textContent).toBe(expected))
 })
+
+test('render:track shows a "no track data" note when no tracks build (no usable time field)', async () => {
+  const fakeView = { map: { add: () => {}, removeMany: () => {} }, popupEnabled: true, on: () => ({ remove() {} }) }
+  const fetchData = vi.fn().mockResolvedValue({
+    ok: true, total: 1, page: 0, pageSize: 5000,
+    // no time-like column → resolveTrackFields leaves timeField undefined → 0 groups
+    schema: [{ name: 'name', type: 'string' }, { name: 'lat', type: 'number' }, { name: 'lng', type: 'number' }],
+    rows: [{ name: 'A', lat: 1, lng: 1 }]
+  })
+  const actions: CanvasActions = { setLocalState() {}, reportInteraction() {}, sendPrompt() {}, fetchData }
+  const node: ComponentNode = { id: 'trke', type: 'esri:map', bindings: { layers: ['data://v'] }, props: { render: 'track' } }
+  const { container } = render(
+    <HandlerProvider actions={actions}><EsriMapMolecule node={node} renderChild={() => null} /></HandlerProvider>
+  )
+  const mapEl = container.querySelector('arcgis-map') as any
+  mapEl.view = fakeView
+  mapEl.dispatchEvent(new CustomEvent('arcgisViewReadyChange'))
+  await waitFor(() => expect(fetchData).toHaveBeenCalled())
+  await waitFor(() => expect(screen.getByTestId('track-empty')).toBeInTheDocument())
+})
