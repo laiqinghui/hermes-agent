@@ -28,6 +28,28 @@ describe('resolveTrackFields', () => {
     expect(r.latField).toBe('lat')
     expect(r.lngField).toBe('lng')
   })
+
+  const VESSEL: MockField[] = [
+    { name: 'mmsi', type: 'string' }, { name: 'vessel_name', type: 'string' }, { name: 'ts', type: 'string' },
+    { name: 'lat', type: 'number' }, { name: 'lng', type: 'number' }, { name: 'cog', type: 'number' }
+  ]
+
+  test('an override naming a non-existent column falls back to alias detection', () => {
+    // An agent that guesses the wrong field names (timeField:'timestamp', trackIdField:'vessel',
+    // headingField:'heading' — none of which exist) must not silently break the render.
+    const r = resolveTrackFields(VESSEL, { timeField: 'timestamp', trackIdField: 'vessel', headingField: 'heading', latField: 'lat', lngField: 'lng' })
+    expect(r.timeField).toBe('ts')       // detected, not the bogus 'timestamp'
+    expect(r.trackIdField).toBe('mmsi')  // detected, not the bogus 'vessel'
+    expect(r.headingField).toBe('cog')   // detected, not the bogus 'heading'
+    expect(r.latField).toBe('lat')
+    expect(r.lngField).toBe('lng')
+  })
+
+  test('an override matching a real column (case-insensitively) resolves to the actual column name', () => {
+    const r = resolveTrackFields(VESSEL, { timeField: 'TS', trackIdField: 'vessel_name' })
+    expect(r.timeField).toBe('ts')            // matched case-insensitively → actual column
+    expect(r.trackIdField).toBe('vessel_name') // honored over the 'mmsi' default
+  })
 })
 
 import { buildTrackGroups, bearingBetween, timeExtentOf } from './tracks'

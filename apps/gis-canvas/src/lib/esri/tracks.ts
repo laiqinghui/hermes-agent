@@ -35,18 +35,26 @@ function detectByAlias(schema: MockField[], aliases: string[]): string | undefin
 }
 
 /**
- * Resolve the field roles a track needs. Explicit overrides (Agent-declared)
- * always win; otherwise fall back to case-insensitive alias detection so a
- * plain data source still renders. lat/lng reuse detectGeoFields.
+ * Resolve the field roles a track needs. An Agent-declared override wins ONLY
+ * when it names a real column (matched case-insensitively → resolved to the
+ * actual column name); a bogus override — e.g. the Agent guessing
+ * timeField:'timestamp' when the column is 'ts' — falls back to alias detection
+ * rather than silently dropping every row. lat/lng reuse detectGeoFields.
  */
 export function resolveTrackFields(schema: MockField[], overrides: TrackFieldOverrides = {}): TrackFields {
   const geo = detectGeoFields(schema)
+  const byLower = new Map<string, string>()
+  for (const f of schema) if (!byLower.has(f.name.toLowerCase())) byLower.set(f.name.toLowerCase(), f.name)
+  // Honor an override only if it resolves to an existing column; else use `detected`.
+  const pick = (override: string | undefined, detected: string | undefined): string | undefined =>
+    (override != null ? byLower.get(override.toLowerCase()) : undefined) ?? detected
+
   return {
-    timeField: overrides.timeField ?? detectByAlias(schema, TIME_ALIASES),
-    trackIdField: overrides.trackIdField ?? detectByAlias(schema, TRACKID_ALIASES),
-    headingField: overrides.headingField ?? detectByAlias(schema, HEADING_ALIASES),
-    latField: overrides.latField ?? geo.latField,
-    lngField: overrides.lngField ?? geo.lngField
+    timeField: pick(overrides.timeField, detectByAlias(schema, TIME_ALIASES)),
+    trackIdField: pick(overrides.trackIdField, detectByAlias(schema, TRACKID_ALIASES)),
+    headingField: pick(overrides.headingField, detectByAlias(schema, HEADING_ALIASES)),
+    latField: pick(overrides.latField, geo.latField),
+    lngField: pick(overrides.lngField, geo.lngField)
   }
 }
 
