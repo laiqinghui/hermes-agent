@@ -158,3 +158,21 @@ def test_tool_guidance_documents_ontology_and_entity_detail(plugin):
     text = plugin.tools_canvas.RENDER_VIEW_SCHEMA["description"] + plugin.tools_canvas._CATALOG_HELP
     for kw in ("entity-detail", "ontology", "links", "reverse"):
         assert kw in text, f"ontology guidance missing {kw!r}"
+
+
+def test_catalog_help_no_longer_forbids_all_inline_rows(plugin):
+    """The absolute ban contradicted props.rows; it must stay narrowed to RETRIEVED rows."""
+    help_text = plugin.tools_canvas._CATALOG_HELP
+    assert "NEVER inline data rows" not in help_text
+    assert "props.rows" in help_text
+
+
+def test_catalog_help_documents_the_note_component(plugin):
+    assert "note" in plugin.tools_canvas._CATALOG_HELP
+
+
+def test_render_view_guidance_leads_with_analysis(plugin):
+    desc = plugin.tools_canvas.RENDER_VIEW_SCHEMA["description"]
+    assert "ANALYSIS PRODUCT" in desc
+    # the old rule told the agent to hero the DATA -- that caused source-data-review canvases
+    assert "for a tabular-only result make the main data-table the layer:'base'" not in desc
