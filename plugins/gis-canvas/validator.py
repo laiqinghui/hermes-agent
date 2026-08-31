@@ -29,6 +29,12 @@ CATALOG: dict[str, dict] = {
         "required_props": ["label", "value"],
         "required_bindings": [],
     },
+    "note": {
+        "container": False,
+        "slots": set(),
+        "required_props": ["body"],
+        "required_bindings": [],
+    },
     "data-table": {
         "container": False,
         "slots": set(),
@@ -79,6 +85,7 @@ CATALOG: dict[str, dict] = {
 STATE_KEYS: dict[str, set[str]] = {
     "card": set(),
     "stat": set(),
+    "note": set(),
     "data-table": {"rowSelection", "sort", "columnFilters", "columnVisibility", "page", "filter"},
     "select": {"value"},
     "tabs": {"active"},

@@ -402,3 +402,21 @@ def test_ontology_link_to_must_name_a_declared_type(plugin):
     doc["ontology"]["vessel"]["links"]["operator"]["to"] = "ghost"
     errors = plugin.validator.validate_doc(doc)
     assert any("ghost" in e for e in errors)
+
+
+def test_note_component_accepted(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "kj", "type": "note", "layer": "base",
+        "props": {"title": "Key judgments", "body": "## AGNI\n**148-day** silence"},
+    })
+    assert plugin.validator.validate_doc(doc) == []
+
+
+def test_note_requires_body(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "kj", "type": "note", "layer": "base", "props": {"title": "No body"},
+    })
+    errors = plugin.validator.validate_doc(doc)
+    assert any("body" in e for e in errors)
