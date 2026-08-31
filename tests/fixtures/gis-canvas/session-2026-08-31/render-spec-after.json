@@ -1,0 +1,60 @@
+{
+  "canvasVersion": 1,
+  "layout": { "type": "grid", "cols": 12, "rowHeight": 80, "gap": 8 },
+  "components": [
+    {
+      "id": "judgments",
+      "type": "note",
+      "layer": "base",
+      "props": {
+        "title": "Key judgments — shadow-fleet AIS gaps",
+        "body": "## Highest-value imagery tasking windows\n\n1. **AGNI** 2025-06-25 to 2025-11-20 — longest silence, 148 days.\n2. **CLYDE NOBLE** 2025-05-19 to 2025-09-08 — 111.8-day silence plus MMSI change.\n3. **WONDER VEGA** 2025-07-17 to 2025-09-03 — 47.7-day silence plus MMSI change.\n4. **TREND** 2025-11-02 to 2025-12-08 — 35.1-day silence, tight geographic boundary.\n\n---\n\n### Sensor recommendation\n\n- **SAR first** for every window: cloud and night independent.\n- **High-resolution optical** when daylight and cloud allow: deck activity, rendezvous, possible STS indicators.\n- For MMSI-change gaps, task both the **late-gap** and **first-reappearance** windows to see whether the same hull returns under a new identity."
+      }
+    },
+    {
+      "id": "gaps",
+      "type": "data-table",
+      "layer": "dock",
+      "edge": "bottom",
+      "size": { "w": 100, "h": 34 },
+      "props": {
+        "title": "AIS gaps & recommended tasking windows",
+        "rows": [
+          { "vessel": "AGNI", "gap": "A", "last_ais": "2025-06-25T20:22Z", "first_ais": "2025-11-20T19:37Z", "days": 148.0, "mmsi_change": "no", "early_sar": "2025-06-26 02:22Z-08:22Z" },
+          { "vessel": "CLYDE NOBLE", "gap": "A", "last_ais": "2025-05-19T06:30Z", "first_ais": "2025-09-08T01:07Z", "days": 111.8, "mmsi_change": "yes", "early_sar": "2025-05-19 12:30Z-18:30Z" },
+          { "vessel": "WONDER VEGA", "gap": "A", "last_ais": "2025-07-17T16:47Z", "first_ais": "2025-09-03T09:28Z", "days": 47.7, "mmsi_change": "yes", "early_sar": "2025-07-17 22:47Z-04:47Z" },
+          { "vessel": "WONDER VEGA", "gap": "B", "last_ais": "2025-09-19T18:30Z", "first_ais": "2025-11-02T02:52Z", "days": 43.3, "mmsi_change": "no", "early_sar": "2025-09-20 00:30Z-06:30Z" },
+          { "vessel": "TREND", "gap": "A", "last_ais": "2025-11-02T22:55Z", "first_ais": "2025-12-08T00:22Z", "days": 35.1, "mmsi_change": "no", "early_sar": "2025-11-03 04:55Z-10:55Z" }
+        ]
+      }
+    },
+    {
+      "id": "caveats",
+      "type": "note",
+      "layer": "dock",
+      "edge": "right",
+      "size": { "w": 26, "h": 100 },
+      "props": {
+        "title": "Caveats",
+        "body": "These are AIS transmission gaps from records returned through the Denodo-governed AIS view.\n\nThey indicate **absence of returned observations**, not proof of deliberate AIS disablement.\n\nSatellite imagery is the independent corroboration step."
+      }
+    },
+    {
+      "id": "sources",
+      "type": "tabs",
+      "layer": "dock",
+      "edge": "top",
+      "size": { "w": 100, "h": 22 },
+      "props": { "tabs": [{ "id": "suspects", "label": "Suspects" }, { "id": "clyde", "label": "CLYDE months" }] },
+      "state": { "active": "suspects" },
+      "slots": {
+        "suspects": [
+          { "id": "t_suspects", "type": "data-table", "props": { "title": "potential_shadow_fleets suspects" }, "bindings": { "source": "data://f4e4262d" } }
+        ],
+        "clyde": [
+          { "id": "t_clyde", "type": "data-table", "props": { "title": "CLYDE NOBLE monthly AIS activity" }, "bindings": { "source": "data://08d4277a" } }
+        ]
+      }
+    }
+  ]
+}
