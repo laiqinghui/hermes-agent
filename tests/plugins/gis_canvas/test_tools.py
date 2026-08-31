@@ -176,3 +176,17 @@ def test_render_view_guidance_leads_with_analysis(plugin):
     assert "ANALYSIS PRODUCT" in desc
     # the old rule told the agent to hero the DATA -- that caused source-data-review canvases
     assert "for a tabular-only result make the main data-table the layer:'base'" not in desc
+
+
+def test_render_view_guidance_keeps_one_map_one_table_and_map_title_rules(plugin):
+    """The COMPOSITION -> ANALYSIS PRODUCT rewrite must not silently drop these two
+    operational constraints: no duplicate table for one dataset, and esri:map must
+    carry a legend-friendly props.title (never a raw data:// handle)."""
+    desc = plugin.tools_canvas.RENDER_VIEW_SCHEMA["description"]
+    assert (
+        "Author at most ONE map and ONE table per dataset — do NOT wrap a table in a "
+        "card AND also emit a standalone table."
+    ) in desc
+    assert (
+        "Give esri:map a props.title — the legend shows it (never a raw data:// handle)."
+    ) in desc
