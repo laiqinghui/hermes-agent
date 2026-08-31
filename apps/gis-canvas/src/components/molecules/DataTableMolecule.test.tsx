@@ -94,3 +94,38 @@ describe('DataTableMolecule linked selection', () => {
     expect((screen.getByLabelText('select x1') as HTMLInputElement).checked).toBe(true)
   })
 })
+
+describe('DataTableMolecule inline rows', () => {
+  it('renders agent-authored rows with no data handle', async () => {
+    const fetchData = vi.fn()
+    renderWith({ id: 'g1', type: 'data-table', props: {
+      title: 'AIS gaps',
+      rows: [{ vessel: 'AGNI', days: 148 }, { vessel: 'TREND', days: 35.1 }]
+    } }, fetchData)
+    await waitFor(() => expect(screen.getByText('AGNI')).toBeInTheDocument())
+    expect(screen.getByText('TREND')).toBeInTheDocument()
+    expect(screen.getByText('2 rows')).toBeInTheDocument()
+    expect(fetchData).not.toHaveBeenCalled()
+  })
+
+  it('infers numeric columns from the first inline row', async () => {
+    const fetchData = vi.fn()
+    const { container } = renderWith({ id: 'g2', type: 'data-table', props: {
+      rows: [{ vessel: 'AGNI', days: 148 }]
+    } }, fetchData)
+    await waitFor(() => expect(screen.getByText('AGNI')).toBeInTheDocument())
+    const headers = [...container.querySelectorAll('th')].map(h => h.textContent)
+    expect(headers).toContain('days')
+    expect(container.querySelector('th.text-right')?.textContent).toBe('days')
+  })
+
+  it('prefers bindings.source over inline rows when both are present', async () => {
+    const fetchData = vi.fn().mockResolvedValue(page)
+    renderWith({ id: 'g3', type: 'data-table',
+      bindings: { source: 'data://ab12' },
+      props: { rows: [{ vessel: 'SHOULD-NOT-RENDER' }] } }, fetchData)
+    await waitFor(() => expect(screen.getByText('x1')).toBeInTheDocument())
+    expect(screen.queryByText('SHOULD-NOT-RENDER')).not.toBeInTheDocument()
+    expect(fetchData).toHaveBeenCalledWith('data://ab12', expect.anything())
+  })
+})

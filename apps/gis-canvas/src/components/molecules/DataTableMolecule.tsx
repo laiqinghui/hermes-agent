@@ -20,6 +20,19 @@ import type { MoleculeProps } from '../registry'
 type Row = Record<string, string | number>
 const helper = createColumnHelper<Row>()
 
+/** Rows the agent computed itself (gap windows, rankings): no data:// handle exists
+ *  for them, and bindings only carries strings, so they travel in props.rows. */
+function inlineSource(props: Record<string, unknown> | undefined): MockSource | null {
+  const rows = props?.rows as Array<Record<string, string | number>> | undefined
+  if (!Array.isArray(rows) || rows.length === 0) return null
+  const declared = props?.schema as MockField[] | undefined
+  const schema = declared ?? Object.keys(rows[0]).map(name => ({
+    name,
+    type: typeof rows[0][name] === 'number' ? 'number' : 'string'
+  })) as MockField[]
+  return { schema, rows }
+}
+
 export function DataTableMolecule({ node }: MoleculeProps) {
   const actions = useCanvasActions()
   const source = (Array.isArray(node.bindings?.source) ? node.bindings!.source[0] : node.bindings?.source) ?? ''
@@ -51,7 +64,9 @@ export function DataTableMolecule({ node }: MoleculeProps) {
     return () => { cancelled = true }
   }, [source, actions])
 
-  const data = isDataHandle(source) ? fetched : resolveMockSource(source)
+  const inline = useMemo(() => inlineSource(node.props), [node.props])
+  // bindings.source always wins; inline rows are the fallback for agent-computed tables
+  const data = isDataHandle(source) ? fetched : (source ? resolveMockSource(source) : inline)
   const wanted = (node.props?.columns as string[] | undefined) ?? null
   const filter = (node.state?.filter as Record<string, string> | undefined) ?? {}
   const [selected, setSelected] = useLinkedSelection(source)
