@@ -466,3 +466,77 @@ def test_data_table_rejects_non_list_rows_dict(plugin):
     })
     errors = plugin.validator.validate_doc(doc)
     assert any("rows" in e and "dict" in e for e in errors)
+
+
+# Finding 1: a validator-accepted document must not be able to throw during render.
+# props.rows elements and props.schema are now inspected, not just "is it a list".
+
+def test_data_table_rejects_non_dict_row_element(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "bad", "type": "data-table", "layer": "base",
+        "props": {"rows": [None]},
+    })
+    errors = plugin.validator.validate_doc(doc)
+    assert any("'bad'" in e and "row 0" in e for e in errors), errors
+
+
+def test_data_table_rejects_row_with_nested_object_value(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "bad", "type": "data-table", "layer": "base",
+        "props": {"rows": [{"window": {"from": "2025-01-01", "to": "2025-01-02"}}]},
+    })
+    errors = plugin.validator.validate_doc(doc)
+    assert any("'bad'" in e and "row 0" in e and "window" in e for e in errors), errors
+
+
+def test_data_table_rejects_row_with_nested_list_value(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "bad", "type": "data-table", "layer": "base",
+        "props": {"rows": [{"tags": ["a", "b"]}]},
+    })
+    errors = plugin.validator.validate_doc(doc)
+    assert any("'bad'" in e and "row 0" in e and "tags" in e for e in errors), errors
+
+
+def test_data_table_accepts_scalar_only_rows(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "good", "type": "data-table", "layer": "base",
+        "props": {"rows": [{"vessel": "AGNI", "days": 148.0, "flagged": True, "note": None}]},
+    })
+    assert plugin.validator.validate_doc(doc) == []
+
+
+def test_data_table_schema_must_be_a_list_not_object(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "bad", "type": "data-table", "layer": "base",
+        "props": {"rows": [{"vessel": "AGNI"}], "schema": {"vessel": "string"}},
+    })
+    errors = plugin.validator.validate_doc(doc)
+    assert any("'bad'" in e and "schema" in e for e in errors), errors
+
+
+def test_data_table_schema_elements_must_be_name_type_objects(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "bad", "type": "data-table", "layer": "base",
+        "props": {"rows": [{"vessel": "AGNI"}], "schema": ["vessel", "days"]},
+    })
+    errors = plugin.validator.validate_doc(doc)
+    assert any("'bad'" in e and "schema" in e for e in errors), errors
+
+
+def test_data_table_valid_schema_passes(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "good", "type": "data-table", "layer": "base",
+        "props": {
+            "rows": [{"vessel": "AGNI", "days": 148.0}],
+            "schema": [{"name": "vessel", "type": "string"}, {"name": "days", "type": "number"}],
+        },
+    })
+    assert plugin.validator.validate_doc(doc) == []

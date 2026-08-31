@@ -149,11 +149,43 @@ def validate_doc(doc: dict) -> list[str]:
                     f"'{node_id}' (data-table): props.rows must be a list of row objects, "
                     f"got {type(rows).__name__}"
                 )
-            if isinstance(rows, list) and len(rows) > MAX_INLINE_ROWS:
-                errors.append(
-                    f"'{node_id}' (data-table): {len(rows)} inline rows exceeds max "
-                    f"{MAX_INLINE_ROWS}; retrieve large results via data_query instead"
-                )
+            if isinstance(rows, list):
+                if len(rows) > MAX_INLINE_ROWS:
+                    errors.append(
+                        f"'{node_id}' (data-table): {len(rows)} inline rows exceeds max "
+                        f"{MAX_INLINE_ROWS}; retrieve large results via data_query instead"
+                    )
+                for i, row in enumerate(rows):
+                    if not isinstance(row, dict):
+                        errors.append(
+                            f"'{node_id}' (data-table): props.rows row {i} must be an object "
+                            f"(row of {{column: value}}), got {type(row).__name__}"
+                        )
+                        continue
+                    for key, value in row.items():
+                        if value is not None and not isinstance(value, (str, int, float, bool)):
+                            errors.append(
+                                f"'{node_id}' (data-table): props.rows row {i}, column '{key}' "
+                                f"must be a scalar (string/number/boolean/null), got "
+                                f"{type(value).__name__} — data-table cells cannot render "
+                                "nested objects or lists; flatten this value into its own column(s)"
+                            )
+
+            schema = props.get("schema")
+            if schema is not None:
+                if not isinstance(schema, list):
+                    errors.append(
+                        f"'{node_id}' (data-table): props.schema must be a list of "
+                        f"{{name, type}} objects, got {type(schema).__name__}"
+                    )
+                else:
+                    for i, col in enumerate(schema):
+                        if not isinstance(col, dict) or "name" not in col or "type" not in col:
+                            errors.append(
+                                f"'{node_id}' (data-table): props.schema[{i}] must be an "
+                                "object with 'name' and 'type' keys, e.g. "
+                                f"{{\"name\": \"vessel\", \"type\": \"string\"}}, got {col!r}"
+                            )
 
         if top_level:
             layer = node.get("layer")
