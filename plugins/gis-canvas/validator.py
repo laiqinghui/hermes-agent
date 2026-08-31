@@ -144,6 +144,11 @@ def validate_doc(doc: dict) -> list[str]:
                     f"'{node_id}' (data-table): needs bindings.source (retrieved data) "
                     "or props.rows (rows you derived yourself)"
                 )
+            elif rows is not None and not isinstance(rows, list):
+                errors.append(
+                    f"'{node_id}' (data-table): props.rows must be a list of row objects, "
+                    f"got {type(rows).__name__}"
+                )
             if isinstance(rows, list) and len(rows) > MAX_INLINE_ROWS:
                 errors.append(
                     f"'{node_id}' (data-table): {len(rows)} inline rows exceeds max "

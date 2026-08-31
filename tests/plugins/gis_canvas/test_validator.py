@@ -446,3 +446,23 @@ def test_data_table_inline_rows_capped(plugin):
     })
     errors = plugin.validator.validate_doc(doc)
     assert any("50" in e for e in errors)
+
+
+def test_data_table_rejects_non_list_rows_string(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "bad", "type": "data-table", "layer": "base",
+        "props": {"rows": "oops"},
+    })
+    errors = plugin.validator.validate_doc(doc)
+    assert any("rows" in e and "str" in e for e in errors)
+
+
+def test_data_table_rejects_non_list_rows_dict(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "bad", "type": "data-table", "layer": "base",
+        "props": {"rows": {"a": 1}},
+    })
+    errors = plugin.validator.validate_doc(doc)
+    assert any("rows" in e and "dict" in e for e in errors)

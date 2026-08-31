@@ -119,6 +119,16 @@ describe('DataTableMolecule inline rows', () => {
     expect(container.querySelector('th.text-right')?.textContent).toBe('days')
   })
 
+  it('renders an empty inline rows array as an empty table, not an error', async () => {
+    const fetchData = vi.fn()
+    renderWith({ id: 'g4', type: 'data-table', props: {
+      title: 'AIS gaps', rows: []
+    } }, fetchData)
+    await waitFor(() => expect(screen.getByText('0 rows')).toBeInTheDocument())
+    expect(screen.queryByText(/Unknown data source/)).not.toBeInTheDocument()
+    expect(fetchData).not.toHaveBeenCalled()
+  })
+
   it('prefers bindings.source over inline rows when both are present', async () => {
     const fetchData = vi.fn().mockResolvedValue(page)
     renderWith({ id: 'g3', type: 'data-table',
