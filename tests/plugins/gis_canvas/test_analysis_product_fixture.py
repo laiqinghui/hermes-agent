@@ -51,13 +51,19 @@ def _base_layer_data_bindings(doc: dict) -> list[str]:
     """IDs of every data://-bound node whose effective layer is base.
 
     Walks children and slot children too, inheriting the nearest ancestor's
-    layer when a nested node doesn't declare its own -- so a data:// table
-    tucked inside a tabs slot is checked against the layer it actually
-    renders behind, not silently skipped.
+    *explicit* layer when a nested node doesn't declare its own -- so a
+    data:// table tucked inside a tabs slot is checked against the layer it
+    actually renders behind, not silently skipped.
+
+    A missing "layer" key is NOT treated as base: a top-level component with
+    no layer is grid-positioned via its "area" and is explicitly not base
+    (the validator requires "area" precisely when "layer" is absent). Only
+    an explicit layer == "base" (its own, or inherited from an ancestor that
+    declared one) counts.
     """
     violations: list[str] = []
 
-    def walk(node: dict, inherited_layer: str) -> None:
+    def walk(node: dict, inherited_layer: str | None) -> None:
         effective_layer = node.get("layer", inherited_layer)
         src = (node.get("bindings") or {}).get("source", "")
         if isinstance(src, str) and src.startswith("data://") and effective_layer == "base":
@@ -69,7 +75,7 @@ def _base_layer_data_bindings(doc: dict) -> list[str]:
                 walk(child, effective_layer)
 
     for c in doc["components"]:
-        walk(c, c.get("layer", "base"))
+        walk(c, c.get("layer"))
     return violations
 
 
@@ -77,6 +83,32 @@ def test_retrieved_source_data_is_demoted(plugin):
     """Every data:// binding must sit behind a dock/tabs rail, never at base."""
     doc = _after()
     assert _base_layer_data_bindings(doc) == []
+
+    # Adversarial case: a data://-bound node at base layer that is nested
+    # inside a slot, not top-level. A components-only (non-recursive) version
+    # of _base_layer_data_bindings would never see this node and would wrongly
+    # report no violations -- this pins the recursion itself, not just the
+    # real fixture (which happens to have no nested base-layer data binding).
+    nested_violation_doc = {
+        "components": [
+            {
+                "id": "tabs-1",
+                "type": "tabs",
+                "layer": "dock",
+                "slots": {
+                    "panels": [
+                        {
+                            "id": "sneaky-table",
+                            "type": "data-table",
+                            "layer": "base",
+                            "bindings": {"source": "data://sneaky-handle"},
+                        }
+                    ]
+                },
+            }
+        ]
+    }
+    assert _base_layer_data_bindings(nested_violation_doc) == ["sneaky-table"]
 
 
 def test_before_and_after_come_from_the_same_session(plugin):
