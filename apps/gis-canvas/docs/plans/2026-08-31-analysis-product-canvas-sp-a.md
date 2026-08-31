@@ -87,10 +87,19 @@ describe('renderMarkdown', () => {
     expect(container.textContent).toContain('<b>x</b>')
   })
 
-  it('leaves unmatched emphasis markers as text', () => {
+  it('leaves unmatched and space-padded emphasis markers as text', () => {
+    // '2 * 3 * 4' is arithmetic, not emphasis: a naive /\*[^*\n]+\*/ turns "3" into <em>.
     const { container } = md('2 * 3 * 4 and ** unclosed')
     expect(container.querySelector('strong')).toBeNull()
+    expect(container.querySelector('em')).toBeNull()
+    expect(container.textContent).toContain('2 * 3 * 4')
     expect(container.textContent).toContain('** unclosed')
+  })
+
+  it('still emphasises single characters', () => {
+    const { container } = md('*a* and **b**')
+    expect(container.querySelector('em')?.textContent).toBe('a')
+    expect(container.querySelector('strong')?.textContent).toBe('b')
   })
 
   it('returns nothing for empty input', () => {
@@ -122,7 +131,9 @@ Create `apps/gis-canvas/src/lib/markdown.ts`:
  */
 import { createElement, type ReactNode } from 'react'
 
-const INLINE = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*\n]+\*)/g
+// Emphasis must not be space-padded, so prose arithmetic ("2 * 3 * 4") is left alone.
+// Lookahead/lookbehind require the delimiters to hug their content, as real markdown does.
+const INLINE = /(`[^`]+`|\*\*(?!\s)[^*]+(?<!\s)\*\*|\*(?![\s*])[^*\n]*?(?<![\s*])\*)/g
 const HEADING = /^(#{1,3})\s+(.*)$/
 const BULLET = /^\s*[-*]\s+(.*)$/
 const ORDERED = /^\s*\d+\.\s+(.*)$/
