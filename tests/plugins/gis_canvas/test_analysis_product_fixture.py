@@ -47,13 +47,36 @@ def test_analysis_product_carries_prose_and_computed_rows(plugin):
     assert inline, "the computed gap/tasking table must be inline, not a handle"
 
 
+def _base_layer_data_bindings(doc: dict) -> list[str]:
+    """IDs of every data://-bound node whose effective layer is base.
+
+    Walks children and slot children too, inheriting the nearest ancestor's
+    layer when a nested node doesn't declare its own -- so a data:// table
+    tucked inside a tabs slot is checked against the layer it actually
+    renders behind, not silently skipped.
+    """
+    violations: list[str] = []
+
+    def walk(node: dict, inherited_layer: str) -> None:
+        effective_layer = node.get("layer", inherited_layer)
+        src = (node.get("bindings") or {}).get("source", "")
+        if isinstance(src, str) and src.startswith("data://") and effective_layer == "base":
+            violations.append(node.get("id", "<unknown>"))
+        for child in node.get("children", []) or []:
+            walk(child, effective_layer)
+        for nodes in (node.get("slots") or {}).values():
+            for child in nodes:
+                walk(child, effective_layer)
+
+    for c in doc["components"]:
+        walk(c, c.get("layer", "base"))
+    return violations
+
+
 def test_retrieved_source_data_is_demoted(plugin):
     """Every data:// binding must sit behind a dock/tabs rail, never at base."""
     doc = _after()
-    for c in doc["components"]:
-        src = (c.get("bindings") or {}).get("source", "")
-        if isinstance(src, str) and src.startswith("data://"):
-            assert c.get("layer") != "base"
+    assert _base_layer_data_bindings(doc) == []
 
 
 def test_before_and_after_come_from_the_same_session(plugin):

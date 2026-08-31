@@ -22,7 +22,7 @@
         "rows": [
           { "vessel": "AGNI", "gap": "A", "last_ais": "2025-06-25T20:22Z", "first_ais": "2025-11-20T19:37Z", "days": 148.0, "mmsi_change": "no", "early_sar": "2025-06-26 02:22Z-08:22Z" },
           { "vessel": "CLYDE NOBLE", "gap": "A", "last_ais": "2025-05-19T06:30Z", "first_ais": "2025-09-08T01:07Z", "days": 111.8, "mmsi_change": "yes", "early_sar": "2025-05-19 12:30Z-18:30Z" },
-          { "vessel": "WONDER VEGA", "gap": "A", "last_ais": "2025-07-17T16:47Z", "first_ais": "2025-09-03T09:28Z", "days": 47.7, "mmsi_change": "yes", "early_sar": "2025-07-17 22:47Z-04:47Z" },
+          { "vessel": "WONDER VEGA", "gap": "A", "last_ais": "2025-07-17T16:47Z", "first_ais": "2025-09-03T09:28Z", "days": 47.7, "mmsi_change": "yes", "early_sar": "2025-07-17 22:47Z-2025-07-18 04:47Z" },
           { "vessel": "WONDER VEGA", "gap": "B", "last_ais": "2025-09-19T18:30Z", "first_ais": "2025-11-02T02:52Z", "days": 43.3, "mmsi_change": "no", "early_sar": "2025-09-20 00:30Z-06:30Z" },
           { "vessel": "TREND", "gap": "A", "last_ais": "2025-11-02T22:55Z", "first_ais": "2025-12-08T00:22Z", "days": 35.1, "mmsi_change": "no", "early_sar": "2025-11-03 04:55Z-10:55Z" }
         ]
