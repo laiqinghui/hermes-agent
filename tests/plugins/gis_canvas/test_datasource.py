@@ -139,3 +139,95 @@ def test_a2a_datasource_query_prefers_structured_query_result(plugin, monkeypatc
     r = src.query("get vessels", session_id="c1")
     assert r.rows == [{"id": "a"}]
     assert r.row_count == 1
+
+
+# Real captured A2A retrieval response (2026-08-27+): the Data Agent's collaborative-mode
+# raw-data-conduit now passes the AISDK v1.3 MCP tool output through verbatim instead of a
+# markdown table -- rows arrive as a CSV block wrapped in <execution_result_csv> tags, alongside
+# sibling <sql_query>/<query_explanation> tags. Captured verbatim from
+# C:\workspace\data-agent-ecosystem\data_agent.log, context_id=8a5325de-f48a-4511-971c-76ec2cac42fc
+# (matches a live "RowCount 0" bug report for this exact query).
+_RETRIEVE_CSV_TAG = '''Execution result returned 5 rows.
+
+
+<execution_result_csv>
+row_id,vessel_name,mmsi,imo,timestamp_date,latitudedegrees,longitudedegrees,sog,cog
+Row 1,WONDER VEGA,610107031,9293155,Sun Dec 28 09:42:19 GMT 2025,1.41137054122,103.179021259,11.6761,305.992
+Row 2,WONDER VEGA,610107031,9293155,Sun Dec 28 09:25:09 GMT 2025,1.3802330517,103.222762345,11.3846,305.97
+Row 3,WONDER VEGA,610107031,9293155,Sun Dec 28 09:22:21 GMT 2025,1.37509435776,103.22968818,11.4817,305.977
+
+</execution_result_csv>
+<sql_query>
+SELECT "vesselname" AS "vessel_name" FROM "admin"."pg_vessel_positions_select" LIMIT 5;
+</sql_query>
+<query_explanation>
+The expected output is 5 rows with 8 columns.
+</query_explanation>'''
+
+
+def test_rows_from_execution_result_csv_parses_header_and_rows(plugin):
+    ds = plugin.datasource
+    rows, schema = ds.rows_from_execution_result_csv(_RETRIEVE_CSV_TAG)
+    assert len(rows) == 3
+    cols = [f["name"] for f in schema]
+    assert "vessel_name" in cols and "latitudedegrees" in cols and "row_id" in cols
+    assert rows[0]["vessel_name"] == "WONDER VEGA"
+    assert rows[0]["latitudedegrees"] == 1.41137054122
+    assert isinstance(rows[0]["latitudedegrees"], float)
+    # sibling <sql_query>/<query_explanation> tags must not leak into the parsed rows
+    assert all("SELECT" not in str(v) for r in rows for v in r.values())
+
+
+def test_rows_from_execution_result_csv_returns_none_without_tag(plugin):
+    ds = plugin.datasource
+    assert ds.rows_from_execution_result_csv("just some prose, no csv tag") is None
+
+
+# The Data Agent's raw_output_cache.pop() concatenates EVERY retrieval tool call made during
+# one turn, so a turn where the agent retried/refined its query yields several
+# <execution_result_csv> blocks in a single response. The LAST block is the authoritative
+# answer; earlier ones are superseded intermediates. Shape taken from a real 2-block turn
+# (data_agent.log, context be0f935e-8f69-483d-ab71-60e686205866), where the agent first
+# queried latitudedegrees/longitudedegrees then refined to latitude/longitude/boundary_label.
+_RETRIEVE_CSV_TWO_BLOCKS = '''Execution result returned 1 rows.
+
+<execution_result_csv>
+row_id,timestamp_date,latitudedegrees,longitudedegrees
+Row 1,Sun Dec 28 09:42:19 GMT 2025,1.41137054122,103.179021259
+</execution_result_csv>
+<sql_query>
+SELECT "latitudedegrees" FROM "admin"."pg_vessel_positions_select" LIMIT 1;
+</sql_query>
+
+Execution result returned 2 rows.
+
+<execution_result_csv>
+row_id,timestamp_date,latitude,longitude,boundary_label
+Row 1,Sun Dec 28 09:42:19 GMT 2025,1.41137054122,103.179021259,SG_PORT
+Row 2,Sun Dec 28 09:25:09 GMT 2025,1.3802330517,103.222762345,SG_PORT
+</execution_result_csv>
+<sql_query>
+SELECT "latitudedegrees" AS "latitude" FROM "admin"."pg_vessel_positions_select" LIMIT 2;
+</sql_query>'''
+
+
+def test_rows_from_execution_result_csv_uses_last_block_when_agent_retried(plugin):
+    ds = plugin.datasource
+    rows, schema = ds.rows_from_execution_result_csv(_RETRIEVE_CSV_TWO_BLOCKS)
+    cols = [f["name"] for f in schema]
+    # the refined final query's columns win; the superseded first block must not leak through
+    assert "latitude" in cols and "boundary_label" in cols
+    assert "latitudedegrees" not in cols
+    assert len(rows) == 2
+    assert rows[0]["boundary_label"] == "SG_PORT"
+
+
+def test_a2a_datasource_query_falls_back_to_execution_result_csv(plugin, monkeypatch):
+    ds = plugin.datasource
+    monkeypatch.setattr(ds.a2a_client, "query", lambda *a, **k: ds.a2a_client.A2AResult(
+        final_state="completed", context_id="c1",
+        response_text=_RETRIEVE_CSV_TAG, query_result=None))
+    src = ds.A2ADataSource("http://bff", "sek")
+    r = src.query("get vessels", session_id="c1")
+    assert r.row_count == 3
+    assert r.rows[0]["vessel_name"] == "WONDER VEGA"

@@ -10,6 +10,9 @@ export interface DataPage {
   page: number
   pageSize: number
   errors?: string[]
+  /** true when the fetch failed because the broker handle outlived its TTL (recoverable
+   *  by re-running the query) rather than never having existed. */
+  expired?: boolean
 }
 
 export function isDataHandle(ref: string | undefined): boolean {

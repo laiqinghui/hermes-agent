@@ -26,13 +26,25 @@ export function DataTableMolecule({ node }: MoleculeProps) {
 
   // data:// handles are pulled from the broker (data plane); mock:// resolves locally.
   const [fetched, setFetched] = useState<MockSource | null>(null)
+  // A failed fetch must never render as an ordinary empty table: an expired handle looks
+  // identical to "the query found nothing", which hides a recoverable cache problem.
+  const [loadError, setLoadError] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
+    setLoadError(null)
     if (isDataHandle(source)) {
       actions
         .fetchData(source, { pageSize: 1000 })
-        .then(p => { if (!cancelled) setFetched({ schema: p.schema as MockField[], rows: p.rows as Array<Record<string, string | number>> }) })
-        .catch(() => { if (!cancelled) setFetched({ schema: [], rows: [] }) })
+        .then(p => {
+          if (cancelled) return
+          if (p?.ok === false) {
+            setLoadError(p.errors?.[0] ?? 'could not load this data handle')
+            setFetched({ schema: [], rows: [] })
+            return
+          }
+          setFetched({ schema: (p.schema ?? []) as MockField[], rows: (p.rows ?? []) as Array<Record<string, string | number>> })
+        })
+        .catch(() => { if (!cancelled) { setLoadError('could not reach the data plane'); setFetched({ schema: [], rows: [] }) } })
     } else {
       setFetched(null)
     }
@@ -89,6 +101,19 @@ export function DataTableMolecule({ node }: MoleculeProps) {
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel()
   })
+
+  if (loadError) {
+    return (
+      <div className="flex h-full flex-col overflow-hidden rounded-gc-md border border-hairline bg-surface shadow-gc-raised">
+        <div className="flex shrink-0 items-center justify-between border-b border-hairline px-3 py-2">
+          <span className="truncate font-display text-sm font-semibold text-primary">
+            {(node.props?.title as string | undefined) ?? source}
+          </span>
+        </div>
+        <div className="min-h-0 flex-1 p-3 text-sm text-negative">{loadError}</div>
+      </div>
+    )
+  }
 
   if (!data) {
     // A data:// handle that hasn't resolved yet is loading, not unknown.

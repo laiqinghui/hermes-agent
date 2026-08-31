@@ -46,6 +46,35 @@ describe('DataTableMolecule data:// handle', () => {
     expect(screen.getByTestId('skeleton')).toBeInTheDocument()
     expect(screen.queryByText(/Unknown data source/)).not.toBeInTheDocument()
   })
+
+  // An expired handle used to render as a plain empty table, which reads as "the query
+  // legitimately found nothing" and hid a recoverable cache problem behind a real-looking result.
+  it('surfaces an expired handle instead of rendering a silent empty table', async () => {
+    const fetchData = vi.fn().mockResolvedValue({
+      ok: false, expired: true, rows: [], schema: [], total: 0, page: 0, pageSize: 100,
+      errors: ["handle 'data://gone' expired and its cached rows were dropped; re-run the query to repopulate it"]
+    })
+    renderWith({ id: 't4', type: 'data-table', bindings: { source: 'data://gone' } }, fetchData)
+    await waitFor(() => expect(screen.getByText(/expired/i)).toBeInTheDocument())
+    expect(screen.queryByText('0 rows')).not.toBeInTheDocument()
+  })
+
+  it('surfaces a failed fetch that is not an expiry', async () => {
+    const fetchData = vi.fn().mockResolvedValue({
+      ok: false, expired: false, rows: [], schema: [], total: 0, page: 0, pageSize: 100,
+      errors: ["unknown handle 'data://nope'"]
+    })
+    renderWith({ id: 't5', type: 'data-table', bindings: { source: 'data://nope' } }, fetchData)
+    await waitFor(() => expect(screen.getByText(/unknown handle/i)).toBeInTheDocument())
+  })
+
+  it('still renders a genuinely empty result as an empty table, not an error', async () => {
+    const fetchData = vi.fn().mockResolvedValue({
+      ok: true, rows: [], schema: [{ name: 'id', type: 'string' }], total: 0, page: 0, pageSize: 100
+    })
+    renderWith({ id: 't6', type: 'data-table', bindings: { source: 'data://empty' } }, fetchData)
+    await waitFor(() => expect(screen.getByText('0 rows')).toBeInTheDocument())
+  })
 })
 
 describe('DataTableMolecule linked selection', () => {

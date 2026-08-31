@@ -4,6 +4,8 @@ The BFF handles auth (Keycloak-backed session -> Data Agent token); the plugin o
 threads the caller's session_id through as a header."""
 from __future__ import annotations
 
+import csv
+import io
 import os
 import re
 from abc import ABC, abstractmethod
@@ -86,6 +88,35 @@ def rows_from_markdown_table(text: str) -> tuple[list[dict], list[dict]] | None:
     return None
 
 
+_EXECUTION_RESULT_CSV_RE = re.compile(
+    r"<execution_result_csv>\s*(.*?)\s*</execution_result_csv>", re.DOTALL)
+
+
+def rows_from_execution_result_csv(text: str) -> tuple[list[dict], list[dict]] | None:
+    """Fallback parser: AISDK v1.3's raw MCP tool output (passed through verbatim by the
+    Data Agent's collaborative-mode raw-data conduit) wraps retrieval rows as a plain CSV
+    block inside <execution_result_csv> tags, alongside sibling <sql_query>/<query_explanation>
+    tags -- not a GitHub-flavored markdown table.
+
+    Takes the LAST block: the Data Agent concatenates every retrieval tool call made during
+    a turn, so when the agent retried or refined its query the earlier blocks are superseded
+    intermediates and only the final one answers the request."""
+    blocks = _EXECUTION_RESULT_CSV_RE.findall(text)
+    if not blocks:
+        return None
+    reader = csv.reader(io.StringIO(blocks[-1]))
+    lines = [row for row in reader if row]
+    if len(lines) < 2:
+        return None
+    header, data_lines = lines[0], lines[1:]
+    rows = [{col: _coerce_markdown_cell(val) for col, val in zip(header, cells)}
+            for cells in data_lines if len(cells) == len(header)]
+    if not rows:
+        return None
+    schema = [{"name": col, "type": _infer_type(rows[0][col])} for col in header]
+    return rows, schema
+
+
 class DataSource(ABC):
     @abstractmethod
     def discover(self, prompt: str, session_id: str | None = None) -> list[dict]: ...
@@ -116,7 +147,8 @@ class A2ADataSource(DataSource):
         if r.query_result:
             rows, schema = rows_from_query_result(r.query_result)
         elif r.response_text:
-            parsed = rows_from_markdown_table(r.response_text)
+            parsed = (rows_from_execution_result_csv(r.response_text)
+                      or rows_from_markdown_table(r.response_text))
             if parsed:
                 rows, schema = parsed
         return QueryResult(rows=rows, schema=schema, row_count=len(rows), context_id=r.context_id)
