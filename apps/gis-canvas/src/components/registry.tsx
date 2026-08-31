@@ -6,6 +6,7 @@ import { DataTableMolecule } from './molecules/DataTableMolecule'
 import { SelectMolecule } from './molecules/SelectMolecule'
 import { TabsMolecule } from './molecules/TabsMolecule'
 import { EntityDetailMolecule } from './molecules/EntityDetailMolecule'
+import { NoteMolecule } from './molecules/NoteMolecule'
 
 export interface MoleculeProps {
   node: ComponentNode
@@ -67,6 +68,7 @@ function FeatureTableAsDataTable({ node, renderChild }: MoleculeProps) {
 export const COMPONENT_REGISTRY: Record<string, ComponentType<MoleculeProps>> = {
   card: CardMolecule,
   stat: StatMolecule,
+  note: NoteMolecule,
   'data-table': DataTableMolecule,
   select: SelectMolecule,
   tabs: TabsMolecule,
