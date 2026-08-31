@@ -14,6 +14,10 @@ from jsonschema import Draft202012Validator
 
 MAX_DEPTH = 3
 
+# render_view echoes the whole doc back into the agent's context, so agent-authored
+# rows are capped for context budget, not for display.
+MAX_INLINE_ROWS = 50
+
 DEFAULT_LAYOUT = {"type": "grid", "cols": 12, "rowHeight": 80, "gap": 8}
 
 CATALOG: dict[str, dict] = {
@@ -39,7 +43,7 @@ CATALOG: dict[str, dict] = {
         "container": False,
         "slots": set(),
         "required_props": [],
-        "required_bindings": ["source"],
+        "required_bindings": [],  # needs bindings.source OR props.rows -- checked in walk()
     },
     "select": {
         "container": False,
@@ -132,6 +136,19 @@ def validate_doc(doc: dict) -> list[str]:
         for b in entry["required_bindings"]:
             if b not in bindings:
                 errors.append(f"'{node_id}' ({node_type}): missing required bindings.{b}")
+
+        if node_type == "data-table":
+            rows = props.get("rows")
+            if "source" not in bindings and rows is None:
+                errors.append(
+                    f"'{node_id}' (data-table): needs bindings.source (retrieved data) "
+                    "or props.rows (rows you derived yourself)"
+                )
+            if isinstance(rows, list) and len(rows) > MAX_INLINE_ROWS:
+                errors.append(
+                    f"'{node_id}' (data-table): {len(rows)} inline rows exceeds max "
+                    f"{MAX_INLINE_ROWS}; retrieve large results via data_query instead"
+                )
 
         if top_level:
             layer = node.get("layer")

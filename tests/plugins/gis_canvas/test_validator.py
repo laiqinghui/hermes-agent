@@ -420,3 +420,29 @@ def test_note_requires_body(plugin):
     })
     errors = plugin.validator.validate_doc(doc)
     assert any("body" in e for e in errors)
+
+
+def test_data_table_accepts_inline_rows_without_source(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "gaps", "type": "data-table", "layer": "base",
+        "props": {"title": "AIS gaps", "rows": [{"vessel": "AGNI", "days": 148}]},
+    })
+    assert plugin.validator.validate_doc(doc) == []
+
+
+def test_data_table_requires_source_or_rows(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({"id": "empty", "type": "data-table", "layer": "base", "props": {}})
+    errors = plugin.validator.validate_doc(doc)
+    assert any("source" in e and "rows" in e for e in errors)
+
+
+def test_data_table_inline_rows_capped(plugin):
+    doc = _minimal_doc()
+    doc["components"].append({
+        "id": "big", "type": "data-table", "layer": "base",
+        "props": {"rows": [{"i": n} for n in range(plugin.validator.MAX_INLINE_ROWS + 1)]},
+    })
+    errors = plugin.validator.validate_doc(doc)
+    assert any("50" in e for e in errors)
