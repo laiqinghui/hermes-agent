@@ -1,0 +1,560 @@
+[
+  {
+    "handle": "data://d3f1a220",
+    "minted": "13:17:39",
+    "rowCount": 0,
+    "columns": [],
+    "prompt": "Use the defaults: treat the entire admin.potential_shadow_fleets view as the high-confidence set, and use admin.pg_vessel_positions_select.vesselname for grouping/output. Retrieve daily AIS record counts grouped by imonumber, vesselname, and UTC date derived from timestamp_date. Include only dates with at least one record. Sort by imonumber then date. Return all rows."
+  },
+  {
+    "handle": "data://dd3ba46d",
+    "minted": "13:27:03",
+    "rowCount": 0,
+    "columns": [],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for vessel IMO 9231509 (TREND), identify the top 3 longest AIS transmission gaps between consecutive AIS records ordered by timestamp_date. Return exactly one row per gap with: vesselname, imonumber, mmsi_before, mmsi_after, last_ais_before_gap timestamp_date, first_ais_after_gap timestamp_date, lat_before=latitudedegrees, lon_before=longitudedegrees, lat_after=latitudedegrees, lon_after=longitudedegrees, speed_before, course_before, heading_before, speed_after, course_after, heading_after, gap_duration_hours. Sort by gap_duration_hours descending. Return all 3 rows."
+  },
+  {
+    "handle": "data://247ae3fd",
+    "minted": "13:34:09",
+    "rowCount": 0,
+    "columns": [],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for vessel IMO 9282792 (CLYDE NOBLE), identify the top 3 longest AIS transmission gaps between consecutive AIS records ordered by timestamp_date. Return exactly one row per gap with: vesselname, imonumber, mmsi_before, mmsi_after, last_ais_before_gap timestamp_date, first_ais_after_gap timestamp_date, lat_before=latitudedegrees, lon_before=longitudedegrees, lat_after=latitudedegrees, lon_after=longitudedegrees, speed_before, course_before, heading_before, speed_after, course_after, heading_after, gap_duration_hours. Sort by gap_duration_hours descending. Return all 3 rows."
+  },
+  {
+    "handle": "data://3d469437",
+    "minted": "13:41:59",
+    "rowCount": 0,
+    "columns": [],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for vessel IMO 9293155 (WONDER VEGA), identify the top 3 longest AIS transmission gaps between consecutive AIS records ordered by timestamp_date. Return exactly one row per gap with: vesselname, imonumber, mmsi_before, mmsi_after, last_ais_before_gap timestamp_date, first_ais_after_gap timestamp_date, lat_before=latitudedegrees, lon_before=longitudedegrees, lat_after=latitudedegrees, lon_after=longitudedegrees, speed_before, course_before, heading_before, speed_after, course_after, heading_after, gap_duration_hours. Sort by gap_duration_hours descending. Return all 3 rows."
+  },
+  {
+    "handle": "data://c0f7ea3d",
+    "minted": "13:43:34",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "record_count",
+      "first_seen",
+      "last_seen",
+      "distinct_mmsi_count"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9314167 (AGNI), return AIS coverage summary grouped by vesselname and imonumber. Include COUNT(*) AS record_count, MIN(timestamp_date) AS first_seen, MAX(timestamp_date) AS last_seen, COUNT(DISTINCT mmsinumber) AS distinct_mmsi_count."
+  },
+  {
+    "handle": "data://7e313b4c",
+    "minted": "14:13:06",
+    "rowCount": 7,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "ais_date",
+      "record_count",
+      "first_ts_on_date",
+      "last_ts_on_date"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9231509, retrieve one row per UTC calendar date with AIS records. Include vesselname, imonumber, ais_date, COUNT(*) AS record_count, MIN(timestamp_date) AS first_ts_on_date, MAX(timestamp_date) AS last_ts_on_date. Group by vesselname, imonumber, ais_date. Sort by ais_date ascending. Return all rows."
+  },
+  {
+    "handle": "data://70bd7df1",
+    "minted": "14:14:39",
+    "rowCount": 20,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "ais_date",
+      "record_count",
+      "first_ts_on_date",
+      "last_ts_on_date"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9282792, retrieve one row per UTC calendar date with AIS records. Include vesselname, imonumber, ais_date, COUNT(*) AS record_count, MIN(timestamp_date) AS first_ts_on_date, MAX(timestamp_date) AS last_ts_on_date. Group by vesselname, imonumber, ais_date. Sort by ais_date ascending. Return all rows."
+  },
+  {
+    "handle": "data://9430de72",
+    "minted": "14:20:19",
+    "rowCount": 72,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "ais_date",
+      "record_count",
+      "first_ts_on_date",
+      "last_ts_on_date"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9293155, retrieve one row per UTC calendar date with AIS records. Include vesselname, imonumber, ais_date, COUNT(*) AS record_count, MIN(timestamp_date) AS first_ts_on_date, MAX(timestamp_date) AS last_ts_on_date. Group by vesselname, imonumber, ais_date. Sort by ais_date ascending. Return all rows."
+  },
+  {
+    "handle": "data://87fa2043",
+    "minted": "14:27:15",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "total_rows",
+      "min_ts",
+      "max_ts",
+      "distinct_days"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9231509 (TREND), identify the top 5 longest AIS silence periods based on daily aggregate boundaries: compute one row per day with MIN(timestamp_date) and MAX(timestamp_date), then compare each day's MAX(timestamp_date) to the next AIS day's MIN(timestamp_date). Return only gaps longer than 6 hours. Include vesselname, imonumber, last_ais_before_gap, first_ais_after_gap, gap_duration_hours. Sort by duration descending. Return all rows."
+  },
+  {
+    "handle": "data://288444f7",
+    "minted": "14:34:40",
+    "rowCount": 0,
+    "columns": [],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9282792 (CLYDE NOBLE), identify the top 5 longest AIS silence periods based on daily aggregate boundaries: compute one row per day with MIN(timestamp_date) and MAX(timestamp_date), then compare each day's MAX(timestamp_date) to the next AIS day's MIN(timestamp_date). Return only gaps longer than 6 hours. Include vesselname, imonumber, last_ais_before_gap, first_ais_after_gap, gap_duration_hours. Sort by duration descending. Return all rows."
+  },
+  {
+    "handle": "data://62aad3d1",
+    "minted": "14:42:05",
+    "rowCount": 0,
+    "columns": [],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9314167 (AGNI), identify the top 5 longest AIS silence periods based on daily aggregate boundaries: compute one row per day with MIN(timestamp_date) and MAX(timestamp_date), then compare each day's MAX(timestamp_date) to the next AIS day's MIN(timestamp_date). Return only gaps longer than 6 hours. Include vesselname, imonumber, last_ais_before_gap, first_ais_after_gap, gap_duration_hours. Sort by duration descending. Return all rows."
+  },
+  {
+    "handle": "data://fe83d386",
+    "minted": "14:48:28",
+    "rowCount": 4,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "month",
+      "record_count",
+      "active_day_count",
+      "first_ts_in_month",
+      "last_ts_in_month"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9282792 (CLYDE NOBLE), retrieve one row per UTC month with AIS records. Include vesselname, imonumber, month, COUNT(*) AS record_count, COUNT(DISTINCT UTC date derived from timestamp_date) AS active_day_count, MIN(timestamp_date) AS first_ts_in_month, MAX(timestamp_date) AS last_ts_in_month. Group by vesselname, imonumber, month. Sort by month ascending. Return all rows."
+  },
+  {
+    "handle": "data://e1f57936",
+    "minted": "14:52:43",
+    "rowCount": 6,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "month",
+      "record_count",
+      "active_day_count",
+      "first_ts_in_month",
+      "last_ts_in_month"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9293155 (WONDER VEGA), retrieve one row per UTC month with AIS records. Include vesselname, imonumber, month, COUNT(*) AS record_count, COUNT(DISTINCT UTC date derived from timestamp_date) AS active_day_count, MIN(timestamp_date) AS first_ts_in_month, MAX(timestamp_date) AS last_ts_in_month. Group by vesselname, imonumber, month. Sort by month ascending. Return all rows."
+  },
+  {
+    "handle": "data://f6db4d38",
+    "minted": "14:58:16",
+    "rowCount": 0,
+    "columns": [],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9282792 (CLYDE NOBLE), retrieve one row per UTC calendar date with AIS records after '2025-05-15 00:00:00' UTC. Include vesselname, imonumber, ais_date, COUNT(*) AS record_count, MIN(timestamp_date) AS first_ts_on_date, MAX(timestamp_date) AS last_ts_on_date. Group by vesselname, imonumber, ais_date. Sort by ais_date ascending. Return all rows."
+  },
+  {
+    "handle": "data://189cb81c",
+    "minted": "15:05:00",
+    "rowCount": 6,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "month",
+      "record_count",
+      "active_day_count",
+      "first_ts_in_month",
+      "last_ts_in_month"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9293155 (WONDER VEGA), retrieve one row per UTC month with AIS records. Include vesselname, imonumber, month, COUNT(*) AS record_count, COUNT(DISTINCT UTC date derived from timestamp_date) AS active_day_count, MIN(timestamp_date) AS first_ts_in_month, MAX(timestamp_date) AS last_ts_in_month. Group by vesselname, imonumber, month. Sort by month descending. Return all rows."
+  },
+  {
+    "handle": "data://e3849817",
+    "minted": "15:12:16",
+    "rowCount": 0,
+    "columns": [],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9293155 (WONDER VEGA), retrieve one row per UTC calendar date with AIS records during December 2025 only. Include vesselname, imonumber, ais_date, COUNT(*) AS record_count, MIN(timestamp_date) AS first_ts_on_date, MAX(timestamp_date) AS last_ts_on_date. Group by vesselname, imonumber, ais_date. Sort by ais_date ascending. Return all rows."
+  },
+  {
+    "handle": "data://08b8e717",
+    "minted": "15:21:36",
+    "rowCount": 6,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "month_label",
+      "record_count",
+      "active_day_count",
+      "first_ts_in_month",
+      "last_ts_in_month"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9293155 (WONDER VEGA), retrieve one row per month with AIS records. Include vesselname, imonumber, month_label, COUNT(*) AS record_count, COUNT(DISTINCT UTC date derived from timestamp_date) AS active_day_count, MIN(timestamp_date) AS first_ts_in_month, MAX(timestamp_date) AS last_ts_in_month. Group by vesselname, imonumber, month_label. Sort by first_ts_in_month descending. Return all rows."
+  },
+  {
+    "handle": "data://3e05630f",
+    "minted": "15:24:31",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single latest AIS row at or before '2025-05-19 06:30:13' UTC for IMO 9282792. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date descending. Limit 1."
+  },
+  {
+    "handle": "data://aa9c0c9f",
+    "minted": "15:25:22",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single earliest AIS row at or after '2025-09-07 18:02:00' UTC for IMO 9282792. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date ascending. Limit 1."
+  },
+  {
+    "handle": "data://17b2b478",
+    "minted": "15:27:13",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single latest AIS row at or before '2025-09-16 16:35:22' UTC for IMO 9282792. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date descending. Limit 1."
+  },
+  {
+    "handle": "data://cdedf9aa",
+    "minted": "15:28:32",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single earliest AIS row at or after '2025-10-28 00:55:19' UTC for IMO 9282792. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date ascending. Limit 1."
+  },
+  {
+    "handle": "data://74ddd7bb",
+    "minted": "15:29:27",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single latest AIS row at or before '2025-10-29 19:36:03' UTC for IMO 9282792. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date descending. Limit 1."
+  },
+  {
+    "handle": "data://54ea9470",
+    "minted": "15:30:50",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single earliest AIS row at or after '2025-11-20 17:07:11' UTC for IMO 9282792. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date ascending. Limit 1."
+  },
+  {
+    "handle": "data://8b321985",
+    "minted": "15:32:00",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single latest AIS row at or before '2025-05-26 19:35:32' UTC for IMO 9293155. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date descending. Limit 1."
+  },
+  {
+    "handle": "data://fe41ee07",
+    "minted": "15:33:10",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single earliest AIS row at or after '2025-06-27 07:17:10' UTC for IMO 9293155. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date ascending. Limit 1."
+  },
+  {
+    "handle": "data://5738b8c3",
+    "minted": "15:34:28",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single latest AIS row at or before '2025-07-17 16:47:48' UTC for IMO 9293155. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date descending. Limit 1."
+  },
+  {
+    "handle": "data://abcaf2b2",
+    "minted": "15:36:17",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single earliest AIS row at or after '2025-09-03 09:28:44' UTC for IMO 9293155. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date ascending. Limit 1."
+  },
+  {
+    "handle": "data://2c9107d5",
+    "minted": "15:37:09",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single latest AIS row at or before '2025-09-19 18:30:31' UTC for IMO 9293155. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date descending. Limit 1."
+  },
+  {
+    "handle": "data://acf066fd",
+    "minted": "15:37:55",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single earliest AIS row at or after '2025-11-01 19:47:41' UTC for IMO 9293155. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date ascending. Limit 1."
+  },
+  {
+    "handle": "data://4b2d99a8",
+    "minted": "15:38:53",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single latest AIS row at or before '2025-11-26 14:42:34' UTC for IMO 9293155. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date descending. Limit 1."
+  },
+  {
+    "handle": "data://115bb663",
+    "minted": "15:40:10",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single earliest AIS row at or after '2025-12-01 16:57:35' UTC for IMO 9293155. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date ascending. Limit 1."
+  },
+  {
+    "handle": "data://8576adff",
+    "minted": "15:40:56",
+    "rowCount": 1,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "mmsinumber",
+      "timestamp_date",
+      "latitudedegrees",
+      "longitudedegrees",
+      "speed",
+      "course",
+      "heading"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, retrieve the single earliest AIS row for IMO 9293155 on UTC calendar date 2025-09-03, timestamp_date >= '2025-09-03 00:00:00' and timestamp_date < '2025-09-04 00:00:00'. Include vesselname, imonumber, mmsinumber, timestamp_date, latitudedegrees, longitudedegrees, speed, course, heading. Sort by timestamp_date ascending. Limit 1."
+  },
+  {
+    "handle": "data://6f46982c",
+    "minted": "17:46:57",
+    "rowCount": 4,
+    "columns": [
+      "row_id",
+      "mmsi_count",
+      "first_mmsi",
+      "last_mmsi",
+      "vesselname",
+      "imonumber",
+      "imo_number",
+      "videos_id"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, return AIS coverage summary for IMO numbers 9282792, 9231509, 9314167 and all other IMO numbers present in high-confidence admin.potential_shadow_fleets. Group by vesselname and imonumber. Include COUNT(*) AS record_count, MIN(timestamp_date) AS first_seen, MAX(timestamp_date) AS last_seen, and COUNT(DISTINCT mmsinumber) AS distinct_mmsi_count. Return all rows sorted by vesselname."
+  },
+  {
+    "handle": "data://f4e4262d",
+    "minted": "17:46:57",
+    "rowCount": 4,
+    "columns": [
+      "row_id",
+      "mmsi_count",
+      "first_mmsi",
+      "last_mmsi",
+      "vesselname",
+      "imonumber",
+      "imo_number",
+      "videos_id"
+    ],
+    "prompt": "Retrieve all high-confidence shadow-fleet suspects from potential_shadow_fleets. Include all identifier fields (vessel name, IMO, MMSI), confidence/risk fields, supporting evidence fields, and any date/location fields. Return all matching rows, not just a sample."
+  },
+  {
+    "handle": "data://08d4277a",
+    "minted": "17:46:57",
+    "rowCount": 4,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "month",
+      "record_count",
+      "active_day_count",
+      "first_ts_in_month",
+      "last_ts_in_month"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9282792 (CLYDE NOBLE), retrieve one row per UTC month with AIS records. Include vesselname, imonumber, month, COUNT(*) AS record_count, COUNT(DISTINCT UTC date derived from timestamp_date) AS active_day_count, MIN(timestamp_date) AS first_ts_in_month, MAX(timestamp_date) AS last_ts_in_month. Group by vesselname, imonumber, month. Sort by month descending. Return all rows."
+  },
+  {
+    "handle": "data://1355b700",
+    "minted": "17:46:57",
+    "rowCount": 6,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "ais_date",
+      "record_count",
+      "first_ts_on_date",
+      "last_ts_on_date"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9314167, retrieve one row per UTC calendar date with AIS records. Include vesselname, imonumber, ais_date, COUNT(*) AS record_count, MIN(timestamp_date) AS first_ts_on_date, MAX(timestamp_date) AS last_ts_on_date. Group by vesselname, imonumber, ais_date. Sort by ais_date ascending. Return all rows."
+  },
+  {
+    "handle": "data://4c10f34c",
+    "minted": "17:46:57",
+    "rowCount": 3,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "month_label",
+      "record_count",
+      "active_day_count",
+      "first_ts_in_month",
+      "last_ts_in_month"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9231509 (TREND), retrieve one row per month with AIS records. Include vesselname, imonumber, month_label, COUNT(*) AS record_count, COUNT(DISTINCT UTC date derived from timestamp_date) AS active_day_count, MIN(timestamp_date) AS first_ts_in_month, MAX(timestamp_date) AS last_ts_in_month. Group by vesselname, imonumber, month_label. Sort by first_ts_in_month ascending. Return all rows."
+  },
+  {
+    "handle": "data://c771b7aa",
+    "minted": "17:46:57",
+    "rowCount": 6,
+    "columns": [
+      "row_id",
+      "vesselname",
+      "imonumber",
+      "month_label",
+      "record_count",
+      "active_day_count",
+      "first_ts_in_month",
+      "last_ts_in_month"
+    ],
+    "prompt": "Using Denodo view admin.pg_vessel_positions_select, for IMO 9293155 (WONDER VEGA), retrieve one row per month with AIS records. Include vesselname, imonumber, month_label, COUNT(*) AS record_count, COUNT(DISTINCT UTC date derived from timestamp_date) AS active_day_count, MIN(timestamp_date) AS first_ts_in_month, MAX(timestamp_date) AS last_ts_in_month. Group by vesselname, imonumber, month_label. Sort by first_ts_in_month ascending. Return all rows."
+  }
+]
