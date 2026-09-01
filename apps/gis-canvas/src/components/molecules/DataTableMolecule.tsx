@@ -13,7 +13,7 @@ import { isDataHandle, pageError } from '../../lib/data-plane'
 import { categoryColorVar } from '../../lib/category-color'
 import { useCanvasActions } from '../HandlerContext'
 import { useLinkedSelection } from '../SelectionContext'
-import { resolveIdField } from '../../lib/selection'
+import { resolveIdField, selectionKeyFor } from '../../lib/selection'
 import { Skeleton } from '../atoms/Skeleton'
 import type { MoleculeProps } from '../registry'
 
@@ -70,7 +70,10 @@ export function DataTableMolecule({ node }: MoleculeProps) {
   const data = isDataHandle(source) ? fetched : (source ? resolveMockSource(source) : inline)
   const wanted = (node.props?.columns as string[] | undefined) ?? null
   const filter = (node.state?.filter as Record<string, string> | undefined) ?? {}
-  const [selected, setSelected] = useLinkedSelection(source)
+  // Selection keys on the bound source, or a synthetic node:// key for agent-computed
+  // rows — NOT on `source`, which is '' for those and yielded an inert no-op setter.
+  // Deliberately separate from the `source` used above to resolve the data itself.
+  const [selected, setSelected] = useLinkedSelection(selectionKeyFor(node))
   const [sorting, setSorting] = useState<SortingState>([])
   const firstSelRef = useRef<HTMLTableRowElement | null>(null)
   useEffect(() => { if (selected.length) firstSelRef.current?.scrollIntoView?.({ block: 'nearest' }) }, [selected])
