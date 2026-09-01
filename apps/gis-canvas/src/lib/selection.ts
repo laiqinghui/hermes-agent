@@ -28,8 +28,26 @@ export function resolveIdField(schema: { name: string }[] | undefined, rows?: Re
   return cols[0]?.name ?? 'id'
 }
 
+/** The key a node's row selection is stored under.
+ *
+ * Selection is keyed by data source, but agent-computed tables (gap windows,
+ * rankings) carry their rows in `props.rows` and have no `bindings.source` — so
+ * they used to key on '', which made their checkboxes inert. They get a synthetic
+ * per-node key instead. `node://` cannot collide with `data://`, `mock://`, or a
+ * FeatureServer URL.
+ *
+ * A bound source always wins, matching the molecule's own precedence rule that
+ * `bindings.source` beats inline rows. */
+export function selectionKeyFor(node: ComponentNode): string {
+  const src = node.bindings?.source
+  const bound = Array.isArray(src) ? src[0] : src
+  if (typeof bound === 'string' && bound) return bound
+  return Array.isArray(node.props?.rows) ? `node://${node.id}` : ''
+}
+
 /** Map each data-source handle to the ids of nodes bound to it — a table's
- * `bindings.source` and each data:// handle in a map's `bindings.layers`. */
+ * `bindings.source`, each data:// handle in a map's `bindings.layers`, and the
+ * synthetic `node://` key of an agent-computed table. */
 export function collectNodesBySource(doc: CanvasDoc | null): Record<string, string[]> {
   const out: Record<string, string[]> = {}
   if (!doc) return out
@@ -38,8 +56,7 @@ export function collectNodesBySource(doc: CanvasDoc | null): Record<string, stri
     ;(out[source] ??= []).push(id)
   }
   const walk = (node: ComponentNode) => {
-    const src = node.bindings?.source
-    add(Array.isArray(src) ? src[0] : src, node.id)
+    add(selectionKeyFor(node), node.id)
     const layers = node.bindings?.layers
     for (const layer of Array.isArray(layers) ? layers : []) if (isDataHandle(layer)) add(layer, node.id)
     for (const kid of node.children ?? []) walk(kid)

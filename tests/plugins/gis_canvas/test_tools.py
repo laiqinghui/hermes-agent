@@ -225,6 +225,21 @@ def test_render_view_accepts_imagery_block(plugin):
     assert out["doc"]["imagery"]["scenes"][0]["sensor"] == "optical"
 
 
+def test_catalog_help_explains_resolving_an_inline_row_selection(plugin):
+    # Selecting a row in an agent-computed table mirrors bare ids (rowSelection=[5]),
+    # because awareness carries ids/state and never data rows. The agent must be told
+    # to resolve those ids against props.rows via canvas_get_state, or a follow-up
+    # turn cannot tell which vessel/window the user picked.
+    desc = plugin.tools_canvas.RENDER_VIEW_SCHEMA["description"]
+    assert "rowSelection" in desc
+    assert "canvas_get_state" in desc
+
+
+def test_get_state_schema_mentions_resolving_selections(plugin):
+    desc = plugin.tools_canvas.CANVAS_GET_STATE_SCHEMA["description"]
+    assert "rowSelection" in desc
+
+
 def test_catalog_help_documents_imagery(plugin):
     # The agent only knows what _CATALOG_HELP tells it; an undocumented block is
     # dead code no matter how well the client renders it.

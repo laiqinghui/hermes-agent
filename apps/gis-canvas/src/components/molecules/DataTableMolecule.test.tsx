@@ -129,6 +129,31 @@ describe('DataTableMolecule inline rows', () => {
     expect(fetchData).not.toHaveBeenCalled()
   })
 
+  it('toggling a row in an agent-computed table selects it and mirrors to the agent', async () => {
+    // Regression: inline tables had no bindings.source, so useLinkedSelection('')
+    // returned a no-op setter — the checkbox rendered but could never be checked.
+    const onMirror = vi.fn()
+    render(
+      <SelectionProvider nodesBySource={{ 'node://gaps': ['gaps'] }} onMirror={onMirror}>
+        <HandlerProvider actions={{ setLocalState() {}, reportInteraction: vi.fn(), sendPrompt() {}, fetchData: vi.fn() }}>
+          <DataTableMolecule
+            node={{ id: 'gaps', type: 'data-table', props: {
+              rows: [
+                { rank: 1, vessel: 'AGNI', gap_days: 148 },
+                { rank: 5, vessel: 'TREND', gap_days: 35.1 }
+              ]
+            } } as any}
+            renderChild={() => null}
+          />
+        </HandlerProvider>
+      </SelectionProvider>
+    )
+    await waitFor(() => expect(screen.getByText('TREND')).toBeInTheDocument())
+    fireEvent.click(screen.getByLabelText('select 5'))
+    expect((screen.getByLabelText('select 5') as HTMLInputElement).checked).toBe(true)
+    expect(onMirror).toHaveBeenCalledWith('gaps', ['5'])
+  })
+
   it('prefers bindings.source over inline rows when both are present', async () => {
     const fetchData = vi.fn().mockResolvedValue(page)
     renderWith({ id: 'g3', type: 'data-table',
