@@ -48,6 +48,24 @@ lists. The *analysis* — shadow-fleet suspicion and imagery tasking recommendat
 interpretive work product, so treat this directory as internal to the repo and do not
 republish it outside.
 
+## Running the demo
+
+The broker expires handles after 24h, so the demo self-destructs unless the cache is
+re-seeded. `scripts/gis_canvas_demo.py` restores every handle here into
+`~/.hermes/gis_canvas_data/` with a fresh mtime, preserving handle ids so the prompt's
+`data://f4e4262d` etc. keep resolving:
+
+```bash
+python scripts/gis_canvas_demo.py           # restore + print the prompt
+python scripts/gis_canvas_demo.py --check   # status only; exit 1 if the demo is broken
+```
+
+Then paste `demo-prompt.md` into the canvas chat. The analysis travels in the prompt, so
+the turn costs one `render_view` and no Denodo round-trips.
+
+Requires the gateway running with `GIS_DATA_SOURCE=a2a` (it never queries Denodo, but the
+plugin must be loaded), and the SPA on `:5174`.
+
 ## Related
 
 Design: `apps/gis-canvas/docs/2026-08-31-analysis-product-canvas-design.md`
