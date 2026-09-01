@@ -4,6 +4,8 @@ import type { ComponentNode } from '../../lib/types'
 import { HandlerProvider } from '../HandlerContext'
 import { SelectionProvider, useLinkedSelection, useSelectionState, useSelectionActions } from '../SelectionContext'
 import { TimeExtentProvider, useMapTimeExtent } from '../TimeExtentContext'
+import { ImageryProvider } from '../ImageryContext'
+import type { Imagery } from '../../lib/types'
 import type { CanvasActions } from '../../lib/handlers'
 
 const built: string[] = []
@@ -18,7 +20,19 @@ vi.mock('../../lib/esri/loader', () => ({
     // contains: "inside" = western hemisphere (lng < 0), for the geofence test below
     geometryEngine: { contains: (_geom: any, p: any) => (p as any).x < 0 },
     webMercatorUtils: { webMercatorToGeographic: (g: any) => g }
-  })
+  }),
+  loadImagery: async () => ({ ImageryTileLayer: class {}, RasterStretchRenderer: class {} })
+}))
+
+const builtImagery: Array<{ id: string; sensor: string }> = []
+const builtFootprints: string[][] = []
+vi.mock('../../lib/esri/imagery', () => ({
+  buildImageryLayer: (scene: any) => { builtImagery.push({ id: scene.id, sensor: scene.sensor }); return { imagery: scene.id } },
+  buildFootprintLayer: (scenes: any[]) => {
+    if (!scenes.length) return null
+    builtFootprints.push(scenes.map((s: any) => s.id))
+    return { footprints: true }
+  }
 }))
 vi.mock('../../lib/esri/layers', () => ({
   parseLayerRef: (r: string) => ({ kind: 'rows', name: r }),
@@ -428,4 +442,63 @@ test('surfaces a failed layer fetch instead of drawing a silently empty map', as
   )
   container.querySelector('arcgis-map')!.dispatchEvent(new CustomEvent('arcgisViewReadyChange'))
   await waitFor(() => expect(screen.getByText(/expired/i)).toBeInTheDocument())
+})
+
+describe('EsriMapMolecule imagery', () => {
+  const IMAGERY: Imagery = {
+    scenes: [
+      { id: 'o1', title: 'S2C', url: 'https://x/TCI.tif', sensor: 'optical', datetime: '2025-12-05T03:36:14Z', bbox: [104.58, 1.72, 104.78, 1.94] },
+      { id: 's1', title: 'S1A', url: 'https://x/vv.tif', sensor: 'sar', datetime: '2025-12-03T22:11:00Z', bbox: [104.5, 1.7, 104.9, 2.0] }
+    ]
+  }
+
+  const mount = (props: Record<string, unknown>, imagery: Imagery | undefined = IMAGERY) => {
+    const mapNode: ComponentNode = { id: 'm', type: 'esri:map', bindings: { layers: ['mock://incidents'] }, props }
+    const added: Array<[unknown, number | undefined]> = []
+    const fakeView = {
+      map: { add: (l: unknown, i?: number) => { added.push([l, i]) }, removeMany() {} },
+      popupEnabled: true,
+      on: () => ({ remove() {} })
+    }
+    const { container } = render(
+      <ImageryProvider imagery={imagery}>
+        <EsriMapMolecule node={mapNode} renderChild={() => null} />
+      </ImageryProvider>
+    )
+    const mapEl = container.querySelector('arcgis-map') as any
+    mapEl.view = fakeView
+    mapEl.dispatchEvent(new CustomEvent('arcgisViewReadyChange'))
+    return { added, container }
+  }
+
+  it('builds only the scenes the map heroes, not the whole catalog', async () => {
+    builtImagery.length = 0
+    mount({ imagery: { scenes: ['s1'] } })
+    await waitFor(() => expect(builtImagery).toEqual([{ id: 's1', sensor: 'sar' }]))
+  })
+
+  it('adds imagery beneath the vector layers — AIS evidence must never sit under raster', async () => {
+    builtImagery.length = 0
+    const { added } = mount({ imagery: { scenes: ['o1', 's1'] } })
+    await waitFor(() => expect(builtImagery).toHaveLength(2))
+    const imageryAdds = added.filter(([l]) => (l as any).imagery)
+    expect(imageryAdds.map(([, i]) => i)).toEqual([0, 1])
+  })
+
+  it('draws footprints for every candidate, above the imagery and below the data', async () => {
+    builtFootprints.length = 0
+    const { added } = mount({ imagery: { scenes: ['o1'], footprints: true } })
+    await waitFor(() => expect(builtFootprints).toEqual([['o1', 's1']]))
+    const fpAdd = added.find(([l]) => (l as any).footprints)
+    expect(fpAdd?.[1]).toBe(1) // one imagery scene occupies index 0
+  })
+
+  it('builds no imagery when the map declares none', async () => {
+    builtImagery.length = 0
+    builtFootprints.length = 0
+    const { container } = mount({})
+    await waitFor(() => expect(container.querySelector('arcgis-map')).toBeTruthy())
+    expect(builtImagery).toEqual([])
+    expect(builtFootprints).toEqual([])
+  })
 })
