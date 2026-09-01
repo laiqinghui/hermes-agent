@@ -126,8 +126,11 @@ If the agent heroes a source table instead, the guidance has regressed — see
 
 - The exact layout varies between runs; the agent chooses it. Judge the four properties
   above, not pixel positions.
-- Inline (agent-computed) tables render a checkbox column that does nothing — linked
-  selection needs a source handle. Known cosmetic issue.
+- Inline (agent-computed) tables are selectable. They have no `data://` handle, so their
+  selection keys on a synthetic `node://<id>` (see `selectionKeyFor` in `lib/selection.ts`).
+  The mirrored `rowSelection` carries the row's first distinct column — often a rank, not the
+  subject — so a follow-up turn must resolve it against `props.rows` via `canvas_get_state`.
+  (Before 2026-09-01 these checkboxes rendered but were inert.)
 - A `float` component authored *before* the docks can be hidden beneath them: seed `z` is
   assigned by array index, not by layer. Known, unfixed.
 
