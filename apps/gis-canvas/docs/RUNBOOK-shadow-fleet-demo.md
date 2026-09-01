@@ -226,6 +226,33 @@ and keep the AIS analysis as the base layer.
 - `esri:layer-list` lists each scene by its title and its toggle hides/shows the raster.
 - Both footprints outline, including the scene that was not loaded.
 
+### Checking vector-over-raster ordering
+
+The demo fixture's handles are activity *counts* with no coordinates, so the TREND canvas
+cannot show whether vector layers draw above imagery. Use `mock://vessel-track` with a scene
+that covers it — tile T48NUG contains the mock track's extent (lat 1.23–1.42, lng 103.70–104.02):
+
+```text
+New canvas: verify vector-over-raster layer ordering.
+
+Base layer: an esri:map titled "Track over imagery", basemap osm,
+bindings.layers ['mock://vessel-track'], render 'points'.
+
+imagery block with one scene:
+  id s2-ug — "S2C 2025-12-05 — Singapore (T48NUG)", optical,
+  datetime 2025-12-05T03:37:54Z, cloud 10.66,
+  bbox [103.2021, 0.816, 104.1893, 1.8096],
+  collection sentinel-2-c1-l2a,
+  url https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/48/N/UG/2025/12/S2C_T48NUG_20251205T033614_L2A/TCI.tif
+
+Hero it with props.imagery {scenes:['s2-ug'], footprints:true}, and add an
+esri:layer-list docked right.
+```
+
+All ten track points must draw as visible dots **over** the raster. If they vanish, the
+index-0 layer ordering in `EsriMapMolecule.tsx` has regressed — unit tests cover the index
+arithmetic but cannot catch a visual stacking failure.
+
 ### Sentinel-1 (SAR) is not usable from this catalog
 
 Earth Search publishes Sentinel-1 GRD assets as `s3://sentinel-s1-l1c/...` URIs on a
