@@ -59,6 +59,27 @@ export interface LinkDef { to: string; field: string; reverse?: boolean }
 export interface EntityType { source: string; id: string; title?: string; props?: string[]; links?: Record<string, LinkDef> }
 export type Ontology = Record<string, EntityType>
 
+/** One STAC-discovered satellite scene. Mirrors $defs/imageryScene in
+ * plugins/gis-canvas/schema/canvas.schema.json — keep the two in sync. */
+export interface ImageryScene {
+  id: string
+  title: string
+  url: string
+  /** REQUIRED: a single-band SAR COG needs a stretch renderer or it paints black,
+   * and that is not reliably recoverable from the URL. The agent always knows it
+   * from the STAC collection it searched. */
+  sensor: 'optical' | 'sar'
+  datetime: string
+  /** WGS84 [minLon, minLat, maxLon, maxLat] — STAC's order, lon first. */
+  bbox: [number, number, number, number]
+  collection?: string
+  cloud?: number
+  /** 0-based band indices. Defaults: [0,1,2] optical, [0] SAR. */
+  bandIds?: number[]
+}
+
+export interface Imagery { scenes: ImageryScene[] }
+
 export interface GridLayout {
   type: 'grid'
   cols: number
@@ -74,6 +95,7 @@ export interface CanvasDoc {
   overlays?: ComponentNode[]
   focus?: string
   ontology?: Ontology
+  imagery?: Imagery
 }
 
 /** Envelope carried in canvas tool results (see plugins/gis-canvas/tools_canvas.py). */

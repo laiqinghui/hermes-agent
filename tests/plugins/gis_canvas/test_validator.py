@@ -540,3 +540,82 @@ def test_data_table_valid_schema_passes(plugin):
         },
     })
     assert plugin.validator.validate_doc(doc) == []
+
+
+# --- imagery (SP4a: COG scenes discovered via STAC) -------------------------
+
+
+def _imagery_doc():
+    doc = _minimal_doc()
+    doc["imagery"] = {
+        "scenes": [
+            {
+                "id": "s1",
+                "title": "S2C 2025-12-05",
+                "url": "https://example.com/TCI.tif",
+                "sensor": "optical",
+                "datetime": "2025-12-05T03:36:14Z",
+                "bbox": [104.58, 1.72, 104.78, 1.94],
+                "collection": "sentinel-2-c1-l2a",
+                "cloud": 2.65,
+            }
+        ]
+    }
+    doc["components"].append(
+        {
+            "id": "map1",
+            "type": "esri:map",
+            "area": {"col": 4, "colSpan": 8, "row": 1, "rowSpan": 4},
+            "props": {"imagery": {"scenes": ["s1"], "footprints": True}},
+            "bindings": {"layers": ["mock://incidents"]},
+        }
+    )
+    return doc
+
+
+def test_valid_imagery_doc_passes(plugin):
+    assert plugin.validator.validate_doc(_imagery_doc()) == []
+
+
+def test_imagery_scene_requires_sensor(plugin):
+    doc = _imagery_doc()
+    del doc["imagery"]["scenes"][0]["sensor"]
+    errors = plugin.validator.validate_doc(doc)
+    assert errors and any("sensor" in e for e in errors)
+
+
+def test_imagery_scene_rejects_unknown_sensor(plugin):
+    doc = _imagery_doc()
+    doc["imagery"]["scenes"][0]["sensor"] = "lidar"
+    errors = plugin.validator.validate_doc(doc)
+    assert errors and any("sensor" in e for e in errors)
+
+
+def test_imagery_scene_rejects_non_http_url(plugin):
+    # Earth Search publishes Sentinel-1 GRD assets as s3:// URIs on a requester-pays
+    # bucket; a browser cannot fetch those, so they must not reach the client.
+    doc = _imagery_doc()
+    doc["imagery"]["scenes"][0]["url"] = "s3://bucket/TCI.tif"
+    errors = plugin.validator.validate_doc(doc)
+    assert errors and any("url" in e for e in errors)
+
+
+def test_imagery_scene_rejects_reversed_bbox(plugin):
+    doc = _imagery_doc()
+    doc["imagery"]["scenes"][0]["bbox"] = [104.78, 1.94, 104.58, 1.72]
+    errors = plugin.validator.validate_doc(doc)
+    assert any("bbox" in e for e in errors)
+
+
+def test_imagery_rejects_duplicate_scene_ids(plugin):
+    doc = _imagery_doc()
+    doc["imagery"]["scenes"].append(dict(doc["imagery"]["scenes"][0]))
+    errors = plugin.validator.validate_doc(doc)
+    assert any("duplicate scene id" in e for e in errors)
+
+
+def test_map_imagery_ref_must_name_a_declared_scene(plugin):
+    doc = _imagery_doc()
+    doc["components"][1]["props"]["imagery"]["scenes"] = ["ghost"]
+    errors = plugin.validator.validate_doc(doc)
+    assert any("undeclared scene 'ghost'" in e for e in errors)

@@ -190,3 +190,44 @@ def test_render_view_guidance_keeps_one_map_one_table_and_map_title_rules(plugin
     assert (
         "Give esri:map a props.title — the legend shows it (never a raw data:// handle)."
     ) in desc
+
+
+def test_render_view_accepts_imagery_block(plugin):
+    spec = {
+        "canvasVersion": 1,
+        "layout": {"type": "grid", "cols": 12, "rowHeight": 80, "gap": 8},
+        "imagery": {
+            "scenes": [
+                {
+                    "id": "s2",
+                    "title": "S2C 2025-12-05 — Singapore Strait",
+                    "url": "https://example.com/TCI.tif",
+                    "sensor": "optical",
+                    "datetime": "2025-12-05T03:36:14Z",
+                    "bbox": [104.58, 1.72, 104.78, 1.94],
+                    "collection": "sentinel-2-c1-l2a",
+                    "cloud": 2.65,
+                }
+            ]
+        },
+        "components": [
+            {
+                "id": "map1",
+                "type": "esri:map",
+                "layer": "base",
+                "props": {"title": "AIS gap", "imagery": {"scenes": ["s2"], "footprints": True}},
+                "bindings": {"layers": ["mock://incidents"]},
+            }
+        ],
+    }
+    out = json.loads(plugin.tools_canvas.render_view({"spec": spec}, task_id="t1"))
+    assert out["ok"] is True, out.get("errors")
+    assert out["doc"]["imagery"]["scenes"][0]["sensor"] == "optical"
+
+
+def test_catalog_help_documents_imagery(plugin):
+    # The agent only knows what _CATALOG_HELP tells it; an undocumented block is
+    # dead code no matter how well the client renders it.
+    help_text = plugin.tools_canvas._CATALOG_HELP
+    assert "imagery" in help_text
+    assert "sensor" in help_text

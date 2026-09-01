@@ -20,6 +20,7 @@ import { resolveBffUrl, authMe, loginUrl, bindSessions, logout, type AuthState }
 import { SelectionProvider } from './components/SelectionContext'
 import { TimeExtentProvider } from './components/TimeExtentContext'
 import { OntologyProvider } from './components/OntologyContext'
+import { ImageryProvider } from './components/ImageryContext'
 import { collectNodesBySource } from './lib/selection'
 import { LayoutProvider } from './components/LayoutProvider'
 import { useLayoutStore } from './lib/use-layout-store'
@@ -187,11 +188,13 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
           <SelectionProvider nodesBySource={nodesBySource} onMirror={mirrorSelection}>
             <TimeExtentProvider>
               <OntologyProvider ontology={mergedDoc.ontology}>
-                <HandlerProvider actions={actions}>
-                  <LayoutProvider store={layout}>
-                    <CanvasGrid doc={mergedDoc} />
-                  </LayoutProvider>
-                </HandlerProvider>
+                <ImageryProvider imagery={mergedDoc.imagery}>
+                  <HandlerProvider actions={actions}>
+                    <LayoutProvider store={layout}>
+                      <CanvasGrid doc={mergedDoc} />
+                    </LayoutProvider>
+                  </HandlerProvider>
+                </ImageryProvider>
               </OntologyProvider>
             </TimeExtentProvider>
           </SelectionProvider>

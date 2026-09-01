@@ -192,10 +192,89 @@ Then relaunch with the PowerShell block in step 2.
 
 ---
 
+## 5. Satellite imagery (COG) follow-on turn
+
+SP4a lets the agent plot Cloud Optimized GeoTIFFs discovered by the
+`stac-satellite-image-discovery` skill as layers on the same map. To verify it without a
+live STAC call, run the demo above and then send a **second** turn supplying the scenes.
+
+Two Sentinel-2 L2A scenes over the Singapore Strait AOI, verified browser-readable on
+2026-09-01 (`Access-Control-Allow-Origin: *`, HTTP 206 on a range request):
+
+```text
+Add the satellite imagery that would confirm the top-ranked AIS gap. Two Sentinel-2 L2A
+scenes from Earth Search over the AOI:
+
+1. id s2-1205 — "S2C 2025-12-05 — Singapore Strait", optical,
+   datetime 2025-12-05T03:37:36Z, cloud 2.65, bbox [104.1, 1.7215, 104.9136, 2.7142],
+   collection sentinel-2-c1-l2a,
+   url https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/48/N/VH/2025/12/S2C_T48NVH_20251205T033614_L2A/TCI.tif
+
+2. id s2-1102 — "S2C 2025-11-02 — Singapore Strait", optical,
+   datetime 2025-11-02T03:27:46Z, cloud 14.2, bbox [104.514, 1.7207, 105.0878, 2.7142],
+   collection sentinel-2-c1-l2a,
+   url https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/48/N/VH/2025/11/S2C_T48NVH_20251102T032655_L2A/TCI.tif
+
+Declare both in the imagery block, hero the low-cloud one on the map with footprints on,
+and keep the AIS analysis as the base layer.
+```
+
+### What a correct result looks like
+
+- The 2025-12-05 scene renders **over the Singapore Strait**, aligned with the basemap coastline.
+- AIS points/track draw **on top of** the imagery, never beneath it.
+- `esri:layer-list` lists each scene by its title and its toggle hides/shows the raster.
+- Both footprints outline, including the scene that was not loaded.
+
+### Checking vector-over-raster ordering
+
+The demo fixture's handles are activity *counts* with no coordinates, so the TREND canvas
+cannot show whether vector layers draw above imagery. Use `mock://vessel-track` with a scene
+that covers it — tile T48NUG contains the mock track's extent (lat 1.23–1.42, lng 103.70–104.02):
+
+```text
+New canvas: verify vector-over-raster layer ordering.
+
+Base layer: an esri:map titled "Track over imagery", basemap osm,
+bindings.layers ['mock://vessel-track'], render 'points'.
+
+imagery block with one scene:
+  id s2-ug — "S2C 2025-12-05 — Singapore (T48NUG)", optical,
+  datetime 2025-12-05T03:37:54Z, cloud 10.66,
+  bbox [103.2021, 0.816, 104.1893, 1.8096],
+  collection sentinel-2-c1-l2a,
+  url https://e84-earth-search-sentinel-data.s3.us-west-2.amazonaws.com/sentinel-2-c1-l2a/48/N/UG/2025/12/S2C_T48NUG_20251205T033614_L2A/TCI.tif
+
+Hero it with props.imagery {scenes:['s2-ug'], footprints:true}, and add an
+esri:layer-list docked right.
+```
+
+All ten track points must draw as visible dots **over** the raster. If they vanish, the
+index-0 layer ordering in `EsriMapMolecule.tsx` has regressed — unit tests cover the index
+arithmetic but cannot catch a visual stacking failure.
+
+### Sentinel-1 (SAR) is not usable from this catalog
+
+Earth Search publishes Sentinel-1 GRD assets as `s3://sentinel-s1-l1c/...` URIs on a
+**requester-pays** bucket. A browser cannot fetch them, and the validator rejects a non-http(s)
+url at author time. Real SAR needs a provider that publishes HTTPS COG hrefs, or a server-side
+proxy that signs requester-pays reads — see the SP4a design doc. The SAR *rendering* path (a
+percent-clip stretch on a single-band COG) was verified against Sentinel-2's `B08` band, which
+is single-band 16-bit on the same public bucket:
+
+```text
+.../sentinel-2-c1-l2a/48/N/VH/2025/12/S2C_T48NVH_20251205T033614_L2A/B08.tif
+```
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause |
 |---|---|
+| Imagery layer absent, no error shown | The scene id in `props.imagery.scenes` matched nothing in the top-level `imagery` block, or the gateway is running pre-SP4a plugin code. Restart it. |
+| `imagery '<title>' failed to load` overlay | The COG URL is not publicly readable — a requester-pays bucket, an expired signed URL, a 404, or a host without CORS. Check with `curl -I -H 'Origin: http://localhost:5174' <url>`. |
+| Imagery renders but hides the AIS points | Layer ordering regression: imagery must be added at map index `0..N-1`, the footprint layer at index `N`. See `EsriMapMolecule.tsx`. |
 | Canvas blank, "No canvas yet" | The SPA only accepts a doc pushed via a `tool.complete` WS event. It never reads the store from disk — **seeding a file by hand cannot work**. Run a real agent turn. |
 | Tables show `0 rows` | Handles expired. `python scripts/gis_canvas_demo.py --check`, then restore. |
 | `render_view` rejects `note` / `props.rows` | Gateway is running pre-change plugin code. Restart it. |

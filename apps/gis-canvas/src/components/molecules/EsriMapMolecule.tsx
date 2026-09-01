@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { loadEsri } from '../../lib/esri/loader'
+import { loadEsri, loadImagery } from '../../lib/esri/loader'
+import { buildImageryLayer, buildFootprintLayer } from '../../lib/esri/imagery'
+import { resolveScenes } from '../../lib/imagery'
+import { useImagery } from '../ImageryContext'
 import { buildLayer, buildRowsLayer, trackLayersFromGroups } from '../../lib/esri/layers'
 import { resolveTrackFields, buildTrackGroups, timeExtentOf, type TrackFields, type TrackGroup } from '../../lib/esri/tracks'
 import { resolveLayerColor } from '../../lib/esri/layer-color'
@@ -54,7 +57,14 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   const publishTimeExtent = useTimeExtentPublisher()
 
   const layerMeta = (node.props?.layers as Array<{ title?: string; color?: string }> | undefined) ?? []
-  const layersSig = JSON.stringify({ layers: layerRefs, meta: layerMeta, render })
+  const imagery = useImagery()
+  const imageryProps = (node.props?.imagery ?? {}) as { scenes?: string[]; footprints?: boolean }
+  const imageryIds = Array.isArray(imageryProps.scenes) ? imageryProps.scenes : []
+  const footprints = imageryProps.footprints === true
+  const layersSig = JSON.stringify({
+    layers: layerRefs, meta: layerMeta, render,
+    imageryIds, footprints, catalog: (imagery?.scenes ?? []).map(s => s.id)
+  })
 
   // View-ready: flip `ready` once the arcgis-map view exists.
   useEffect(() => {
@@ -71,7 +81,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   useEffect(() => {
     if (!ready) return
     let cancelled = false
-    const el = ref.current as (HTMLElement & { view?: { map: { add(l: unknown): void; removeMany(ls: unknown[]): void }; popupEnabled?: boolean } }) | null
+    const el = ref.current as (HTMLElement & { view?: { map: { add(l: unknown, index?: number): void; removeMany(ls: unknown[]): void }; popupEnabled?: boolean } }) | null
     const view = el?.view
     ;(async () => {
       const esri = await loadEsri()
@@ -171,6 +181,37 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
         setLayerErrors(layerErrs)
         setBuildTick(t => t + 1)
       }
+
+      // Imagery LAST, deliberately: the failure path appends to layerErrors with a
+      // functional update, and running after setLayerErrors(layerErrs) above means a
+      // fast rejection can't be clobbered by it.
+      if (cancelled) return
+      const scenes = resolveScenes(imagery, imageryIds)
+      if (!scenes.length && !footprints) return
+      try {
+        const ib = await loadImagery()
+        if (cancelled) return
+        scenes.forEach((scene, i) => {
+          try {
+            const layer = buildImageryLayer(scene, ib)
+            // Index 0..N-1: imagery sits at the BOTTOM of the operational stack.
+            // The vector layers are already added, so inserting low pushes them up —
+            // AIS evidence must never end up beneath the raster.
+            if (view) { view.map.add(layer, i); addedLayersRef.current.push(layer) }
+            // A COG that can't be fetched — CORS-less host, requester-pays bucket,
+            // expired signed URL, 404 — must SAY so. An absent raster is otherwise
+            // indistinguishable from one that simply hasn't painted yet.
+            void (layer as { load?: () => Promise<unknown> }).load?.()?.catch(() => {
+              if (cancelled) return
+              setLayerErrors(prev => [...prev, `imagery '${scene.title}' failed to load — check the asset URL is public, CORS-enabled, and a valid COG`])
+            })
+          } catch (e) { console.error('imagery layer build failed', scene.id, e) }
+        })
+        if (footprints) {
+          const fp = buildFootprintLayer(imagery?.scenes ?? [], esri)
+          if (fp && view) { view.map.add(fp, scenes.length); addedLayersRef.current.push(fp) }
+        }
+      } catch (e) { console.error('imagery load failed', e) }
     })().catch(() => {})
     return () => { cancelled = true }
   }, [ready, layersSig]) // eslint-disable-line react-hooks/exhaustive-deps

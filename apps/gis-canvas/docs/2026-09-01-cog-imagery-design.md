@@ -59,6 +59,36 @@ SP4a's shape changes materially — the fallback is a georeferenced `MediaLayer`
 `rendered_preview`/`thumbnail` asset, which is lower fidelity and needs its own extent
 handling — and we revisit this spec before continuing.
 
+### Spike result — 2026-09-01: RESOLVED, reprojection works
+
+Ran against the real Sentinel-2 scene `S2C_T48NVH_20251205T033614_L2A` (2.65% cloud, the
+lowest-cloud scene over the AOI in the target window) on an OSM Web Mercator basemap:
+
+- The COG renders **correctly aligned** with the basemap coastline over the Singapore Strait.
+- View SR and layer SR differ — `ImageryTileLayer` reprojects on the fly. No view SR change,
+  no `MediaLayer` fallback needed. The design proceeds as written.
+- A percent-clip `RasterStretchRenderer` on a single-band COG shows visible structure, so the
+  SAR rendering path is sound.
+
+### Sentinel-1 is not browser-readable from Earth Search
+
+Discovered during the spike and **not** a blocker for SP4a, but it constrains the workflow:
+Earth Search returns Sentinel-1 GRD assets as `s3://sentinel-s1-l1c/...` URIs — an S3 URI
+rather than an HTTPS href, on a **requester-pays** bucket with no anonymous read. A browser
+cannot fetch them at all.
+
+The SAR *code path* is therefore verified with Sentinel-2's `B08` (NIR), a single-band 16-bit
+COG on the same public bucket that needs the identical stretch. Displaying real SAR will need
+either a different provider (one publishing HTTPS COG hrefs) or a server-side proxy that signs
+requester-pays reads. That is a follow-on decision, not SP4a work — but it means the
+shadow-fleet workflow's *primary* sensor recommendation cannot yet be displayed from this
+catalog, and the `imagery` block's `sensor:'sar'` path will initially be exercised only by
+scenes from other providers.
+
+This is precisely the case the "Load failure" error handling exists for: an `s3://` url is
+rejected by the validator at author time, and a CORS-less or 403 https url surfaces a visible
+load error rather than an empty map.
+
 ## Architecture
 
 ### The `imagery` doc block

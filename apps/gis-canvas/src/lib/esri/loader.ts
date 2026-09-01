@@ -1,3 +1,5 @@
+import type { ImageryBag } from './imagery'
+
 export interface EsriBag {
   esriConfig: { apiKey?: string; assetsPath?: string }
   FeatureLayer: new (o: unknown) => unknown
@@ -70,4 +72,21 @@ export function loadFeatureTable(): Promise<void> {
   if (featureTableCached) return featureTableCached
   featureTableCached = import('@arcgis/map-components/components/arcgis-feature-table').then(() => undefined)
   return featureTableCached
+}
+
+let imageryCached: Promise<ImageryBag> | null = null
+
+/** Lazy-load the raster modules for COG imagery. Kept out of the main loadEsri()
+ * bag for the same reason as loadFeatureTable: raster support pulls decoder WASM
+ * that no non-imagery canvas should pay for. */
+export function loadImagery(): Promise<ImageryBag> {
+  if (imageryCached) return imageryCached
+  imageryCached = (async () => {
+    const [{ default: ImageryTileLayer }, { default: RasterStretchRenderer }] = await Promise.all([
+      import('@arcgis/core/layers/ImageryTileLayer.js'),
+      import('@arcgis/core/renderers/RasterStretchRenderer.js')
+    ])
+    return { ImageryTileLayer, RasterStretchRenderer } as unknown as ImageryBag
+  })()
+  return imageryCached
 }
