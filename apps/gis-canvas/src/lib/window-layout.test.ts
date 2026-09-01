@@ -71,6 +71,34 @@ describe('seedRects', () => {
     expect(rects.tb.y + rects.tb.h).toBeCloseTo(100 - RESERVE_PCT, 5)
   })
 
+  // Live 2026-09-01: the agent authored a summary card as a top-left float alongside a top
+  // dock. Seeds put it at (1.5,1.5) under the rail at z 2 vs the rail's z 5 — the card was
+  // rendered but 100% invisible, and nothing reported it. The guidance already says "panels
+  // must not overlap each other", so anchoring inside the rails is what makes that true.
+  it('anchors a float inside the rails so it cannot seed underneath a dock', () => {
+    const rects = seedRects(doc([
+      { id: 'judgments', type: 'note', layer: 'base' },
+      { id: 'card', type: 'card', layer: 'float', anchor: 'top-left', size: { w: 24, h: 22 } },
+      { id: 'gaps', type: 'data-table', layer: 'dock', edge: 'bottom', size: { w: 100, h: 36 } },
+      { id: 'sensor', type: 'note', layer: 'dock', edge: 'right', size: { w: 27, h: 100 } },
+      { id: 'sources', type: 'tabs', layer: 'dock', edge: 'top', size: { w: 100, h: 25 } },
+    ]))
+    expect(overlaps(rects.card, rects.sources)).toBe(false)
+    expect(overlaps(rects.card, rects.sensor)).toBe(false)
+    expect(overlaps(rects.card, rects.gaps)).toBe(false)
+    expect(rects.card.y).toBeGreaterThanOrEqual(25) // below the top rail
+  })
+
+  it('still lets a float overlay a full-bleed map when there are no rails', () => {
+    const rects = seedRects(doc([
+      { id: 'm', type: 'esri:map', layer: 'base' },
+      { id: 'f', type: 'stat', layer: 'float', anchor: 'top-left', size: { w: 20, h: 15 } },
+    ]))
+    expect(overlaps(rects.f, rects.m)).toBe(true) // overlaying the map interior is the point
+    expect(rects.f.x).toBeCloseTo(1.5, 5)
+    expect(rects.f.y).toBeCloseTo(1.5, 5)
+  })
+
   it('seeds a float from its anchor + size', () => {
     const rects = seedRects(doc([
       { id: 'm', type: 'esri:map', layer: 'base' },

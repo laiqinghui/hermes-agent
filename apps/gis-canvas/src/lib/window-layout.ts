@@ -56,19 +56,35 @@ function baseRect(
   return { x: insets.left, y: insets.top, w, h }
 }
 
-function floatRect(anchor: Anchor, size?: { w: number; h: number }): Omit<WindowRect, 'z'> {
+/** Anchor a float inside the area the rails leave, not the raw canvas. The guidance tells
+ *  the agent "panels must not overlap each other" while also inviting floats to overlay a
+ *  map's interior; anchoring within the rails satisfies both. Without it a top-left float
+ *  seeds under a top dock and — because seed z follows array order, not layer — can be
+ *  rendered completely invisibly. With no rails the box IS the canvas, so a float overlays
+ *  a full-bleed map exactly as before. */
+function floatRect(
+  anchor: Anchor,
+  size: { w: number; h: number } | undefined,
+  insets: { left: number; right: number; top: number; bottom: number },
+): Omit<WindowRect, 'z'> {
   const s = size ?? defaultSize(anchor)
   const g = GAP_PCT
-  const midX = (100 - s.w) / 2, midY = (100 - s.h) / 2
-  const rightX = 100 - s.w - g, bottomY = 100 - s.h - g - RESERVE_PCT
+  let ax = insets.left, ay = insets.top
+  let aw = 100 - insets.left - insets.right
+  let ah = 100 - RESERVE_PCT - insets.top - insets.bottom
+  // Rails leaving no room are a malformed layout: fall back to the whole canvas rather
+  // than emitting a negative-origin rect.
+  if (aw <= 0 || ah <= 0) { ax = 0; ay = 0; aw = 100; ah = 100 - RESERVE_PCT }
+  const leftX = ax + g, rightX = ax + aw - s.w - g, midX = ax + (aw - s.w) / 2
+  const topY = ay + g, bottomY = ay + ah - s.h - g, midY = ay + (ah - s.h) / 2
   switch (anchor) {
-    case 'top-left': return { x: g, y: g, w: s.w, h: s.h }
-    case 'top': return { x: midX, y: g, w: s.w, h: s.h }
-    case 'top-right': return { x: rightX, y: g, w: s.w, h: s.h }
-    case 'left': return { x: g, y: midY, w: s.w, h: s.h }
+    case 'top-left': return { x: leftX, y: topY, w: s.w, h: s.h }
+    case 'top': return { x: midX, y: topY, w: s.w, h: s.h }
+    case 'top-right': return { x: rightX, y: topY, w: s.w, h: s.h }
+    case 'left': return { x: leftX, y: midY, w: s.w, h: s.h }
     case 'center': return { x: midX, y: midY, w: s.w, h: s.h }
     case 'right': return { x: rightX, y: midY, w: s.w, h: s.h }
-    case 'bottom-left': return { x: g, y: bottomY, w: s.w, h: s.h }
+    case 'bottom-left': return { x: leftX, y: bottomY, w: s.w, h: s.h }
     case 'bottom': return { x: midX, y: bottomY, w: s.w, h: s.h }
     case 'bottom-right': return { x: rightX, y: bottomY, w: s.w, h: s.h }
   }
@@ -103,7 +119,7 @@ export function seedRects(doc: CanvasDoc): Record<string, WindowRect> {
   resolved.components.forEach((c: ComponentNode, i: number) => {
     if (c.layer === 'base') { out[c.id] = { ...baseRect(c.type, insets), z: 0 }; return }
     if (c.layer === 'float') {
-      const r = floatRect((c.anchor as Anchor | undefined) ?? 'top-left', c.size)
+      const r = floatRect((c.anchor as Anchor | undefined) ?? 'top-left', c.size, insets)
       out[c.id] = { ...r, z: i + 1 }; return
     }
     const edge = (c.edge as Edge | undefined) ?? edgeForType(c.type)
