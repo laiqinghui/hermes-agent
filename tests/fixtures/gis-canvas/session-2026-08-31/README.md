@@ -50,6 +50,9 @@ republish it outside.
 
 ## Running the demo
 
+Full procedure, including how to start each service and how to revert afterwards:
+**`apps/gis-canvas/docs/RUNBOOK-shadow-fleet-demo.md`**. Quick version:
+
 The broker expires handles after 24h, so the demo self-destructs unless the cache is
 re-seeded. `scripts/gis_canvas_demo.py` restores every handle here into
 `~/.hermes/gis_canvas_data/` with a fresh mtime, preserving handle ids so the prompt's
