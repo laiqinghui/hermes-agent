@@ -19,6 +19,15 @@ export function isDataHandle(ref: string | undefined): boolean {
   return typeof ref === 'string' && ref.startsWith('data://')
 }
 
+/** The message to show when the data plane refuses a handle, or null when the page is
+ *  usable. Centralised because every consumer previously read `page.rows` unconditionally,
+ *  so an expired handle rendered as a plausible empty result — indistinguishable from a
+ *  query that legitimately found nothing. */
+export function pageError(page: DataPage | null | undefined): string | null {
+  if (!page || page.ok !== false) return null
+  return page.errors?.[0] ?? 'could not load this data handle'
+}
+
 export async function fetchDataPage(
   gw: Pick<GatewayLike, 'request'>,
   handle: string,

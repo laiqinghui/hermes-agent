@@ -9,7 +9,13 @@ export interface ResolvedEntity {
   props: Array<{ label: string; value: string }>
   provenance: { source: string }
 }
-export interface SourceData { schema: { name: string }[]; rows: Array<Record<string, unknown>> }
+export interface SourceData {
+  schema: { name: string }[]
+  rows: Array<Record<string, unknown>>
+  /** Set when the data plane refused the handle (e.g. expired), so a consumer can say
+   *  why the entity is missing rather than claiming no match was found. */
+  error?: string
+}
 
 /** The entity type whose `source` is this handle, if any. */
 export function typeForSource(ontology: Ontology | undefined, source: string): string | undefined {

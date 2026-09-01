@@ -64,7 +64,8 @@ export function EntityDetailMolecule({ node: _node }: MoleculeProps) {
   const anySelection = Object.values(selection).some(k => k?.length)
   if (!focus) return <Frame><Hint text={anySelection ? 'Selection is not an ontology entity' : 'Select an entity to see its details'} /></Frame>
   if (!data) return <Frame><Hint text="Loading…" /></Frame>
-  if (!resolved) return <Frame><Hint text={`No matching ${focus.type} for "${focus.key}"`} /></Frame>
+  // A refused handle is not "no match" — report the data-plane reason instead.
+  if (!resolved) return <Frame><Hint text={data.error ?? `No matching ${focus.type} for "${focus.key}"`} /></Frame>
 
   const e = resolved.entity
   const pivot = (ref: EntityRef, title: string) => {

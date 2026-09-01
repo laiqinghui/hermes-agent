@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { loadEsri, loadFeatureTable } from '../../lib/esri/loader'
 import { buildLayer, buildRowsLayer } from '../../lib/esri/layers'
-import { isDataHandle } from '../../lib/data-plane'
+import { isDataHandle, pageError } from '../../lib/data-plane'
 import { useCanvasActions } from '../HandlerContext'
 import { EsriFrame } from './EsriFrame'
 import type { MoleculeProps } from '../registry'
@@ -9,6 +9,7 @@ import type { MoleculeProps } from '../registry'
 export function EsriFeatureTableMolecule({ node }: MoleculeProps) {
   const actions = useCanvasActions()
   const ref = useRef<HTMLElement | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const layerHandle = Array.isArray(node.bindings?.layer) ? node.bindings!.layer[0] : node.bindings?.layer as string | undefined
   const mapRef = node.bindings?.mapRef as string | undefined
 
@@ -23,6 +24,10 @@ export function EsriFeatureTableMolecule({ node }: MoleculeProps) {
         if (isDataHandle(layerHandle)) {
           const page = await actions.fetchData(layerHandle, { pageSize: 5000 })
           if (cancelled) return
+          // An expired handle must not render as an empty table — that reads as
+          // "the query found nothing" and hides a recoverable cache problem.
+          const err = pageError(page)
+          if (err) { setLoadError(err); return }
           el.layer = buildRowsLayer({ schema: page.schema as never, rows: page.rows as never }, esri, layerHandle)
         } else {
           el.layer = buildLayer(layerHandle, esri)
@@ -40,8 +45,9 @@ export function EsriFeatureTableMolecule({ node }: MoleculeProps) {
   const refEl = mapRef ? `#esri-map-${mapRef}` : undefined
   return (
     <EsriFrame title="Features">
+      {loadError ? <div className="p-3 text-sm text-negative">{loadError}</div> : null}
       {/* @ts-expect-error custom element */}
-      <arcgis-feature-table ref={ref} {...(refEl ? { 'reference-element': refEl } : {})} style={{ display: 'block', width: '100%', height: '100%' }} />
+      <arcgis-feature-table ref={ref} {...(refEl ? { 'reference-element': refEl } : {})} style={{ display: loadError ? 'none' : 'block', width: '100%', height: '100%' }} />
     </EsriFrame>
   )
 }

@@ -411,3 +411,21 @@ test('render:track shows a "no track data" note when no tracks build (no usable 
   await waitFor(() => expect(fetchData).toHaveBeenCalled())
   await waitFor(() => expect(screen.getByTestId('track-empty')).toBeInTheDocument())
 })
+
+test('surfaces a failed layer fetch instead of drawing a silently empty map', async () => {
+  // An expired handle used to yield an empty layer with no explanation — the same
+  // silent-failure shape that cost a live debugging session.
+  const fetchData = vi.fn().mockResolvedValue({
+    ok: false, expired: true, rows: [], schema: [], total: 0, page: 0, pageSize: 100,
+    errors: ["handle 'data://gone' expired and its cached rows were dropped; re-run the query to repopulate it"]
+  })
+  const actions: CanvasActions = { setLocalState() {}, reportInteraction: vi.fn(), sendPrompt() {}, fetchData }
+  const n: ComponentNode = { ...node, id: 'mapErr', bindings: { layers: ['data://gone'] } }
+  const { container } = render(
+    <HandlerProvider actions={actions}>
+      <EsriMapMolecule node={n} renderChild={() => null} />
+    </HandlerProvider>
+  )
+  container.querySelector('arcgis-map')!.dispatchEvent(new CustomEvent('arcgisViewReadyChange'))
+  await waitFor(() => expect(screen.getByText(/expired/i)).toBeInTheDocument())
+})

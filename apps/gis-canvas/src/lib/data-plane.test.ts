@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { fetchDataPage, isDataHandle } from './data-plane'
+import { fetchDataPage, isDataHandle, pageError } from './data-plane'
 
 describe('data-plane', () => {
   it('isDataHandle recognizes data:// only', () => {
@@ -26,5 +26,27 @@ describe('data-plane', () => {
       filter: { sev: 'high' }
     })
     expect(page.rows).toEqual([{ id: 'a' }])
+  })
+})
+
+describe('pageError', () => {
+  // Every consumer of the data plane used to read page.rows unconditionally, so an
+  // expired handle rendered as a plausible empty result. Centralising the check keeps
+  // that from drifting apart again per-molecule.
+  it('returns the broker message when the page failed', () => {
+    expect(pageError({
+      ok: false, expired: true, rows: [], schema: [], total: 0, page: 0, pageSize: 100,
+      errors: ["handle 'data://gone' expired and its cached rows were dropped; re-run the query to repopulate it"]
+    })).toMatch(/expired/)
+  })
+
+  it('falls back to a generic message when a failure carries no errors', () => {
+    expect(pageError({ ok: false, rows: [], schema: [], total: 0, page: 0, pageSize: 100 }))
+      .toBeTruthy()
+  })
+
+  it('returns null for a usable page, including a genuinely empty one', () => {
+    expect(pageError({ ok: true, rows: [], schema: [], total: 0, page: 0, pageSize: 100 })).toBeNull()
+    expect(pageError(null)).toBeNull()
   })
 })

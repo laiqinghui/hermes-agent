@@ -9,7 +9,7 @@ import {
   type SortingState
 } from '@tanstack/react-table'
 import { resolveMockSource, type MockSource, type MockField } from '../../lib/mock-data'
-import { isDataHandle } from '../../lib/data-plane'
+import { isDataHandle, pageError } from '../../lib/data-plane'
 import { categoryColorVar } from '../../lib/category-color'
 import { useCanvasActions } from '../HandlerContext'
 import { useLinkedSelection } from '../SelectionContext'
@@ -50,8 +50,9 @@ export function DataTableMolecule({ node }: MoleculeProps) {
         .fetchData(source, { pageSize: 1000 })
         .then(p => {
           if (cancelled) return
-          if (p?.ok === false) {
-            setLoadError(p.errors?.[0] ?? 'could not load this data handle')
+          const err = pageError(p)
+          if (err) {
+            setLoadError(err)
             setFetched({ schema: [], rows: [] })
             return
           }

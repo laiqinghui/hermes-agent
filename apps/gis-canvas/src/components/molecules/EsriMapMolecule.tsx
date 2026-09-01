@@ -3,7 +3,7 @@ import { loadEsri } from '../../lib/esri/loader'
 import { buildLayer, buildRowsLayer, trackLayersFromGroups } from '../../lib/esri/layers'
 import { resolveTrackFields, buildTrackGroups, timeExtentOf, type TrackFields, type TrackGroup } from '../../lib/esri/tracks'
 import { resolveLayerColor } from '../../lib/esri/layer-color'
-import { isDataHandle } from '../../lib/data-plane'
+import { isDataHandle, pageError } from '../../lib/data-plane'
 import { resolveMockSource } from '../../lib/mock-data'
 import { useCanvasActions } from '../HandlerContext'
 import { useSelectionActions, useSelectionState } from '../SelectionContext'
@@ -50,6 +50,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
   const [buildTick, setBuildTick] = useState(0)
   const [roles, setRoles] = useState<TrackFields | null>(null)
   const [trackEmpty, setTrackEmpty] = useState(false)
+  const [layerErrors, setLayerErrors] = useState<string[]>([])
   const publishTimeExtent = useTimeExtentPublisher()
 
   const layerMeta = (node.props?.layers as Array<{ title?: string; color?: string }> | undefined) ?? []
@@ -84,6 +85,10 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
       mapCtx.current = null
       setRoles(null)
       setTrackEmpty(false)
+      setLayerErrors([])
+      // A layer whose handle expired must not render as an absent layer — that is
+      // indistinguishable from a query that legitimately matched nothing.
+      const layerErrs: string[] = []
       let trackColorBase = 0
       let rolesSet = false
       const allTrackGroups: TrackGroup[] = []
@@ -99,6 +104,8 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
             if (isDataHandle(r)) {
               const page = await actions.fetchData(r, { pageSize: 5000 })
               if (cancelled) return
+              const err = pageError(page)
+              if (err) { layerErrs.push(err); continue }
               schema = page.schema
               rows = page.rows as Record<string, unknown>[]
             } else {
@@ -123,6 +130,8 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
           if (isDataHandle(r)) {
             const page = await actions.fetchData(r, { pageSize: 5000 })
             if (cancelled) return
+            const err = pageError(page)
+            if (err) { layerErrs.push(err); continue }
             if (r === source) {
               const rows = page.rows as Record<string, unknown>[]
               const idField = resolveIdField(page.schema as { name: string }[], rows)
@@ -159,6 +168,7 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
         // coordinates) instead of leaving a silently-empty map.
         const trackEligible = render === 'track' && layerRefs.some(r => isDataHandle(r) || r.startsWith('mock://'))
         setTrackEmpty(trackEligible && allTrackGroups.length === 0)
+        setLayerErrors(layerErrs)
         setBuildTick(t => t + 1)
       }
     })().catch(() => {})
@@ -285,6 +295,14 @@ export function EsriMapMolecule({ node }: MoleculeProps) {
           <span>◇ spatial {roles.latField ?? 'lat'}/{roles.lngField ?? 'lng'}</span>
           <span>◷ temporal {roles.timeField ?? '—'}</span>
           {roles.trackIdField ? <span>⛓ track {roles.trackIdField}</span> : null}
+        </div>
+      ) : null}
+      {layerErrors.length ? (
+        <div
+          data-testid="layer-errors"
+          className="pointer-events-none absolute inset-x-4 top-4 z-6 rounded-gc-md border border-hairline bg-surface/90 px-3 py-2 font-sans text-xs text-negative backdrop-blur-sm"
+        >
+          {layerErrors.map((e, i) => <div key={i}>{e}</div>)}
         </div>
       ) : null}
       {trackEmpty ? (
