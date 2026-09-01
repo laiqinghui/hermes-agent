@@ -12,6 +12,47 @@ describe('seedRects', () => {
     expect(rects.m).toEqual({ x: 0, y: 0, w: 100, h: 100, z: 0 })
   })
 
+  // A map at base WANTS to be the full-bleed background — panels belong on top of it.
+  // Prose does not: an opaque dock drawn over a note hides text with no way to reach it
+  // (the note's own scrollbar is behind the dock too). Verified live 2026-09-01: an
+  // agent-authored briefing put its key judgments at base and the reader could not
+  // scroll to the section hidden under the rails.
+  const briefing: CanvasDoc['components'] = [
+    { id: 'judgments', type: 'note', layer: 'base' },
+    { id: 'gaps', type: 'data-table', layer: 'dock', edge: 'bottom', size: { w: 100, h: 36 } },
+    { id: 'sensor', type: 'note', layer: 'dock', edge: 'right', size: { w: 27, h: 100 } },
+    { id: 'sources', type: 'tabs', layer: 'dock', edge: 'top', size: { w: 100, h: 25 } },
+  ]
+
+  const overlaps = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) =>
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+
+  it('insets a non-map base out from under the dock rails', () => {
+    const rects = seedRects(doc(briefing))
+    expect(rects.judgments).toEqual({ x: 0, y: 25, w: 73, h: 100 - RESERVE_PCT - 25 - 36, z: 0 })
+    for (const id of ['gaps', 'sensor', 'sources']) {
+      expect(overlaps(rects.judgments, rects[id])).toBe(false)
+    }
+  })
+
+  it('keeps a map base full-bleed — panels are meant to sit over it', () => {
+    const rects = seedRects(doc([
+      { id: 'm', type: 'esri:map', layer: 'base' },
+      ...briefing.slice(1),
+    ]))
+    expect(rects.m).toEqual({ x: 0, y: 0, w: 100, h: 100, z: 0 })
+  })
+
+  it('falls back to full-bleed when the rails would leave a non-map base no room', () => {
+    const rects = seedRects(doc([
+      { id: 'n', type: 'note', layer: 'base' },
+      { id: 'top', type: 'tabs', layer: 'dock', edge: 'top', size: { w: 100, h: 60 } },
+      { id: 'bot', type: 'data-table', layer: 'dock', edge: 'bottom', size: { w: 100, h: 60 } },
+    ]))
+    // showing it behind the rails beats collapsing it to nothing
+    expect(rects.n).toEqual({ x: 0, y: 0, w: 100, h: 100, z: 0 })
+  })
+
   it('seeds a right-docked legend as a right rail above z 0', () => {
     const rects = seedRects(doc([
       { id: 'm', type: 'esri:map', layer: 'base' },

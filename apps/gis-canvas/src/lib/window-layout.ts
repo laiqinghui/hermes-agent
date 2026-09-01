@@ -36,6 +36,26 @@ function dockRect(edge: Edge, size?: { w: number; h: number }, insets: { left: n
   }
 }
 
+const FULL_BLEED = { x: 0, y: 0, w: 100, h: 100 }
+
+/** A map at `base` is the backdrop — panels are meant to sit on top of it, and it stays
+ *  full-bleed. Anything else at `base` (notably a note carrying the analysis) must NOT be
+ *  left under an opaque rail: the rail hides the text *and* the note's own scrollbar, so
+ *  that content becomes unreachable rather than merely scrolled away. A non-map base
+ *  therefore takes the area the rails leave over. */
+function baseRect(
+  type: string,
+  insets: { left: number; right: number; top: number; bottom: number },
+): Omit<WindowRect, 'z'> {
+  if (type === 'esri:map') return { ...FULL_BLEED }
+  const w = 100 - insets.left - insets.right
+  const h = 100 - RESERVE_PCT - insets.top - insets.bottom
+  // Rails that leave no room are a malformed layout; showing the panel behind them beats
+  // collapsing it to nothing.
+  if (w <= 0 || h <= 0) return { ...FULL_BLEED }
+  return { x: insets.left, y: insets.top, w, h }
+}
+
 function floatRect(anchor: Anchor, size?: { w: number; h: number }): Omit<WindowRect, 'z'> {
   const s = size ?? defaultSize(anchor)
   const g = GAP_PCT
@@ -61,8 +81,9 @@ export function seedRects(doc: CanvasDoc): Record<string, WindowRect> {
   const resolved = applyAutoShell(doc)
   const out: Record<string, WindowRect> = {}
 
-  // Compute left/right rail insets for horizontal docks before processing components
-  let leftInset = 0, rightInset = 0
+  // Compute rail insets before processing components: the left/right ones size the
+  // horizontal docks, and all four inset a non-map base out from under the rails.
+  let leftInset = 0, rightInset = 0, topInset = 0, bottomInset = 0
   resolved.components.forEach((c: ComponentNode) => {
     if (c.layer === 'dock') {
       const edge = (c.edge as Edge | undefined) ?? edgeForType(c.type)
@@ -70,12 +91,17 @@ export function seedRects(doc: CanvasDoc): Record<string, WindowRect> {
         leftInset = c.size?.w ?? defaultDockSize('left').w
       } else if (edge === 'right') {
         rightInset = c.size?.w ?? defaultDockSize('right').w
+      } else if (edge === 'top') {
+        topInset = c.size?.h ?? defaultDockSize('top').h
+      } else {
+        bottomInset = c.size?.h ?? defaultDockSize('bottom').h
       }
     }
   })
+  const insets = { left: leftInset, right: rightInset, top: topInset, bottom: bottomInset }
 
   resolved.components.forEach((c: ComponentNode, i: number) => {
-    if (c.layer === 'base') { out[c.id] = { x: 0, y: 0, w: 100, h: 100, z: 0 }; return }
+    if (c.layer === 'base') { out[c.id] = { ...baseRect(c.type, insets), z: 0 }; return }
     if (c.layer === 'float') {
       const r = floatRect((c.anchor as Anchor | undefined) ?? 'top-left', c.size)
       out[c.id] = { ...r, z: i + 1 }; return
