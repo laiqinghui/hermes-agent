@@ -300,6 +300,13 @@ RENDER_VIEW_SCHEMA = {
         "ONE map and ONE table per dataset — do NOT wrap a table in a card AND also emit a "
         "standalone table. Give esri:map a props.title — the legend shows it (never a raw "
         "data:// handle). "
+        "ACTING ON A ROW THE USER SELECTED: the canvas summary reports selections as bare "
+        "ids (e.g. rowSelection=[5]) — it carries state, never data rows. For a table you "
+        "authored inline (props.rows) that id is the row's first distinct column, often a "
+        "rank or index, NOT the subject. Before acting on such a selection, call "
+        "canvas_get_state and look the id up in that table's props.rows to recover the "
+        "actual row — the vessel, the time window, the identifiers you need to query. Do "
+        "NOT guess which row the user meant, and do not assume the selected id is a name. "
         "Briefing example: {canvasVersion:1, layout:{type:'grid',cols:12}, components:[ "
         "{id:'kj', type:'note', layer:'base', props:{title:'Key judgments', "
         "body:'## Highest-value tasking windows\\n1. **AGNI** 2025-06-25 to 2025-11-20 — "
@@ -361,7 +368,10 @@ CANVAS_GET_STATE_SCHEMA = {
     "name": "canvas_get_state",
     "description": (
         "Read the current canvas document (or one component's subtree via component_id): "
-        "returns {ok, rev, doc|node}. Use before update_view when unsure of current state/rev."
+        "returns {ok, rev, doc|node}. Use before update_view when unsure of current state/rev. "
+        "ALSO use it to resolve a rowSelection: the canvas summary reports selected rows as "
+        "bare ids, and the doc returned here carries each table's props.rows, so you can look "
+        "the ids up to see WHICH rows the user picked."
     ),
     "parameters": {
         "type": "object",
