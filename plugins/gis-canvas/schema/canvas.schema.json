@@ -25,9 +25,33 @@
     "ontology": {
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/entityType" }
+    },
+    "imagery": {
+      "type": "object",
+      "required": ["scenes"],
+      "additionalProperties": false,
+      "properties": {
+        "scenes": { "type": "array", "items": { "$ref": "#/$defs/imageryScene" } }
+      }
     }
   },
   "$defs": {
+    "imageryScene": {
+      "type": "object",
+      "required": ["id", "title", "url", "sensor", "datetime", "bbox"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "pattern": "^https?://" },
+        "sensor": { "enum": ["optical", "sar"] },
+        "datetime": { "type": "string", "minLength": 1 },
+        "bbox": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 },
+        "collection": { "type": "string" },
+        "cloud": { "type": "number" },
+        "bandIds": { "type": "array", "items": { "type": "integer", "minimum": 0 } }
+      }
+    },
     "entityType": {
       "type": "object",
       "required": ["source", "id"],

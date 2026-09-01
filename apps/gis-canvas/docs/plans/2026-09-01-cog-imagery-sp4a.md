@@ -20,7 +20,11 @@
 - ArcGIS `bandIds` are **0-based** indices into the raster's bands.
 - Every ESRI graphic geometry MUST carry an explicit `spatialReference` and MUST NOT contain non-finite coordinates. A missing SR yields a `[0,0]` extent and nothing renders; a single `NaN` poisons the entire layer. (Both were live-verified failures in SP3b.)
 - Imagery layers are **not** selectable and participate in neither linked selection nor the ontology. They are backdrop, not evidence rows.
-- Existing test counts before this work: 298 frontend, 127 plugin. Both suites must still pass at every commit.
+- Existing test counts before this work: **330 frontend, 157 plugin** (measured 2026-09-01; the
+  298/127 figures from the SP1-era notes were stale). Expected totals per task below are
+  written against the stale baseline — trust the delta, not the absolute: Task 1 +7 plugin,
+  Task 2 +8 FE, Task 3 +6 FE, Task 5 +4 FE, Task 6 +2 plugin. Final: 348 FE, 166 plugin.
+  Both suites must pass at every commit.
 
 ---
 

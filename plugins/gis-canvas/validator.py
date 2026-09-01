@@ -247,4 +247,45 @@ def validate_doc(doc: dict) -> list[str]:
                     f"ontology '{type_name}'.links.{link_name}: 'to' references undeclared type '{target}'"
                 )
 
+    # Imagery cross-checks. Per-scene field presence/types are enforced by the JSON
+    # schema; these catch what it can't express — duplicate ids, bbox ordering, and
+    # a map heroing a scene that was never declared.
+    scenes = (doc.get("imagery") or {}).get("scenes") or []
+    scene_ids: set[str] = set()
+    for scene in scenes:
+        sid = scene.get("id")
+        if sid in scene_ids:
+            errors.append(f"imagery: duplicate scene id '{sid}'")
+        scene_ids.add(sid)
+        bbox = scene.get("bbox") or []
+        if len(bbox) == 4:
+            min_lon, min_lat, max_lon, max_lat = bbox
+            if not (min_lon < max_lon and min_lat < max_lat):
+                errors.append(
+                    f"imagery scene '{sid}': bbox must be WGS84 "
+                    f"[minLon, minLat, maxLon, maxLat] with minLon < maxLon and "
+                    f"minLat < maxLat, got {bbox}"
+                )
+
+    def check_imagery_refs(node: dict) -> None:
+        if node.get("type") == "esri:map":
+            refs = ((node.get("props") or {}).get("imagery") or {}).get("scenes") or []
+            for ref in refs:
+                if ref not in scene_ids:
+                    errors.append(
+                        f"'{node['id']}' (esri:map): props.imagery.scenes references "
+                        f"undeclared scene '{ref}' — declare it in the top-level "
+                        f"`imagery` block"
+                    )
+        for kid in node.get("children") or []:
+            check_imagery_refs(kid)
+        for slot_kids in (node.get("slots") or {}).values():
+            for kid in slot_kids:
+                check_imagery_refs(kid)
+
+    for comp in doc.get("components", []):
+        check_imagery_refs(comp)
+    for overlay in doc.get("overlays", []):
+        check_imagery_refs(overlay)
+
     return errors
