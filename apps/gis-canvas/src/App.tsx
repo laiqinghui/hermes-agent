@@ -16,6 +16,7 @@ import { useCanvasDoc } from './lib/use-canvas-doc'
 import { mergeOverrides, type Overrides } from './lib/merge'
 import { fetchDataPage } from './lib/data-plane'
 import type { CanvasActions } from './lib/handlers'
+import type { CanvasDoc } from './lib/types'
 import { resolveBffUrl, authMe, loginUrl, bindSessions, logout, type AuthState } from './lib/auth'
 import { SelectionProvider } from './components/SelectionContext'
 import { TimeExtentProvider } from './components/TimeExtentContext'
@@ -26,6 +27,8 @@ import { LayoutProvider } from './components/LayoutProvider'
 import { useLayoutStore } from './lib/use-layout-store'
 import { WindowStateProvider } from './components/WindowStateProvider'
 import { useWindowStateStore } from './lib/use-window-state'
+import { SessionPicker } from './components/SessionPicker'
+import { listSessions, type SessionRow } from './lib/sessions'
 
 // reasoning.delta carries the model's real between-step reasoning (gpt-5.5 et al.);
 // reasoning.available is only the final answer for such models. Both feed the star.
@@ -41,7 +44,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     () => injectedClient ?? createGatewayClient(),
     [injectedClient]
   )
-  const { doc, errors } = useCanvasDoc(client)
+  const { doc, errors, setDoc } = useCanvasDoc(client)
   const [connected, setConnected] = useState(false)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const sessionIdRef = useRef<string | null>(null)
@@ -54,6 +57,10 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const layout = useLayoutStore()
   const windows = useWindowStateStore()
   const [overlayOpen, setOverlayOpen] = useOverlayShortcut()
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [sessionRows, setSessionRows] = useState<SessionRow[]>([])
+  const [canvasKeys, setCanvasKeys] = useState<Set<string>>(new Set())
+  const [pickerBusy, setPickerBusy] = useState(false)
   const [approval, setApproval] = useState<PendingApproval | null>(null)
 
   const log = (item: Omit<ActivityItem, 'id'>) =>
@@ -185,12 +192,46 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   // overrides AND restores every shaded or minimized window.
   const handleResetLayout = () => { layout.reset(); windows.reset() }
 
+  // Opening the picker refetches both lists: sessions from the BFF, stored
+  // canvas keys from the plugin, so Canvas/Transcript marks are never stale.
+  const openPicker = () => {
+    setPickerOpen(true)
+    setPickerBusy(true)
+    void Promise.all([
+      listSessions(bffUrl),
+      client.request<{ keys: string[] }>('canvas.list', {}).catch(() => ({ keys: [] as string[] })),
+    ]).then(([rows, stored]) => {
+      setSessionRows(rows)
+      setCanvasKeys(new Set(stored.keys ?? []))
+    }).finally(() => setPickerBusy(false))
+  }
+
+  // Own session: fetch the stored doc, resume so it can be continued (resume
+  // MUTATES — correct for our own session, forbidden for foreign ones), bind.
+  const openOwnSession = (row: SessionRow) => {
+    setPickerOpen(false)
+    void (async () => {
+      try {
+        await client.request('session.resume', { session_id: row.id })
+        const got = await client.request<{ doc: CanvasDoc | null }>('canvas.get', { session_id: row.id })
+        sessionIdRef.current = row.id
+        canvasKeyRef.current = row.id
+        await bindSessions(bffUrl, [row.id])
+        if (got.doc) setDoc(got.doc)
+        log({ kind: 'system', text: `opened session ${row.id}` })
+      } catch (err) {
+        log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      }
+    })()
+  }
+
   return (
     <div className="flex h-screen flex-col bg-canvas font-sans text-primary">
       <TopBar theme={theme} onToggleTheme={toggleTheme} connected={connected} isBusy={isBusy}
         onLogout={handleLogout} onResetLayout={handleResetLayout}
         canReset={!layout.isEmpty || !windows.isEmpty}
-        onFocusMap={windows.toggleFocus} canFocus={windows.canFocus} isFocused={windows.isFocused} />
+        onFocusMap={windows.toggleFocus} canFocus={windows.canFocus} isFocused={windows.isFocused}
+        onOpenSessions={openPicker} />
       <main className="relative min-h-0 flex-1 overflow-auto gc-canvas-grid-bg p-4">
         <CanvasHeader rev={mergedDoc?.rev} isBusy={isBusy} />
         {mergedDoc ? (
@@ -232,6 +273,14 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         onSend={send}
         approval={approval}
         onRespond={respondApproval}
+      />
+      <SessionPicker
+        open={pickerOpen}
+        rows={sessionRows}
+        canvasKeys={canvasKeys}
+        busy={pickerBusy}
+        onOpenSession={(row, hasCanvas) => { if (hasCanvas) openOwnSession(row); else setPickerOpen(false) }}
+        onClose={() => setPickerOpen(false)}
       />
     </div>
   )

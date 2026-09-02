@@ -61,3 +61,10 @@ test('ignores unrelated tool results', () => {
   })
   expect(result.current.doc).toBeNull()
 })
+
+test('exposes setDoc so a stored canvas can be installed without an agent turn', () => {
+  const { result } = renderHook(() => useCanvasDoc(fakeClient()))
+  expect(result.current.doc).toBeNull()
+  act(() => result.current.setDoc({ canvasVersion: 1, rev: 7, layout: { type: 'grid', cols: 12 }, components: [] }))
+  expect(result.current.doc?.rev).toBe(7)
+})

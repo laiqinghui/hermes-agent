@@ -6,6 +6,7 @@ const base = {
   theme: 'dark' as const, onToggleTheme: () => {}, connected: true, isBusy: false,
   onLogout: () => {}, onResetLayout: () => {}, canReset: false,
   onFocusMap: () => {}, canFocus: false, isFocused: false,
+  onOpenSessions: () => {},
 }
 
 describe('TopBar', () => {
@@ -32,5 +33,12 @@ describe('TopBar', () => {
     expect(screen.getByTestId('focus-map')).toHaveTextContent('Focus map')
     rerender(<TopBar {...base} canFocus isFocused />)
     expect(screen.getByTestId('focus-map')).toHaveTextContent('Show all')
+  })
+
+  it('always offers the sessions button and calls back', () => {
+    const onOpenSessions = vi.fn()
+    render(<TopBar {...base} onOpenSessions={onOpenSessions} />)
+    fireEvent.click(screen.getByTestId('open-sessions'))
+    expect(onOpenSessions).toHaveBeenCalled()
   })
 })
