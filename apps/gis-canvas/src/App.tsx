@@ -30,6 +30,9 @@ import { useWindowStateStore } from './lib/use-window-state'
 import { SessionPicker } from './components/SessionPicker'
 import { listSessions, fetchTranscript, type SessionRow } from './lib/sessions'
 import { transcriptToTurns } from './lib/transcript'
+import { packTranscript } from './lib/transcript-pack'
+import { buildJudgePrompt } from './lib/judge'
+import { parseVerdict } from './lib/verdict'
 
 // reasoning.delta carries the model's real between-step reasoning (gpt-5.5 et al.);
 // reasoning.available is only the final answer for such models. Both feed the star.
@@ -167,6 +170,22 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const derived = useMemo(() => deriveActivity(activity), [activity])
   const { messages, trace, isBusy } = derived
 
+  // The judging turn has finished: read its answers, remember the verdict so
+  // this foreign session is never judged again (declines included).
+  useEffect(() => {
+    if (!foreign?.previewSessionId || foreign.verdict || isBusy) return
+    const last = derived.turns.at(-1)
+    if (!last || last.isBusy) return
+    const v = parseVerdict(last.answers)
+    setForeign(f => f && { ...f, verdict: v.verdict, reason: v.reason })
+    void client.request('canvas.preview_set', {
+      source_session_id: foreign.row.id,
+      preview_session_id: foreign.previewSessionId,
+      verdict: v.verdict,
+      reason: v.reason,
+    }).catch(() => {})
+  }, [foreign, derived.turns, isBusy, client])
+
   // Keep the cognition plane mounted for the whole ACTIVE turn — from first
   // activity until the agent's final answer — not just while a tool is running.
   // `isBusy` alone drops between every tool (the gap after one completes, before
@@ -234,7 +253,9 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     })()
   }
 
-  // Foreign session: READ-ONLY. Never resume, never branch — both mutate.
+  // Foreign session: READ-ONLY on the original. Never resume, never branch.
+  // The judgement runs in a separate preview session, once per foreign session
+  // (cached in the plugin's preview index), and Continue here promotes it.
   const openForeignSession = (row: SessionRow) => {
     setPickerOpen(false)
     void (async () => {
@@ -242,10 +263,74 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         const rows = await fetchTranscript(bffUrl, row.id)
         setForeign({ row, turns: transcriptToTurns(rows) })
         setOverlayOpen(true)
+
+        const cached = await client
+          .request<{ record: { preview_session_id: string; verdict: 'rendered' | 'declined'; reason: string } | null }>(
+            'canvas.preview_get', { source_session_id: row.id })
+          .catch(() => ({ record: null }))
+
+        if (cached.record) {
+          const got = await client
+            .request<{ doc: CanvasDoc | null }>('canvas.get', { session_id: cached.record.preview_session_id })
+            .catch(() => ({ doc: null }))
+          if (got.doc) setDoc(got.doc)
+          setForeign(f => f && { ...f, previewSessionId: cached.record!.preview_session_id,
+            verdict: cached.record!.verdict, reason: cached.record!.reason })
+          return
+        }
+
+        // Never judged: spend exactly one turn, then remember the outcome.
+        setForeign(f => f && { ...f, judging: true })
+        const created = await client.request<{ session_id: string }>('session.create', { cols: 96 })
+        await bindSessions(bffUrl, [created.session_id])
+        await client.request('prompt.submit', {
+          session_id: created.session_id,
+          text: buildJudgePrompt(row, packTranscript(rows)),
+        })
+        setForeign(f => f && { ...f, previewSessionId: created.session_id, judging: false })
       } catch (err) {
+        setForeign(f => f && { ...f, judging: false })
         log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
       }
     })()
+  }
+
+  // Promote the preview session to a live one the user can type into. The
+  // transcript and rendered canvas are already in it, which is the inheritance
+  // "Continue here" promises. The ORIGINAL foreign session stays untouched.
+  const continueHere = async () => {
+    if (!foreign) return
+    const current = foreign
+    try {
+      const rows = await fetchTranscript(bffUrl, current.row.id).catch(() => [])
+      let pid = current.previewSessionId
+      try {
+        if (!pid) throw new Error('no preview session')
+        await client.request('session.resume', { session_id: pid })
+      } catch {
+        // The cached preview session is gone — rebuild one and re-seed it.
+        const created = await client.request<{ session_id: string }>('session.create', { cols: 96 })
+        pid = created.session_id
+        await bindSessions(bffUrl, [pid])
+        await client.request('prompt.submit', {
+          session_id: pid,
+          text: buildJudgePrompt(current.row, packTranscript(rows)),
+        })
+        await client.request('canvas.preview_set', {
+          source_session_id: current.row.id,
+          preview_session_id: pid,
+          verdict: current.verdict ?? 'rendered',
+          reason: current.reason ?? '',
+        }).catch(() => {})
+      }
+      sessionIdRef.current = pid!
+      canvasKeyRef.current = pid!
+      await bindSessions(bffUrl, [pid!])
+      setForeign(null) // leaves read-only mode; the composer returns
+      log({ kind: 'system', text: `continuing from ${current.row.id} in session ${pid}` })
+    } catch (err) {
+      log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
   }
 
   return (
@@ -257,6 +342,16 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         onOpenSessions={openPicker} />
       <main className="relative min-h-0 flex-1 overflow-auto gc-canvas-grid-bg p-4">
         <CanvasHeader rev={mergedDoc?.rev} isBusy={isBusy} />
+        {foreign?.judging && (
+          <p data-testid="verdict-judging" className="px-1 pb-2 font-sans text-[12.5px] text-tertiary">
+            Reading {foreign.row.source} session — deciding whether it is worth rendering…
+          </p>
+        )}
+        {foreign?.verdict === 'declined' && (
+          <p data-testid="verdict-declined" className="px-1 pb-2 font-sans text-[12.5px] text-tertiary">
+            No canvas for this session — {foreign.reason || 'the agent judged it not worth rendering'}.
+          </p>
+        )}
         {mergedDoc ? (
           <SelectionProvider nodesBySource={nodesBySource} onMirror={mirrorSelection}>
             <TimeExtentProvider>
@@ -292,6 +387,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         turns={foreign ? foreign.turns : derived.turns}
         readOnly={!!foreign}
         noReasoningNote={!!foreign && foreign.turns.length > 0 && foreign.turns.every(t => !t.reasoning.length)}
+        onContinue={() => { void continueHere() }}
         timeline={derived.timeline}
         errors={errors}
         connected={connected}
