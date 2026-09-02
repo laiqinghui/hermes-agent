@@ -9,7 +9,7 @@ import { CanvasHeader } from './components/CanvasHeader'
 import { CognitionPlane } from './components/CognitionPlane'
 import { useTheme } from './lib/use-theme'
 import { useOverlayShortcut } from './lib/use-overlay-shortcut'
-import { deriveActivity, activityItemFromEvent, type ActivityItem } from './lib/activity'
+import { deriveActivity, activityItemFromEvent, type ActivityItem, type Turn } from './lib/activity'
 import { approvalFromEvent, type PendingApproval, type ApprovalChoice } from './lib/approval'
 import { createGatewayClient, resolveWsUrl, type GatewayLike } from './lib/gateway'
 import { useCanvasDoc } from './lib/use-canvas-doc'
@@ -28,7 +28,8 @@ import { useLayoutStore } from './lib/use-layout-store'
 import { WindowStateProvider } from './components/WindowStateProvider'
 import { useWindowStateStore } from './lib/use-window-state'
 import { SessionPicker } from './components/SessionPicker'
-import { listSessions, type SessionRow } from './lib/sessions'
+import { listSessions, fetchTranscript, type SessionRow } from './lib/sessions'
+import { transcriptToTurns } from './lib/transcript'
 
 // reasoning.delta carries the model's real between-step reasoning (gpt-5.5 et al.);
 // reasoning.available is only the final answer for such models. Both feed the star.
@@ -61,6 +62,14 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const [sessionRows, setSessionRows] = useState<SessionRow[]>([])
   const [canvasKeys, setCanvasKeys] = useState<Set<string>>(new Set())
   const [pickerBusy, setPickerBusy] = useState(false)
+  const [foreign, setForeign] = useState<{
+    row: SessionRow
+    turns: Turn[]
+    previewSessionId?: string
+    verdict?: 'rendered' | 'declined'
+    reason?: string
+    judging?: boolean
+  } | null>(null)
   const [approval, setApproval] = useState<PendingApproval | null>(null)
 
   const log = (item: Omit<ActivityItem, 'id'>) =>
@@ -225,6 +234,20 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     })()
   }
 
+  // Foreign session: READ-ONLY. Never resume, never branch — both mutate.
+  const openForeignSession = (row: SessionRow) => {
+    setPickerOpen(false)
+    void (async () => {
+      try {
+        const rows = await fetchTranscript(bffUrl, row.id)
+        setForeign({ row, turns: transcriptToTurns(rows) })
+        setOverlayOpen(true)
+      } catch (err) {
+        log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      }
+    })()
+  }
+
   return (
     <div className="flex h-screen flex-col bg-canvas font-sans text-primary">
       <TopBar theme={theme} onToggleTheme={toggleTheme} connected={connected} isBusy={isBusy}
@@ -266,7 +289,9 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
       <AgentPanel
         open={overlayOpen}
         onClose={() => setOverlayOpen(false)}
-        turns={derived.turns}
+        turns={foreign ? foreign.turns : derived.turns}
+        readOnly={!!foreign}
+        noReasoningNote={!!foreign && foreign.turns.length > 0 && foreign.turns.every(t => !t.reasoning.length)}
         timeline={derived.timeline}
         errors={errors}
         connected={connected}
@@ -279,7 +304,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         rows={sessionRows}
         canvasKeys={canvasKeys}
         busy={pickerBusy}
-        onOpenSession={(row, hasCanvas) => { if (hasCanvas) openOwnSession(row); else setPickerOpen(false) }}
+        onOpenSession={(row, hasCanvas) => (hasCanvas ? openOwnSession(row) : openForeignSession(row))}
         onClose={() => setPickerOpen(false)}
       />
     </div>
