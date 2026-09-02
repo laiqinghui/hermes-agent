@@ -246,3 +246,33 @@ def test_catalog_help_documents_imagery(plugin):
     help_text = plugin.tools_canvas._CATALOG_HELP
     assert "imagery" in help_text
     assert "sensor" in help_text
+
+
+def test_catalog_help_steers_imagery_to_optical_only(plugin):
+    # SAR display is dropped for now: the open catalogs publish Sentinel-1 GRD as
+    # s3:// requester-pays assets no browser can fetch. The renderer still exists
+    # for when a usable source appears, but the agent must not hero SAR scenes it
+    # cannot display, or the user gets a load error instead of imagery.
+    help_text = plugin.tools_canvas._CATALOG_HELP
+    assert "optical" in help_text
+    assert "do NOT author" in help_text or "do not author" in help_text
+
+
+def test_sar_renderer_is_still_available(plugin):
+    # Dropping SAR is a guidance decision, not a schema change: sensor:'sar' must
+    # still validate so a verified HTTPS SAR COG works the day one turns up.
+    doc = {
+        "canvasVersion": 1,
+        "layout": {"type": "grid", "cols": 12},
+        "imagery": {"scenes": [{
+            "id": "s", "title": "SAR", "url": "https://example.com/vv.tif",
+            "sensor": "sar", "datetime": "2025-12-03T22:11:00Z",
+            "bbox": [104.5, 1.7, 104.9, 2.0],
+        }]},
+        "components": [{
+            "id": "n", "type": "note",
+            "area": {"col": 1, "colSpan": 4, "row": 1, "rowSpan": 1},
+            "props": {"body": "x"},
+        }],
+    }
+    assert plugin.validator.validate_doc(doc) == []
