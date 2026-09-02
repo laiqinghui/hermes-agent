@@ -245,3 +245,11 @@ async def a2a_message(request: Request):
 
     return StreamingResponse(_stream(), status_code=upstream.status_code,
                              media_type="application/x-ndjson")
+
+
+# ── Read-only session browsing ────────────────────────────────────────────────
+import sys as _sys  # noqa: E402
+
+from .sessions_proxy import _init as _init_sessions_proxy  # noqa: E402
+
+app.include_router(_init_sessions_proxy(_sys.modules[__name__]))

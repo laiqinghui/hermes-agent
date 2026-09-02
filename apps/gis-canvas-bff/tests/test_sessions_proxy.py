@@ -1,0 +1,83 @@
+import os
+
+import httpx
+import pytest
+import respx
+from fastapi.testclient import TestClient
+
+os.environ.setdefault("KEYCLOAK_ISSUER", "http://dev.com:8080/realms/master")
+os.environ.setdefault("KEYCLOAK_CLIENT_ID", "gis-canvas-bff")
+os.environ.setdefault("KEYCLOAK_CLIENT_SECRET", "sekret")
+os.environ.setdefault("BFF_REDIRECT_URI", "http://localhost:9109/auth/callback")
+os.environ.setdefault("SPA_ORIGIN", "http://localhost:5174")
+os.environ.setdefault("POST_LOGOUT_REDIRECT", "http://localhost:5174/")
+os.environ.setdefault("SESSION_SECRET", "s" * 40)
+os.environ.setdefault("DATA_AGENT_URL", "http://localhost:2024")
+os.environ.setdefault("GIS_BFF_PROXY_SECRET", "p" * 40)
+
+from app import main as bff  # noqa: E402
+from app.sessions import TokenRecord  # noqa: E402
+from app.sessions_proxy import visible_sessions  # noqa: E402
+
+GW = "http://127.0.0.1:9119"
+
+
+@pytest.fixture(autouse=True)
+def _reset():
+    bff.store._by_sid.clear()
+    bff.store._canvas_to_sid.clear()
+    yield
+
+
+def _authed() -> TestClient:
+    sid = bff.store.create(TokenRecord(access_token="AT", refresh_token="RT", id_token="IT",
+                                       expires_at=9e9, username="jsmith", roles=["selectdata"]))
+    c = TestClient(bff.app, follow_redirects=False)
+    c.cookies.set("sid", sid)
+    return c
+
+
+def test_visible_sessions_v1_returns_every_row():
+    # v1 rule, stated in the design: any authenticated user sees every session
+    # on the host. This test exists so tightening the rule is a visible diff.
+    rows = [{"id": "a", "source": "telegram"}, {"id": "b", "source": "cli"}]
+    assert visible_sessions(rows, "jsmith") == rows
+
+
+def test_sessions_401_when_not_authenticated():
+    r = TestClient(bff.app).get("/sessions")
+    assert r.status_code == 401
+
+
+def test_messages_401_when_not_authenticated():
+    r = TestClient(bff.app).get("/sessions/abc/messages")
+    assert r.status_code == 401
+
+
+def test_sessions_proxies_the_gateway_with_the_service_token():
+    payload = {"sessions": [{"id": "a", "source": "telegram", "title": "t",
+                             "preview": "p", "message_count": 3,
+                             "started_at": 1.0, "last_active": 2.0}], "total": 1}
+    with respx.mock:
+        route = respx.get(f"{GW}/api/sessions").mock(return_value=httpx.Response(200, json=payload))
+        r = _authed().get("/sessions")
+    assert r.status_code == 200
+    assert r.json()["sessions"][0]["id"] == "a"
+    assert r.json()["total"] == 1
+    assert route.calls[0].request.headers["X-Hermes-Session-Token"] == "dev-gis-local"
+
+
+def test_messages_proxies_the_gateway():
+    payload = {"session_id": "abc", "messages": [{"role": "user", "content": "hi"}]}
+    with respx.mock:
+        respx.get(f"{GW}/api/sessions/abc/messages").mock(return_value=httpx.Response(200, json=payload))
+        r = _authed().get("/sessions/abc/messages")
+    assert r.status_code == 200
+    assert r.json()["messages"][0]["content"] == "hi"
+
+
+def test_gateway_failure_surfaces_as_502_not_500():
+    with respx.mock:
+        respx.get(f"{GW}/api/sessions").mock(return_value=httpx.Response(500, text="boom"))
+        r = _authed().get("/sessions")
+    assert r.status_code == 502
