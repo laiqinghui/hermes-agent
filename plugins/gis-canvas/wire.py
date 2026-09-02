@@ -27,6 +27,21 @@ def handle_canvas_interaction(params: dict) -> dict:
     return {"ok": True, "rev": stored.get("rev")}
 
 
+def handle_canvas_get(params: dict) -> dict:
+    """Inbound canvas.get: return the stored doc for a session, or None. Purely
+    read-only — the session browser opens past canvases through this."""
+    session_id = str((params or {}).get("session_id") or "")
+    if not session_id:
+        return {"ok": False, "errors": ["session_id is required"]}
+    return {"ok": True, "doc": get_store().get(session_id)}
+
+
+def handle_canvas_list(params: dict) -> dict:
+    """Inbound canvas.list: the stored canvas keys, so the session picker can
+    mark which sessions already have a canvas."""
+    return {"ok": True, "keys": get_store().list()}
+
+
 def handle_canvas_data_fetch(params: dict) -> dict:
     """Inbound canvas.data_fetch: serve a page of rows from the broker cache by
     handle. Bulk rows travel on this data plane only — never the agent context."""

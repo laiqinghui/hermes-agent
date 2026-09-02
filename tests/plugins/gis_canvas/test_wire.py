@@ -63,3 +63,36 @@ def test_data_fetch_missing_handle_errors(plugin, tmp_path, monkeypatch):
     plugin.broker.reset_broker_for_tests()
     out = plugin.wire.handle_canvas_data_fetch({"handle": "data://nope"})
     assert out["ok"] is False and out["errors"]
+
+
+def test_canvas_get_returns_the_stored_doc(plugin):
+    _render(plugin, "s1")
+    out = plugin.wire.handle_canvas_get({"session_id": "s1"})
+    assert out["ok"] is True
+    assert out["doc"]["rev"] == 1
+    assert out["doc"]["components"][0]["id"] == "sev"
+
+
+def test_canvas_get_unknown_session_returns_none_not_an_error(plugin):
+    out = plugin.wire.handle_canvas_get({"session_id": "nope"})
+    assert out["ok"] is True and out["doc"] is None
+
+
+def test_canvas_get_requires_a_session_id(plugin):
+    out = plugin.wire.handle_canvas_get({})
+    assert out["ok"] is False and "session_id" in out["errors"][0]
+
+
+def test_canvas_list_returns_stored_keys(plugin):
+    _render(plugin, "s1")
+    _render(plugin, "s2")
+    out = plugin.wire.handle_canvas_list({})
+    assert out["ok"] is True and out["keys"] == ["s1", "s2"]
+
+
+def test_canvas_get_does_not_write(plugin):
+    _render(plugin, "s1")
+    plugin.wire.handle_canvas_get({"session_id": "s1"})
+    plugin.wire.handle_canvas_list({})
+    # A read must never bump the rev.
+    assert plugin.wire.handle_canvas_get({"session_id": "s1"})["doc"]["rev"] == 1
