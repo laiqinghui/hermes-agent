@@ -7,7 +7,10 @@ export function TopBar({
   isBusy,
   onLogout,
   onResetLayout,
-  canReset
+  canReset,
+  onFocusMap,
+  canFocus,
+  isFocused
 }: {
   theme: ThemeMode
   onToggleTheme: () => void
@@ -16,6 +19,9 @@ export function TopBar({
   onLogout: () => void
   onResetLayout: () => void
   canReset: boolean
+  onFocusMap: () => void
+  canFocus: boolean
+  isFocused: boolean
 }) {
   const statusLabel = isBusy ? 'COMPOSING' : connected ? 'AGENT · LIVE' : 'CONNECTING…'
   const statusColor = isBusy ? 'text-accent' : connected ? 'text-positive' : 'text-tertiary'
@@ -35,6 +41,16 @@ export function TopBar({
       </div>
 
       <div className="flex items-center gap-2.5">
+        {canFocus && (
+          <button
+            data-testid="focus-map"
+            onClick={onFocusMap}
+            title={isFocused ? 'Restore all panels' : 'Minimize every panel except the map'}
+            className="rounded-gc-sm border border-hairline bg-surface px-2.5 py-1.5 font-sans text-[11.5px] text-secondary hover:text-primary"
+          >
+            {isFocused ? '⊙ Show all' : '⊙ Focus map'}
+          </button>
+        )}
         {canReset && (
           <button
             data-testid="reset-layout"
