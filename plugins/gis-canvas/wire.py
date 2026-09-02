@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from .broker import get_broker
 from .interaction import apply_interaction
+from .preview_index import get_preview_index
 from .tools_canvas import get_store
 
 
@@ -56,3 +57,31 @@ def handle_canvas_data_fetch(params: dict) -> dict:
         filter=p.get("filter"),
         fields=p.get("fields"),
     )
+
+
+def handle_canvas_preview_get(params: dict) -> dict:
+    """Inbound canvas.preview_get: the cached preview record for a foreign
+    session, or None when it has never been judged."""
+    source = str((params or {}).get("source_session_id") or "")
+    if not source:
+        return {"ok": False, "errors": ["source_session_id is required"]}
+    return {"ok": True, "record": get_preview_index().get(source)}
+
+
+def handle_canvas_preview_set(params: dict) -> dict:
+    """Inbound canvas.preview_set: remember the preview session and the render
+    verdict for a foreign session, so it is judged once and never again."""
+    p = params or {}
+    source = str(p.get("source_session_id") or "")
+    preview = str(p.get("preview_session_id") or "")
+    verdict = str(p.get("verdict") or "")
+    if not source or not preview:
+        return {"ok": False, "errors": ["source_session_id and preview_session_id are required"]}
+    if verdict not in ("rendered", "declined"):
+        return {"ok": False, "errors": ["verdict must be 'rendered' or 'declined'"]}
+    record = get_preview_index().put(source, {
+        "preview_session_id": preview,
+        "verdict": verdict,
+        "reason": str(p.get("reason") or ""),
+    })
+    return {"ok": True, "record": record}

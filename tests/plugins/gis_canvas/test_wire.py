@@ -96,3 +96,33 @@ def test_canvas_get_does_not_write(plugin):
     plugin.wire.handle_canvas_list({})
     # A read must never bump the rev.
     assert plugin.wire.handle_canvas_get({"session_id": "s1"})["doc"]["rev"] == 1
+
+
+def test_preview_set_then_get_round_trips(plugin):
+    plugin.preview_index.reset_index_for_tests()
+    out = plugin.wire.handle_canvas_preview_set({
+        "source_session_id": "tg1", "preview_session_id": "p1",
+        "verdict": "rendered", "reason": "analysis session",
+    })
+    assert out["ok"] is True
+    got = plugin.wire.handle_canvas_preview_get({"source_session_id": "tg1"})
+    assert got["ok"] is True and got["record"]["preview_session_id"] == "p1"
+
+
+def test_preview_get_unknown_returns_none(plugin):
+    plugin.preview_index.reset_index_for_tests()
+    got = plugin.wire.handle_canvas_preview_get({"source_session_id": "nope"})
+    assert got["ok"] is True and got["record"] is None
+
+
+def test_preview_set_requires_ids(plugin):
+    out = plugin.wire.handle_canvas_preview_set({"source_session_id": "tg1"})
+    assert out["ok"] is False
+
+
+def test_preview_set_rejects_an_unknown_verdict(plugin):
+    plugin.preview_index.reset_index_for_tests()
+    out = plugin.wire.handle_canvas_preview_set({
+        "source_session_id": "tg1", "preview_session_id": "p1", "verdict": "maybe",
+    })
+    assert out["ok"] is False and "verdict" in out["errors"][0]

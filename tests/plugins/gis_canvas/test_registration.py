@@ -60,5 +60,6 @@ def test_gateway_fenced_block_declares_the_canvas_rpcs():
     start = text.index("# >>> gis-canvas")
     end = text.index("# <<< gis-canvas >>>")
     block = text[start:end]
-    for m in ("canvas.interaction", "canvas.data_fetch", "canvas.get", "canvas.list"):
+    for m in ("canvas.interaction", "canvas.data_fetch", "canvas.get", "canvas.list",
+              "canvas.preview_get", "canvas.preview_set"):
         assert f'@method("{m}")' in block, f"{m} missing from the fenced gis-canvas block"
