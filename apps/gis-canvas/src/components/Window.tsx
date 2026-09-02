@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode, type PointerEvent as RPointerEvent } from 'react'
 import type { ComponentNode, WindowRect } from '../lib/types'
 import { HANDLES, type ResizeHandle } from '../lib/window-layout'
+import { humanTitle } from '../lib/window-state'
 
 interface WindowProps {
   node: ComponentNode
@@ -10,11 +11,6 @@ interface WindowProps {
   onDragMove: (dxPct: number, dyPct: number, commit: boolean) => void
   onResizeMove: (handle: ResizeHandle, dxPct: number, dyPct: number, commit: boolean) => void
   children: ReactNode
-}
-
-function humanTitle(node: ComponentNode): string {
-  const t = (node.props?.title as string | undefined)?.trim()
-  return t || node.type.replace(/^esri:/, '').replace(/[-_]/g, ' ')
 }
 
 export function Window({ node, rect, getContainer, onGestureStart, onDragMove, onResizeMove, children }: WindowProps) {
