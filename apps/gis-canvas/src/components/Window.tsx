@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode, type PointerEvent as RPointerEvent } from 'react'
 import type { ComponentNode, WindowRect } from '../lib/types'
 import { HANDLES, type ResizeHandle } from '../lib/window-layout'
+import { humanTitle, type WindowState } from '../lib/window-state'
 
 interface WindowProps {
   node: ComponentNode
@@ -9,15 +10,17 @@ interface WindowProps {
   onGestureStart: () => void                    // pointerdown: parent snapshots rect + brings to front
   onDragMove: (dxPct: number, dyPct: number, commit: boolean) => void
   onResizeMove: (handle: ResizeHandle, dxPct: number, dyPct: number, commit: boolean) => void
+  state?: WindowState
+  canMinimize?: boolean
+  onToggleShade?: () => void
+  onMinimize?: () => void
   children: ReactNode
 }
 
-function humanTitle(node: ComponentNode): string {
-  const t = (node.props?.title as string | undefined)?.trim()
-  return t || node.type.replace(/^esri:/, '').replace(/[-_]/g, ' ')
-}
-
-export function Window({ node, rect, getContainer, onGestureStart, onDragMove, onResizeMove, children }: WindowProps) {
+export function Window({
+  node, rect, getContainer, onGestureStart, onDragMove, onResizeMove,
+  state = 'open', canMinimize = false, onToggleShade, onMinimize, children,
+}: WindowProps) {
   const start = useRef<{ x: number; y: number } | null>(null)
   // Holds the teardown for whichever gesture (drag or resize) is currently in
   // flight, so an interrupted gesture (pointercancel) or a mid-drag unmount
@@ -80,12 +83,19 @@ export function Window({ node, rect, getContainer, onGestureStart, onDragMove, o
     teardownRef.current = teardown
   }
 
+  const shaded = state === 'shaded'
+  const minimized = state === 'minimized'
+  // Keep the pointerdown off both the header drag and the outer gesture start —
+  // pressing a control must never move or re-stack the window.
+  const swallow = (e: RPointerEvent) => e.stopPropagation()
+
   return (
     <div
       data-testid={`window-${node.id}`}
+      hidden={minimized}
       onPointerDown={onGestureStart}
       className="gc-hud pointer-events-auto absolute flex flex-col overflow-hidden rounded-gc-md"
-      style={{ left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.w}%`, height: `${rect.h}%`, zIndex: rect.z }}
+      style={{ left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.w}%`, height: shaded ? 'auto' : `${rect.h}%`, zIndex: rect.z }}
     >
       <div
         data-testid={`window-header-${node.id}`}
@@ -93,9 +103,33 @@ export function Window({ node, rect, getContainer, onGestureStart, onDragMove, o
         className="flex shrink-0 cursor-move items-center gap-1.5 border-b border-hairline/40 px-2 py-1 font-mono text-[10.5px] uppercase tracking-wide text-tertiary select-none"
       >
         <span className="truncate">{humanTitle(node)}</span>
+        {canMinimize && (
+          <span className="ml-auto flex shrink-0 items-center gap-0.5">
+            <button
+              data-testid={`shade-${node.id}`}
+              aria-label={shaded ? 'Expand' : 'Collapse'}
+              title={shaded ? 'Expand' : 'Collapse'}
+              onPointerDown={swallow}
+              onClick={onToggleShade}
+              className="cursor-pointer px-1 leading-none text-tertiary hover:text-primary"
+            >
+              {shaded ? '⌃' : '⌄'}
+            </button>
+            <button
+              data-testid={`minimize-${node.id}`}
+              aria-label="Minimize"
+              title="Minimize"
+              onPointerDown={swallow}
+              onClick={onMinimize}
+              className="cursor-pointer px-1 leading-none text-tertiary hover:text-primary"
+            >
+              ▁
+            </button>
+          </span>
+        )}
       </div>
-      <div className="relative min-h-0 min-w-0 flex-1 overflow-auto">{children}</div>
-      {HANDLES.map(h => (
+      {!shaded && <div className="relative min-h-0 min-w-0 flex-1 overflow-auto">{children}</div>}
+      {!shaded && HANDLES.map(h => (
         <span key={h} data-testid={`resize-${node.id}-${h}`} onPointerDown={beginResize(h)}
           className={`absolute ${handleClass(h)}`} />
       ))}

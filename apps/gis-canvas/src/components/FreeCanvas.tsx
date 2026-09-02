@@ -3,6 +3,9 @@ import type { CanvasDoc, ComponentNode, WindowRect } from '../lib/types'
 import { COMPONENT_REGISTRY, UnknownTile } from './registry'
 import { Window } from './Window'
 import { useLayout } from './LayoutProvider'
+import { useWindowState } from './WindowStateProvider'
+import { WindowTaskbar } from './WindowTaskbar'
+import { canMinimize, signatures, changedIds } from '../lib/window-state'
 import { seedRects, applyDrag, applyResize, clampToBounds, minSizePct, type ResizeHandle } from '../lib/window-layout'
 import { snapTargets, snapDrag } from '../lib/window-snap'
 
@@ -17,6 +20,8 @@ function renderNode(node: ComponentNode): ReactNode {
 
 export function FreeCanvas({ doc }: { doc: CanvasDoc }) {
   const store = useLayout()
+  const windows = useWindowState()
+  const sigRef = useRef<Record<string, string>>({})
   const boxRef = useRef<HTMLDivElement>(null)
   const [guides, setGuides] = useState<{ x?: number; y?: number }>({})
   const altRef = useRef(false)
@@ -25,8 +30,25 @@ export function FreeCanvas({ doc }: { doc: CanvasDoc }) {
   const seeds = useMemo(() => seedRects(doc), [doc])
 
   // Prune overrides for molecules the agent removed (sticky otherwise — NOT reset
-  // on rev). Runs after each doc change.
-  useEffect(() => { store.prune(doc.components.map(c => c.id)) }, [doc, store])
+  // on rev), and refresh the focus-candidate set. The map is excluded: it is the
+  // hero, so it can never be a minimize target.
+  const minimizable = useMemo(() => doc.components.filter(canMinimize).map(c => c.id), [doc])
+  useEffect(() => {
+    store.prune(doc.components.map(c => c.id))
+    windows.sync(minimizable)
+  }, [doc, store, windows, minimizable])
+
+  // Badge minimized windows the agent has revised since they were set aside, so
+  // an update is visible without the panel jumping back over the map. sigRef is
+  // written before the comparison, so the re-run this triggers is a no-op.
+  useEffect(() => {
+    const next = signatures(doc)
+    const prev = sigRef.current
+    sigRef.current = next
+    for (const id of changedIds(prev, next)) {
+      if (windows.get(id) === 'minimized') windows.markUpdated(id)
+    }
+  }, [doc, windows])
 
   // Track Alt to suppress snapping for fine placement.
   useEffect(() => {
@@ -102,12 +124,21 @@ export function FreeCanvas({ doc }: { doc: CanvasDoc }) {
           onGestureStart={beginGesture(node.id)}
           onDragMove={onDrag(node.id)}
           onResizeMove={onResize(node.id, node.type)}
+          state={canMinimize(node) ? windows.get(node.id) : 'open'}
+          canMinimize={canMinimize(node)}
+          onToggleShade={() => windows.toggleShade(node.id)}
+          onMinimize={() => windows.minimize(node.id)}
         >
           {renderNode(node)}
         </Window>
       ))}
       {guides.x !== undefined && <div className="pointer-events-none absolute top-0 bottom-0 z-50 w-px bg-accent/70" style={{ left: `${guides.x}%` }} />}
       {guides.y !== undefined && <div className="pointer-events-none absolute left-0 right-0 z-50 h-px bg-accent/70" style={{ top: `${guides.y}%` }} />}
+      <WindowTaskbar
+        nodes={doc.components.filter(c => canMinimize(c) && windows.get(c.id) === 'minimized')}
+        updated={windows.updated}
+        onRestore={windows.restore}
+      />
     </div>
   )
 }

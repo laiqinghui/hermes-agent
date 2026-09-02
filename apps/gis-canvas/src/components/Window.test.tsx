@@ -61,4 +61,39 @@ describe('Window', () => {
     fireEvent.pointerMove(window, { clientX: 200, clientY: 150 })
     expect(onDragMove).toHaveBeenCalledTimes(callsAfterCancel) // listeners removed — no further calls
   })
+
+  it('shows no shade/minimize controls unless canMinimize is set', () => {
+    setup()
+    expect(screen.queryByTestId('shade-w1')).toBeNull()
+    expect(screen.queryByTestId('minimize-w1')).toBeNull()
+  })
+
+  it('fires the callbacks without starting a drag', () => {
+    const onToggleShade = vi.fn(); const onMinimize = vi.fn()
+    const { onDragMove, onGestureStart } = setup({ canMinimize: true, onToggleShade, onMinimize })
+    fireEvent.pointerDown(screen.getByTestId('shade-w1'))
+    fireEvent.click(screen.getByTestId('shade-w1'))
+    fireEvent.click(screen.getByTestId('minimize-w1'))
+    expect(onToggleShade).toHaveBeenCalledTimes(1)
+    expect(onMinimize).toHaveBeenCalledTimes(1)
+    expect(onDragMove).not.toHaveBeenCalled()
+    expect(onGestureStart).not.toHaveBeenCalled()
+  })
+
+  it('shaded collapses to the header: no content, no resize handles, still draggable', () => {
+    setup({ canMinimize: true, state: 'shaded' })
+    expect(screen.queryByText('body')).toBeNull()
+    expect(screen.queryByTestId('resize-w1-se')).toBeNull()
+    expect(screen.getByTestId('window-w1')).toHaveStyle({ height: 'auto' })
+    expect(screen.getByTestId('window-header-w1')).toBeInTheDocument()
+  })
+
+  it('minimized hides the window but keeps its children mounted', () => {
+    setup({ canMinimize: true, state: 'minimized' })
+    const el = screen.getByTestId('window-w1')
+    expect(el).toHaveAttribute('hidden')
+    // Load-bearing: unmounting would refetch broker data and drop the shared
+    // time extent, so the molecule must survive minimize.
+    expect(el).toHaveTextContent('body')
+  })
 })

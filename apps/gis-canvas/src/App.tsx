@@ -24,6 +24,8 @@ import { ImageryProvider } from './components/ImageryContext'
 import { collectNodesBySource } from './lib/selection'
 import { LayoutProvider } from './components/LayoutProvider'
 import { useLayoutStore } from './lib/use-layout-store'
+import { WindowStateProvider } from './components/WindowStateProvider'
+import { useWindowStateStore } from './lib/use-window-state'
 
 // reasoning.delta carries the model's real between-step reasoning (gpt-5.5 et al.);
 // reasoning.available is only the final answer for such models. Both feed the star.
@@ -50,6 +52,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const bffUrl = useMemo(() => resolveBffUrl(import.meta.env as Record<string, string | undefined>), [])
   const [theme, toggleTheme] = useTheme()
   const layout = useLayoutStore()
+  const windows = useWindowStateStore()
   const [overlayOpen, setOverlayOpen] = useOverlayShortcut()
   const [approval, setApproval] = useState<PendingApproval | null>(null)
 
@@ -178,10 +181,16 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     void logout(bffUrl).then(u => { window.location.href = u })
   }
 
+  // "Reset layout" is the put-everything-back button: it drops drag/resize
+  // overrides AND restores every shaded or minimized window.
+  const handleResetLayout = () => { layout.reset(); windows.reset() }
+
   return (
     <div className="flex h-screen flex-col bg-canvas font-sans text-primary">
       <TopBar theme={theme} onToggleTheme={toggleTheme} connected={connected} isBusy={isBusy}
-        onLogout={handleLogout} onResetLayout={layout.reset} canReset={!layout.isEmpty} />
+        onLogout={handleLogout} onResetLayout={handleResetLayout}
+        canReset={!layout.isEmpty || !windows.isEmpty}
+        onFocusMap={windows.toggleFocus} canFocus={windows.canFocus} isFocused={windows.isFocused} />
       <main className="relative min-h-0 flex-1 overflow-auto gc-canvas-grid-bg p-4">
         <CanvasHeader rev={mergedDoc?.rev} isBusy={isBusy} />
         {mergedDoc ? (
@@ -191,7 +200,9 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
                 <ImageryProvider imagery={mergedDoc.imagery}>
                   <HandlerProvider actions={actions}>
                     <LayoutProvider store={layout}>
-                      <CanvasGrid doc={mergedDoc} />
+                      <WindowStateProvider store={windows}>
+                        <CanvasGrid doc={mergedDoc} />
+                      </WindowStateProvider>
                     </LayoutProvider>
                   </HandlerProvider>
                 </ImageryProvider>

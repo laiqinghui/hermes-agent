@@ -3,6 +3,8 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { FreeCanvas } from './FreeCanvas'
 import { LayoutProvider } from './LayoutProvider'
 import { useLayoutStore } from '../lib/use-layout-store'
+import { WindowStateProvider } from './WindowStateProvider'
+import { useWindowStateStore } from '../lib/use-window-state'
 import type { CanvasDoc } from '../lib/types'
 
 // jsdom has no layout; give the container a real rect so px→% is finite.
@@ -21,10 +23,14 @@ const doc: CanvasDoc = {
 
 function Harness({ doc }: { doc: CanvasDoc }) {
   const store = useLayoutStore()
+  const windows = useWindowStateStore()
   return (
     <LayoutProvider store={store}>
-      <div data-testid="store-empty">{String(store.isEmpty)}</div>
-      <FreeCanvas doc={doc} />
+      <WindowStateProvider store={windows}>
+        <div data-testid="store-empty">{String(store.isEmpty)}</div>
+        <button data-testid="focus-toggle" onClick={windows.toggleFocus}>focus</button>
+        <FreeCanvas doc={doc} />
+      </WindowStateProvider>
     </LayoutProvider>
   )
 }
@@ -102,5 +108,73 @@ describe('FreeCanvas', () => {
     const sZ = Number(screen.getByTestId('window-s').style.zIndex)
     const lgZ = Number(screen.getByTestId('window-lg').style.zIndex)
     expect(sZ).toBeGreaterThan(lgZ)
+  })
+})
+
+describe('FreeCanvas minimize', () => {
+  it('the hero map exposes no shade or minimize control', () => {
+    render(<Harness doc={doc} />)
+    expect(screen.queryByTestId('minimize-m')).toBeNull()
+    expect(screen.queryByTestId('shade-m')).toBeNull()
+    expect(screen.getByTestId('minimize-lg')).toBeInTheDocument()
+  })
+
+  it('minimizing hides the window, adds a chip, and keeps the molecule mounted', () => {
+    render(<Harness doc={doc} />)
+    fireEvent.click(screen.getByTestId('minimize-lg'))
+    expect(screen.getByTestId('window-lg')).toHaveAttribute('hidden')
+    expect(screen.getByTestId('taskbar-chip-lg')).toBeInTheDocument()
+  })
+
+  it('restoring from the chip returns the window and drops the chip', () => {
+    render(<Harness doc={doc} />)
+    fireEvent.click(screen.getByTestId('minimize-lg'))
+    fireEvent.click(screen.getByTestId('taskbar-chip-lg'))
+    expect(screen.getByTestId('window-lg')).not.toHaveAttribute('hidden')
+    expect(screen.queryByTestId('window-taskbar')).toBeNull()
+  })
+
+  it('a minimized window keeps its exact rect when restored', () => {
+    render(<Harness doc={doc} />)
+    const before = screen.getByTestId('window-lg').getAttribute('style')
+    fireEvent.click(screen.getByTestId('minimize-lg'))
+    fireEvent.click(screen.getByTestId('taskbar-chip-lg'))
+    expect(screen.getByTestId('window-lg').getAttribute('style')).toBe(before)
+  })
+
+  it('badges a minimized chip when the agent revises that molecule, and clears on restore', () => {
+    const { rerender } = render(<Harness doc={doc} />)
+    fireEvent.click(screen.getByTestId('minimize-lg'))
+    expect(screen.queryByTestId('chip-badge-lg')).toBeNull()
+    const revised: CanvasDoc = {
+      ...doc, rev: 2,
+      components: [doc.components[0], { ...doc.components[1], props: { title: 'Legend (updated)' } }],
+    }
+    rerender(<Harness doc={revised} />)
+    expect(screen.getByTestId('chip-badge-lg')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('taskbar-chip-lg'))
+    expect(screen.queryByTestId('chip-badge-lg')).toBeNull()
+  })
+
+  it('an agent revision does not restore a minimized window', () => {
+    const { rerender } = render(<Harness doc={doc} />)
+    fireEvent.click(screen.getByTestId('minimize-lg'))
+    rerender(<Harness doc={{ ...doc, rev: 2 }} />)
+    expect(screen.getByTestId('window-lg')).toHaveAttribute('hidden')
+  })
+
+  it('focus mode minimizes every panel but never the map', () => {
+    render(<Harness doc={doc} />)
+    fireEvent.click(screen.getByTestId('focus-toggle'))
+    expect(screen.getByTestId('window-lg')).toHaveAttribute('hidden')
+    expect(screen.getByTestId('window-m')).not.toHaveAttribute('hidden')
+  })
+
+  it('shading collapses the window in place without a chip', () => {
+    render(<Harness doc={doc} />)
+    fireEvent.click(screen.getByTestId('shade-lg'))
+    expect(screen.getByTestId('window-lg')).not.toHaveAttribute('hidden')
+    expect(screen.getByTestId('window-lg')).toHaveStyle({ height: 'auto' })
+    expect(screen.queryByTestId('window-taskbar')).toBeNull()
   })
 })
