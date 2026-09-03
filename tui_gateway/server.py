@@ -7748,6 +7748,38 @@ def _(rid, params: dict) -> dict:
         return _ok(rid, {"closed": _close_session_by_id(sid, end_reason="tui_close")})
 
 
+# Metadata a branch must carry so its transcript is a faithful copy rather than
+# a flattened one. Passing only role+content dropped tool calls, tool results and
+# reasoning, so a branch replayed as just "prompt -> final answer" and each
+# successive branch lost more. Absent keys are OMITTED, never passed as None:
+# append_message has its own defaults and an explicit None would overwrite them.
+_BRANCH_COPIED_FIELDS = (
+    "tool_calls",
+    "tool_call_id",
+    "reasoning",
+    "reasoning_content",
+    "reasoning_details",
+    "token_count",
+    "finish_reason",
+    "timestamp",
+)
+
+
+def _branch_message_fields(msg: dict) -> dict:
+    """append_message kwargs for one history entry being copied into a branch."""
+    fields = {"role": msg.get("role", "user"), "content": msg.get("content")}
+    # History entries are OpenAI-shaped: a tool row names its tool in `name`,
+    # while the DB column is `tool_name`. Only a tool row's `name` means a tool.
+    tool_name = msg.get("tool_name") or (msg.get("name") if msg.get("role") == "tool" else None)
+    if tool_name:
+        fields["tool_name"] = tool_name
+    for key in _BRANCH_COPIED_FIELDS:
+        value = msg.get(key)
+        if value is not None:
+            fields[key] = value
+    return fields
+
+
 @method("session.branch")
 def _(rid, params: dict) -> dict:
     session, err = _sess(params, rid)
@@ -7791,11 +7823,7 @@ def _(rid, params: dict) -> dict:
             cwd=_session_cwd(session),
         )
         for msg in history:
-            db.append_message(
-                session_id=new_key,
-                role=msg.get("role", "user"),
-                content=msg.get("content"),
-            )
+            db.append_message(session_id=new_key, **_branch_message_fields(msg))
         db.set_session_title(new_key, title)
     except Exception as e:
         if lease is not None:
