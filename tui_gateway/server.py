@@ -13904,4 +13904,48 @@ def _(rid, params: dict) -> dict:
     if not finished.get("ok"):
         return _err(rid, -32000, "; ".join(finished.get("errors", ["canvas.judge failed"])))
     return _ok(rid, {**finished, "preview_session_id": key})
+# canvas.branch forks the loaded session. session.branch does the real work
+# (full history copy, parent link, fresh agent, parent left untouched) but
+# returns only the runtime sid — the canvas store is keyed by the STORED key,
+# which is only reachable in-process. This delegate bridges that and carries the
+# parent's canvas across. NOT a _LONG_HANDLERS entry: it runs no agent turn.
+@method("canvas.branch")
+def _(rid, params: dict) -> dict:
+    try:
+        from hermes_plugins.gis_canvas.wire import handle_canvas_branch_doc
+    except Exception as exc:  # plugin absent/disabled — fail soft
+        return _err(rid, -32601, f"gis-canvas plugin unavailable: {exc}")
+    p = params or {}
+    sid = str(p.get("session_id") or "")
+    if not sid:
+        return _err(rid, -32602, "session_id is required")
+
+    with _sessions_lock:
+        parent = _sessions.get(sid)
+    parent_key = parent.get("session_key") if parent else None
+    if not parent_key:
+        return _err(rid, 4001, "canvas.branch: session not found")
+
+    branched = _methods["session.branch"](rid, {"session_id": sid})
+    if (branched or {}).get("error"):
+        return branched  # 4008 "nothing to branch" and friends pass straight through
+    result = (branched or {}).get("result") or {}
+    new_sid = result.get("session_id")
+    if not new_sid:
+        return _err(rid, -32000, "canvas.branch: branch returned no session id")
+
+    with _sessions_lock:
+        child = _sessions.get(new_sid)
+    new_key = (child or {}).get("session_key") or new_sid
+
+    copied = handle_canvas_branch_doc({"from_key": parent_key, "to_key": new_key})
+    if not copied.get("ok"):
+        return _err(rid, -32000, "; ".join(copied.get("errors", ["canvas.branch failed"])))
+    return _ok(rid, {
+        "session_id": new_sid,
+        "stored_session_id": new_key,
+        "title": result.get("title") or "",
+        "parent": result.get("parent") or parent_key,
+        "doc": copied.get("doc"),
+    })
 # <<< gis-canvas >>>
