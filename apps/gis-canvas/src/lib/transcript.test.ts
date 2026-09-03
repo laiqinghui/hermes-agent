@@ -157,3 +157,54 @@ describe('transcriptToTurns step details', () => {
     expect(turns[0].trace[0].args).toBeUndefined()
   })
 })
+
+describe('transcriptToTurns timings', () => {
+  const at = (r: Partial<MessageRow> & { role: string }, timestamp: number): MessageRow =>
+    ({ ...row(r), timestamp })
+
+  it('derives a duration for a sequential tool call from the row timestamps', () => {
+    const turns = transcriptToTurns([
+      at({ role: 'user', content: 'q' }, 100),
+      at({ role: 'assistant', tool_calls: JSON.stringify([{ id: 'c1', function: { name: 'data_query' } }]) }, 110),
+      at({ role: 'tool', tool_call_id: 'c1', content: 'ok' }, 410),
+    ])
+    expect(turns[0].trace[0].durationS).toBeCloseTo(300)
+  })
+
+  it('omits a duration for parallel calls rather than reporting a false 0.0s', () => {
+    // One assistant message declaring three calls: only the FIRST result's
+    // delta is real elapsed time; the rest are persistence gaps.
+    const turns = transcriptToTurns([
+      at({ role: 'user', content: 'q' }, 100),
+      at({ role: 'assistant', tool_calls: JSON.stringify([
+        { id: 'a', function: { name: 'skill_view' } },
+        { id: 'b', function: { name: 'skill_view' } },
+        { id: 'c', function: { name: 'skill_view' } },
+      ]) }, 110),
+      at({ role: 'tool', tool_call_id: 'a', content: 'ok' }, 112.2),
+      at({ role: 'tool', tool_call_id: 'b', content: 'ok' }, 112.21),
+      at({ role: 'tool', tool_call_id: 'c', content: 'ok' }, 112.22),
+    ])
+    expect(turns[0].trace[0].durationS).toBeCloseTo(2.2)
+    expect(turns[0].trace[1].durationS).toBeUndefined()
+    expect(turns[0].trace[2].durationS).toBeUndefined()
+  })
+
+  it('omits durations entirely when the provider stored no timestamps', () => {
+    const turns = transcriptToTurns([
+      row({ role: 'user', content: 'q' }),
+      row({ role: 'assistant', tool_calls: JSON.stringify([{ id: 'c1', function: { name: 'data_query' } }]) }),
+      row({ role: 'tool', tool_call_id: 'c1', content: 'ok' }),
+    ])
+    expect(turns[0].trace[0].durationS).toBeUndefined()
+  })
+
+  it('never reports a negative duration from out-of-order rows', () => {
+    const turns = transcriptToTurns([
+      at({ role: 'user', content: 'q' }, 100),
+      at({ role: 'assistant', tool_calls: JSON.stringify([{ id: 'c1', function: { name: 'data_query' } }]) }, 110),
+      at({ role: 'tool', tool_call_id: 'c1', content: 'ok' }, 105),
+    ])
+    expect(turns[0].trace[0].durationS).toBeUndefined()
+  })
+})

@@ -21,6 +21,26 @@ function maybeJson(raw: string): unknown {
   }
 }
 
+/** Below this, a gap between stored rows is persistence noise rather than work.
+ * Parallel calls declared in one assistant message land within milliseconds of
+ * each other: the FIRST result carries the batch's real elapsed time and the
+ * rest are near-zero. Reporting those as "0.0s" would be a fabricated
+ * measurement, so they get no duration at all. */
+const MIN_MEANINGFUL_S = 0.05
+
+/** How long a tool took, derived from stored row timestamps.
+ *
+ * This is derived, not measured: a live step's `durationS` comes from the
+ * gateway timing the call, whereas a replay only knows when rows were written.
+ * For a sequential call the gap IS the tool's duration; anything implausible
+ * (missing timestamps, clock skew, out-of-order rows) yields no number rather
+ * than a wrong one. */
+function derivedDuration(prevTs: number | undefined, ts: number | undefined): number | undefined {
+  if (typeof prevTs !== 'number' || typeof ts !== 'number') return undefined
+  const delta = ts - prevTs
+  return delta >= MIN_MEANINGFUL_S ? delta : undefined
+}
+
 /** Parse a `tool_calls` JSON blob. The column is written by several providers
  * with slightly different shapes, and a malformed blob must never break the
  * replay — an unreadable blob contributes no calls. */
@@ -63,6 +83,8 @@ export function transcriptToTurns(rows: MessageRow[]): Turn[] {
   let seq = 0
   // Calls awaiting their result, for the current turn.
   let pending: Array<{ id?: string; name: string; step: BuildStep }> = []
+  // Timestamp of the previous stored row, for deriving how long a tool took.
+  let prevTs: number | undefined
 
   const open = (prompt?: string): Turn => {
     const t: Turn = { id: turns.length, prompt, reasoning: [], trace: [], items: [], answers: [], isBusy: false }
@@ -84,6 +106,7 @@ export function transcriptToTurns(rows: MessageRow[]): Turn[] {
 
     if (r.role === 'user') {
       current = open(text || undefined)
+      prevTs = r.timestamp ?? prevTs
       continue
     }
 
@@ -111,10 +134,14 @@ export function transcriptToTurns(rows: MessageRow[]): Turn[] {
       const idx = byId >= 0 ? byId : pending.findIndex(p => p.name === named && p.step.result === undefined)
       const target = idx >= 0 ? pending.splice(idx, 1)[0].step : named ? addStep(named) : null
       if (target && text) target.result = maybeJson(text)
+      const elapsed = derivedDuration(prevTs, r.timestamp)
+      if (target && elapsed !== undefined) target.durationS = elapsed
+      prevTs = r.timestamp ?? prevTs
       continue
     }
 
     if (text) current.answers.push(text)
+    prevTs = r.timestamp ?? prevTs
   }
 
   return turns
