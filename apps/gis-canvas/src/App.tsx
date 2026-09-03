@@ -234,11 +234,15 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     setPickerOpen(false)
     void (async () => {
       try {
-        await client.request('session.resume', { session_id: row.id })
+        const resumed = await client.request<{ session_id: string; session_key?: string }>(
+          'session.resume', { session_id: row.id })
         const got = await client.request<{ doc: CanvasDoc | null }>('canvas.get', { session_id: row.id })
-        sessionIdRef.current = row.id
-        canvasKeyRef.current = row.id
-        await bindSessions(bffUrl, [row.id])
+        // Two DIFFERENT ids: the gateway keys live sessions by runtime sid, while
+        // the canvas store and sessions.id use the stored key. Mixing them makes
+        // every later prompt fail with 4001 "session not found".
+        sessionIdRef.current = resumed.session_id ?? row.id
+        canvasKeyRef.current = resumed.session_key ?? row.id
+        await bindSessions(bffUrl, [...new Set([row.id, resumed.session_id].filter(Boolean))] as string[])
         if (got.doc) setDoc(got.doc)
         // Replay the history too — resuming does not backfill this connection's
         // activity log, so the dock would otherwise be empty.

@@ -242,3 +242,33 @@ test('a resumed own session keeps its composer (replay is not read-only)', async
   expect(await screen.findByTestId('agent-input')).toBeInTheDocument()
   expect(screen.queryByTestId('continue-here')).toBeNull()
 })
+
+test('reopening a session addresses it by RUNTIME sid, not the stored key', async () => {
+  vi.mocked(listSessions).mockResolvedValueOnce([
+    { id: 'own1', source: 'tui', title: 'Shadow fleet', preview: '', message_count: 7, started_at: 1, last_active: 2 },
+  ])
+  vi.mocked(fetchTranscript).mockResolvedValueOnce([msg('user', 'earlier question')])
+  const client = makeFakeClient({
+    'canvas.list': { keys: ['own1'] },
+    'canvas.get': { doc: null },
+    // The gateway keys live sessions by runtime sid and returns both ids.
+    'session.resume': { session_id: 'rt-99', session_key: 'own1' },
+  })
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x/api/ws?token=t" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  fireEvent.click(screen.getByTestId('open-sessions'))
+  fireEvent.click(await screen.findByTestId('session-row-own1'))
+  fireEvent.click(await screen.findByTestId('command-dock'))
+
+  const input = await screen.findByTestId('agent-input')
+  fireEvent.change(input, { target: { value: 'follow-up' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+
+  await waitFor(() => {
+    const submit = client.requests.find(r => r.method === 'prompt.submit')
+    // The stored key here would be 4001 "session not found".
+    expect((submit?.params as { session_id: string } | undefined)?.session_id).toBe('rt-99')
+  })
+})
