@@ -7,6 +7,7 @@ const base = {
   onLogout: () => {}, onResetLayout: () => {}, canReset: false,
   onFocusMap: () => {}, canFocus: false, isFocused: false,
   onOpenSessions: () => {},
+  onBranch: () => {}, canBranch: false,
 }
 
 describe('TopBar', () => {
@@ -40,5 +41,14 @@ describe('TopBar', () => {
     render(<TopBar {...base} onOpenSessions={onOpenSessions} />)
     fireEvent.click(screen.getByTestId('open-sessions'))
     expect(onOpenSessions).toHaveBeenCalled()
+  })
+
+  it('offers Branch only when there is something to branch', () => {
+    const onBranch = vi.fn()
+    const { rerender } = render(<TopBar {...base} onBranch={onBranch} />)
+    expect(screen.queryByTestId('branch-session')).toBeNull()
+    rerender(<TopBar {...base} onBranch={onBranch} canBranch />)
+    fireEvent.click(screen.getByTestId('branch-session'))
+    expect(onBranch).toHaveBeenCalled()
   })
 })

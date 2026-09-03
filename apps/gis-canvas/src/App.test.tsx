@@ -272,3 +272,43 @@ test('reopening a session addresses it by RUNTIME sid, not the stored key', asyn
     expect((submit?.params as { session_id: string } | undefined)?.session_id).toBe('rt-99')
   })
 })
+
+test('branching forks into the new session, carrying its canvas and history', async () => {
+  vi.mocked(fetchTranscript).mockResolvedValue([
+    msg('user', 'the original question'),
+    msg('assistant', 'the original answer'),
+  ])
+  const client = makeFakeClient({
+    'canvas.branch': {
+      session_id: 'rt-branch',
+      stored_session_id: '20260903_090000_abcdef',
+      title: 'Shadow fleet (2)',
+      parent: 'parent-key',
+      doc: { canvasVersion: 1, rev: 1, layout: { type: 'grid', cols: 12 }, components: [] },
+    },
+  })
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x/api/ws?token=t" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  // Give the session a turn so there is something to branch.
+  fireEvent.click(await screen.findByTestId('command-dock'))
+  const input = await screen.findByTestId('agent-input')
+  fireEvent.change(input, { target: { value: 'first prompt' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+
+  fireEvent.click(await screen.findByTestId('branch-session'))
+
+  await waitFor(() => {
+    expect(client.requests.some(r => r.method === 'canvas.branch')).toBe(true)
+  })
+  // The fork's inherited conversation is visible, not an apparently empty session.
+  expect(await screen.findByText('the original question')).toBeInTheDocument()
+  // Later prompts address the BRANCH by its runtime sid.
+  fireEvent.change(input, { target: { value: 'second prompt' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+  await waitFor(() => {
+    const last = [...client.requests].reverse().find(r => r.method === 'prompt.submit')
+    expect((last?.params as { session_id: string }).session_id).toBe('rt-branch')
+  })
+})

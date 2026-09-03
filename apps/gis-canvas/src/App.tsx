@@ -255,6 +255,49 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     })()
   }
 
+  // Fork the loaded session. session.branch copies the whole conversation and
+  // leaves the parent alone; canvas.branch additionally carries the canvas
+  // across and hands back the STORED key the canvas store needs.
+  const branchSession = () => {
+    const sid = sessionIdRef.current
+    if (!sid) return
+    void (async () => {
+      try {
+        const b = await client.request<{
+          session_id: string
+          stored_session_id: string
+          title: string
+          parent: string
+          doc: CanvasDoc | null
+        }>('canvas.branch', { session_id: sid })
+        sessionIdRef.current = b.session_id
+        canvasKeyRef.current = b.stored_session_id
+        await bindSessions(bffUrl, [b.stored_session_id, b.session_id])
+        if (b.doc) setDoc(b.doc)
+        // A branch has no picker row; synthesise one so the single `opened`
+        // replay path shows the inherited conversation.
+        const rows = await fetchTranscript(bffUrl, b.stored_session_id).catch(() => [])
+        const turns = transcriptToTurns(rows)
+        setOpened({
+          row: {
+            id: b.stored_session_id,
+            source: 'dashboard',
+            title: b.title,
+            preview: '',
+            message_count: turns.length,
+            started_at: Date.now() / 1000,
+            last_active: Date.now() / 1000,
+          },
+          turns,
+          readOnly: false,
+        })
+        log({ kind: 'system', text: `branched into ${b.title || b.stored_session_id}` })
+      } catch (err) {
+        log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      }
+    })()
+  }
+
   // Foreign session: READ-ONLY on the original. Never resume, never branch.
   // The judgement runs in a separate preview session, once per foreign session
   // (cached in the plugin's preview index), and Continue here promotes it.
@@ -346,7 +389,9 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         onLogout={handleLogout} onResetLayout={handleResetLayout}
         canReset={!layout.isEmpty || !windows.isEmpty}
         onFocusMap={windows.toggleFocus} canFocus={windows.canFocus} isFocused={windows.isFocused}
-        onOpenSessions={openPicker} />
+        onOpenSessions={openPicker}
+        onBranch={branchSession}
+        canBranch={!isBusy && (opened !== null || derived.turns.length > 0)} />
       <main className="relative min-h-0 flex-1 overflow-auto gc-canvas-grid-bg p-4">
         <CanvasHeader rev={mergedDoc?.rev} isBusy={isBusy} />
         {opened?.judging && (
