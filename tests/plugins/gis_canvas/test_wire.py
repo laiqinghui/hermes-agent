@@ -157,3 +157,36 @@ def test_judge_finish_declines_when_the_turn_authored_nothing(plugin):
 def test_judge_finish_requires_both_ids(plugin):
     out = plugin.wire.handle_canvas_judge_finish({"source_session_id": "tg1"})
     assert out["ok"] is False
+
+
+def test_branch_doc_copies_the_parent_canvas_to_the_new_key(plugin):
+    _render(plugin, "parent")
+    out = plugin.wire.handle_canvas_branch_doc({"from_key": "parent", "to_key": "child"})
+    assert out["ok"] is True
+    assert out["doc"]["components"][0]["id"] == "sev"
+    # The copy is the branch's OWN document, starting at rev 1.
+    assert out["doc"]["rev"] == 1
+    assert plugin.wire.handle_canvas_get({"session_id": "child"})["doc"]["components"][0]["id"] == "sev"
+
+
+def test_branch_doc_leaves_the_parent_untouched(plugin):
+    _render(plugin, "parent")   # rev 1
+    _render(plugin, "parent")   # rev 2 — a parent with some history
+    before = plugin.wire.handle_canvas_get({"session_id": "parent"})["doc"]
+    plugin.wire.handle_canvas_branch_doc({"from_key": "parent", "to_key": "child"})
+    after = plugin.wire.handle_canvas_get({"session_id": "parent"})["doc"]
+    # This is the load-bearing guarantee of the whole feature.
+    assert after == before
+    assert after["rev"] == 2
+
+
+def test_branch_doc_is_fine_when_the_parent_has_no_canvas(plugin):
+    out = plugin.wire.handle_canvas_branch_doc({"from_key": "no-canvas", "to_key": "child"})
+    assert out["ok"] is True and out["doc"] is None
+    # Nothing was written for the branch either.
+    assert plugin.wire.handle_canvas_get({"session_id": "child"})["doc"] is None
+
+
+def test_branch_doc_requires_both_keys(plugin):
+    assert plugin.wire.handle_canvas_branch_doc({"from_key": "parent"})["ok"] is False
+    assert plugin.wire.handle_canvas_branch_doc({"to_key": "child"})["ok"] is False

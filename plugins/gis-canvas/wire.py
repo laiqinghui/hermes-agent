@@ -106,3 +106,25 @@ def handle_canvas_judge_finish(params: dict) -> dict:
         "reason": reason,
     })
     return {"ok": True, "record": record, "doc": doc}
+
+
+def handle_canvas_branch_doc(params: dict) -> dict:
+    """Inbound (from canvas.branch): copy a canvas doc onto a branch's key.
+
+    The parent's doc is READ ONLY — the branch gets its own file, stamped as
+    its own rev 1 by CanvasStore.put. That separation is what lets a branch
+    diverge without ever altering the session it came from.
+
+    A parent with no canvas is normal (a conversation-only session), not an
+    error: nothing is written and the caller gets None.
+    """
+    p = params or {}
+    from_key = str(p.get("from_key") or "")
+    to_key = str(p.get("to_key") or "")
+    if not from_key or not to_key:
+        return {"ok": False, "errors": ["from_key and to_key are required"]}
+    store = get_store()
+    doc = store.get(from_key)
+    if doc is None:
+        return {"ok": True, "doc": None}
+    return {"ok": True, "doc": store.put(to_key, doc)}
