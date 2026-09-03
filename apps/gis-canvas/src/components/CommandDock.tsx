@@ -15,6 +15,7 @@ export function CommandDock({
   const live = busy && step && step.status === 'running'
   return (
     <button
+      data-testid="command-dock"
       onClick={onOpen}
       className="fixed bottom-6 left-1/2 z-30 flex w-[min(560px,90vw)] -translate-x-1/2 items-center gap-2.5 overflow-hidden rounded-full border border-hairline-strong bg-rail px-2.5 py-2.5 text-left shadow-gc-overlay"
       style={{ animation: 'gc-dock-in .35s cubic-bezier(.2,.8,.2,1) both' }}

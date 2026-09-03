@@ -3,6 +3,13 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import App from './App'
 import type { GatewayLike } from './lib/gateway'
 import { authMe } from './lib/auth'
+import { listSessions, fetchTranscript } from './lib/sessions'
+
+vi.mock('./lib/sessions', async (orig) => ({
+  ...(await orig<typeof import('./lib/sessions')>()),
+  listSessions: vi.fn().mockResolvedValue([]),
+  fetchTranscript: vi.fn().mockResolvedValue([]),
+}))
 
 vi.mock('./lib/auth', async (orig) => ({
   ...(await orig<typeof import('./lib/auth')>()),
@@ -25,7 +32,7 @@ vi.mock('./lib/auth', async (orig) => ({
  * once armed, a later connect() opens synchronously instead of waiting on
  * a resolver that will never come.
  */
-function makeFakeClient() {
+function makeFakeClient(responses: Record<string, unknown> = {}) {
   let state: 'idle' | 'connecting' | 'open' = 'idle'
   const openResolvers: Array<() => void> = []
   let armed = false
@@ -53,6 +60,7 @@ function makeFakeClient() {
         sessionCreateCalls++
         return { session_id: 's1' } as unknown as T
       }
+      if (method in responses) return responses[method] as T
       return {} as T
     },
     on() {
@@ -184,4 +192,53 @@ test('keeps the cognition plane mounted across the gap between tools, until the 
   // the agent's final answer ends the turn → plane unmounts
   act(() => client.emit({ type: 'message.complete', payload: { text: 'Done.' } }))
   await waitFor(() => expect(screen.queryByTestId('cognition-plane')).toBeNull())
+})
+
+const msg = (role: string, content: string) =>
+  ({ role, content, tool_calls: null, tool_name: null, reasoning: null, reasoning_content: null, timestamp: 1 })
+
+test('reopening a session with a stored canvas replays its transcript into the dock', async () => {
+  vi.mocked(listSessions).mockResolvedValueOnce([
+    { id: 'own1', source: 'tui', title: 'Shadow fleet', preview: '', message_count: 7, started_at: 1, last_active: 2 },
+  ])
+  vi.mocked(fetchTranscript).mockResolvedValueOnce([
+    msg('user', 'find the AIS gaps'),
+    msg('assistant', 'four suspect vessels found'),
+  ])
+  const client = makeFakeClient({
+    'canvas.list': { keys: ['own1'] },
+    'canvas.get': { doc: { canvasVersion: 1, rev: 3, layout: { type: 'grid', cols: 12 }, components: [] } },
+  })
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x/api/ws?token=t" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  fireEvent.click(screen.getByTestId('open-sessions'))
+  fireEvent.click(await screen.findByTestId('session-row-own1'))
+
+  // The activity log only holds THIS connection's events, so a reopened
+  // session's history must be replayed or the dock is empty.
+  fireEvent.click(await screen.findByTestId('command-dock'))
+  expect(await screen.findByText('find the AIS gaps')).toBeInTheDocument()
+})
+
+test('a resumed own session keeps its composer (replay is not read-only)', async () => {
+  vi.mocked(listSessions).mockResolvedValueOnce([
+    { id: 'own1', source: 'tui', title: 'Shadow fleet', preview: '', message_count: 7, started_at: 1, last_active: 2 },
+  ])
+  vi.mocked(fetchTranscript).mockResolvedValueOnce([msg('user', 'find the AIS gaps')])
+  const client = makeFakeClient({
+    'canvas.list': { keys: ['own1'] },
+    'canvas.get': { doc: null },
+  })
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x/api/ws?token=t" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  fireEvent.click(screen.getByTestId('open-sessions'))
+  fireEvent.click(await screen.findByTestId('session-row-own1'))
+  fireEvent.click(await screen.findByTestId('command-dock'))
+
+  expect(await screen.findByTestId('agent-input')).toBeInTheDocument()
+  expect(screen.queryByTestId('continue-here')).toBeNull()
 })

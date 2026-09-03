@@ -65,9 +65,14 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const [sessionRows, setSessionRows] = useState<SessionRow[]>([])
   const [canvasKeys, setCanvasKeys] = useState<Set<string>>(new Set())
   const [pickerBusy, setPickerBusy] = useState(false)
-  const [foreign, setForeign] = useState<{
+  // A session opened from the picker. `turns` is its REPLAYED history — the
+  // activity log only holds this browser connection's events, so without a
+  // replay any reopened session shows an empty dock. `readOnly` is a SEPARATE
+  // concern: only a session we did not resume (a foreign one) locks the composer.
+  const [opened, setOpened] = useState<{
     row: SessionRow
     turns: Turn[]
+    readOnly: boolean
     previewSessionId?: string
     verdict?: 'rendered' | 'declined'
     reason?: string
@@ -173,18 +178,18 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   // The judging turn has finished: read its answers, remember the verdict so
   // this foreign session is never judged again (declines included).
   useEffect(() => {
-    if (!foreign?.previewSessionId || foreign.verdict || isBusy) return
+    if (!opened?.previewSessionId || opened.verdict || isBusy) return
     const last = derived.turns.at(-1)
     if (!last || last.isBusy) return
     const v = parseVerdict(last.answers)
-    setForeign(f => f && { ...f, verdict: v.verdict, reason: v.reason })
+    setOpened(f => f && { ...f, verdict: v.verdict, reason: v.reason })
     void client.request('canvas.preview_set', {
-      source_session_id: foreign.row.id,
-      preview_session_id: foreign.previewSessionId,
+      source_session_id: opened.row.id,
+      preview_session_id: opened.previewSessionId,
       verdict: v.verdict,
       reason: v.reason,
     }).catch(() => {})
-  }, [foreign, derived.turns, isBusy, client])
+  }, [opened, derived.turns, isBusy, client])
 
   // Keep the cognition plane mounted for the whole ACTIVE turn — from first
   // activity until the agent's final answer — not just while a tool is running.
@@ -246,6 +251,10 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         canvasKeyRef.current = row.id
         await bindSessions(bffUrl, [row.id])
         if (got.doc) setDoc(got.doc)
+        // Replay the history too — resuming does not backfill this connection's
+        // activity log, so the dock would otherwise be empty.
+        const rows = await fetchTranscript(bffUrl, row.id).catch(() => [])
+        setOpened({ row, turns: transcriptToTurns(rows), readOnly: false })
         log({ kind: 'system', text: `opened session ${row.id}` })
       } catch (err) {
         log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -261,7 +270,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     void (async () => {
       try {
         const rows = await fetchTranscript(bffUrl, row.id)
-        setForeign({ row, turns: transcriptToTurns(rows) })
+        setOpened({ row, turns: transcriptToTurns(rows), readOnly: true })
         setOverlayOpen(true)
 
         const cached = await client
@@ -274,22 +283,22 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
             .request<{ doc: CanvasDoc | null }>('canvas.get', { session_id: cached.record.preview_session_id })
             .catch(() => ({ doc: null }))
           if (got.doc) setDoc(got.doc)
-          setForeign(f => f && { ...f, previewSessionId: cached.record!.preview_session_id,
+          setOpened(f => f && { ...f, previewSessionId: cached.record!.preview_session_id,
             verdict: cached.record!.verdict, reason: cached.record!.reason })
           return
         }
 
         // Never judged: spend exactly one turn, then remember the outcome.
-        setForeign(f => f && { ...f, judging: true })
+        setOpened(f => f && { ...f, judging: true })
         const created = await client.request<{ session_id: string }>('session.create', { cols: 96 })
         await bindSessions(bffUrl, [created.session_id])
         await client.request('prompt.submit', {
           session_id: created.session_id,
           text: buildJudgePrompt(row, packTranscript(rows)),
         })
-        setForeign(f => f && { ...f, previewSessionId: created.session_id, judging: false })
+        setOpened(f => f && { ...f, previewSessionId: created.session_id, judging: false })
       } catch (err) {
-        setForeign(f => f && { ...f, judging: false })
+        setOpened(f => f && { ...f, judging: false })
         log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
       }
     })()
@@ -299,8 +308,8 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   // transcript and rendered canvas are already in it, which is the inheritance
   // "Continue here" promises. The ORIGINAL foreign session stays untouched.
   const continueHere = async () => {
-    if (!foreign) return
-    const current = foreign
+    if (!opened) return
+    const current = opened
     try {
       const rows = await fetchTranscript(bffUrl, current.row.id).catch(() => [])
       let pid = current.previewSessionId
@@ -326,7 +335,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
       sessionIdRef.current = pid!
       canvasKeyRef.current = pid!
       await bindSessions(bffUrl, [pid!])
-      setForeign(null) // leaves read-only mode; the composer returns
+      setOpened(null) // leaves read-only mode; the composer returns
       log({ kind: 'system', text: `continuing from ${current.row.id} in session ${pid}` })
     } catch (err) {
       log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -342,14 +351,14 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         onOpenSessions={openPicker} />
       <main className="relative min-h-0 flex-1 overflow-auto gc-canvas-grid-bg p-4">
         <CanvasHeader rev={mergedDoc?.rev} isBusy={isBusy} />
-        {foreign?.judging && (
+        {opened?.judging && (
           <p data-testid="verdict-judging" className="px-1 pb-2 font-sans text-[12.5px] text-tertiary">
-            Reading {foreign.row.source} session — deciding whether it is worth rendering…
+            Reading {opened.row.source} session — deciding whether it is worth rendering…
           </p>
         )}
-        {foreign?.verdict === 'declined' && (
+        {opened?.verdict === 'declined' && (
           <p data-testid="verdict-declined" className="px-1 pb-2 font-sans text-[12.5px] text-tertiary">
-            No canvas for this session — {foreign.reason || 'the agent judged it not worth rendering'}.
+            No canvas for this session — {opened.reason || 'the agent judged it not worth rendering'}.
           </p>
         )}
         {mergedDoc ? (
@@ -384,9 +393,9 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
       <AgentPanel
         open={overlayOpen}
         onClose={() => setOverlayOpen(false)}
-        turns={foreign ? foreign.turns : derived.turns}
-        readOnly={!!foreign}
-        noReasoningNote={!!foreign && foreign.turns.length > 0 && foreign.turns.every(t => !t.reasoning.length)}
+        turns={opened ? [...opened.turns, ...derived.turns] : derived.turns}
+        readOnly={!!opened?.readOnly}
+        noReasoningNote={!!opened && opened.turns.length > 0 && opened.turns.every(t => !t.reasoning.length)}
         onContinue={() => { void continueHere() }}
         timeline={derived.timeline}
         errors={errors}
