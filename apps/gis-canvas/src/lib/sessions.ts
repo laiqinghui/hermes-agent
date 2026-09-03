@@ -17,6 +17,7 @@ export interface MessageRow {
   role: string
   content: string | null
   tool_calls?: string | null
+  tool_call_id?: string | null
   tool_name?: string | null
   reasoning?: string | null
   reasoning_content?: string | null

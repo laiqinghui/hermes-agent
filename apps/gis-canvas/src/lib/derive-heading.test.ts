@@ -16,3 +16,8 @@ describe('deriveHeading', () => {
   })
   it('returns empty for empty input', () => { expect(deriveHeading('')).toBe('') })
 })
+
+test('strips markdown emphasis so the heading reads as plain text', () => {
+  expect(deriveHeading('**Identifying required data skills**')).toBe('Identifying required data skills')
+  expect(deriveHeading('*Planning* the `data_query` calls')).toBe('Planning the data_query calls')
+})

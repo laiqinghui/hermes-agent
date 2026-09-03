@@ -96,3 +96,64 @@ describe('transcriptToTurns', () => {
     expect(turns[0].items.map(i => i.kind)).toEqual(['reasoning', 'step'])
   })
 })
+
+describe('transcriptToTurns step details', () => {
+  it('carries tool arguments through so the step can be expanded', () => {
+    const turns = transcriptToTurns([
+      row({ role: 'user', content: 'q' }),
+      row({ role: 'assistant', tool_calls: JSON.stringify([
+        { id: 'c1', function: { name: 'data_query', arguments: '{"sql":"select 1"}' } },
+      ]) }),
+    ])
+    expect(turns[0].trace[0].args).toEqual({ sql: 'select 1' })
+  })
+
+  it('attaches a tool result to the call it belongs to, by tool_call_id', () => {
+    const turns = transcriptToTurns([
+      row({ role: 'user', content: 'q' }),
+      row({ role: 'assistant', tool_calls: JSON.stringify([
+        { id: 'c1', function: { name: 'data_query', arguments: '{"sql":"select 1"}' } },
+      ]) }),
+      row({ role: 'tool', tool_call_id: 'c1', tool_name: 'data_query', content: '{"rows":3}' }),
+    ])
+    // One step, not two: the tool row is the RESULT of the call, not another step.
+    expect(turns[0].trace).toHaveLength(1)
+    expect(turns[0].trace[0].result).toEqual({ rows: 3 })
+  })
+
+  it('keeps a non-JSON tool result as text rather than dropping it', () => {
+    const turns = transcriptToTurns([
+      row({ role: 'user', content: 'q' }),
+      row({ role: 'assistant', tool_calls: JSON.stringify([{ id: 'c1', function: { name: 'skill_view' } }]) }),
+      row({ role: 'tool', tool_call_id: 'c1', content: 'plain text result' }),
+    ])
+    expect(turns[0].trace[0].result).toBe('plain text result')
+  })
+
+  it('falls back to the most recent unresolved call of the same name when there is no id', () => {
+    const turns = transcriptToTurns([
+      row({ role: 'user', content: 'q' }),
+      row({ role: 'assistant', tool_calls: JSON.stringify([{ function: { name: 'data_query' } }]) }),
+      row({ role: 'tool', tool_name: 'data_query', content: 'ok' }),
+    ])
+    expect(turns[0].trace).toHaveLength(1)
+    expect(turns[0].trace[0].result).toBe('ok')
+  })
+
+  it('still shows an orphan tool result as its own step rather than losing it', () => {
+    const turns = transcriptToTurns([
+      row({ role: 'user', content: 'q' }),
+      row({ role: 'tool', tool_name: 'data_discover', content: 'ok' }),
+    ])
+    expect(turns[0].trace.map(s => s.label)).toEqual(['data_discover'])
+    expect(turns[0].trace[0].result).toBe('ok')
+  })
+
+  it('leaves args undefined when the call carried none', () => {
+    const turns = transcriptToTurns([
+      row({ role: 'user', content: 'q' }),
+      row({ role: 'assistant', tool_calls: JSON.stringify([{ function: { name: 'skill_view' } }]) }),
+    ])
+    expect(turns[0].trace[0].args).toBeUndefined()
+  })
+})
