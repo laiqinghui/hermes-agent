@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from .broker import get_broker
 from .interaction import apply_interaction
+from .judge import verdict_from
 from .preview_index import get_preview_index
 from .tools_canvas import get_store
 
@@ -85,3 +86,23 @@ def handle_canvas_preview_set(params: dict) -> dict:
         "reason": str(p.get("reason") or ""),
     })
     return {"ok": True, "record": record}
+
+
+def handle_canvas_judge_finish(params: dict) -> dict:
+    """Finalise a judging turn: derive the verdict from what the agent said AND
+    whether a canvas actually landed in the store, then cache it so this foreign
+    session is never judged again. Called by the gateway's canvas.judge once the
+    turn has genuinely finished — the client cannot observe turn boundaries."""
+    p = params or {}
+    source = str(p.get("source_session_id") or "")
+    preview = str(p.get("preview_session_id") or "")
+    if not source or not preview:
+        return {"ok": False, "errors": ["source_session_id and preview_session_id are required"]}
+    doc = get_store().get(preview)
+    verdict, reason = verdict_from(str(p.get("answer") or ""), doc)
+    record = get_preview_index().put(source, {
+        "preview_session_id": preview,
+        "verdict": verdict,
+        "reason": reason,
+    })
+    return {"ok": True, "record": record, "doc": doc}

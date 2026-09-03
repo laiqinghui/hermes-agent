@@ -177,6 +177,8 @@ _DETAIL_MODES = frozenset({"hidden", "collapsed", "expanded"})
 # response writes are safe.
 _LONG_HANDLERS = frozenset(
     {
+        # gis-canvas: runs a whole agent turn to completion (see canvas.judge).
+        "canvas.judge",
         "billing.step_up",
         "browser.manage",
         "cli.exec",
@@ -13840,4 +13842,66 @@ def _(rid, params: dict) -> dict:
     if not result.get("ok"):
         return _err(rid, -32000, "; ".join(result.get("errors", ["canvas.preview_set failed"])))
     return _ok(rid, result)
+# canvas.judge runs the "is this session worth a canvas?" turn to COMPLETION and
+# returns the verdict. It lives here rather than in the client because only the
+# gateway can observe turn boundaries: the SPA sees one global event stream with
+# no session correlation, so it cannot tell whose turn just ended (an earlier
+# client-side attempt cached a wrong "declined" before the turn had even begun).
+# Registered in _LONG_HANDLERS — it blocks for as long as the turn takes.
+_CANVAS_JUDGE_TIMEOUT_S = 900
+
+
+@method("canvas.judge")
+def _(rid, params: dict) -> dict:
+    try:
+        from hermes_plugins.gis_canvas.wire import handle_canvas_judge_finish
+    except Exception as exc:  # plugin absent/disabled — fail soft
+        return _err(rid, -32601, f"gis-canvas plugin unavailable: {exc}")
+    p = params or {}
+    source = str(p.get("source_session_id") or "")
+    text = str(p.get("text") or "")
+    if not source or not text:
+        return _err(rid, -32602, "source_session_id and text are required")
+
+    created = _methods["session.create"](rid, {"cols": int(p.get("cols", 96))})
+    result = (created or {}).get("result") or {}
+    sid = result.get("session_id")
+    key = result.get("stored_session_id") or sid
+    if not sid:
+        return _err(rid, -32000, "canvas.judge: could not create a preview session")
+
+    # Reuse prompt.submit wholesale (it owns every busy/queue/interrupt edge
+    # case). It sets running=True synchronously before spawning its thread, so
+    # by the time it returns there is no start race to lose.
+    submitted = _methods["prompt.submit"](rid, {"session_id": sid, "text": text})
+    if (submitted or {}).get("error"):
+        return _err(rid, -32000, f"canvas.judge: prompt.submit failed: {submitted['error']}")
+
+    with _sessions_lock:
+        session = _sessions.get(sid)
+    if session is None:
+        return _err(rid, -32000, "canvas.judge: preview session vanished")
+
+    deadline = time.time() + _CANVAS_JUDGE_TIMEOUT_S
+    while session.get("running") and time.time() < deadline:
+        time.sleep(0.25)
+    if session.get("running"):
+        return _err(rid, -32000, f"canvas.judge: turn did not finish within {_CANVAS_JUDGE_TIMEOUT_S}s")
+
+    with session["history_lock"]:
+        answer = next(
+            (
+                str(m.get("content") or "")
+                for m in reversed(list(session.get("history", [])))
+                if m.get("role") == "assistant" and str(m.get("content") or "").strip()
+            ),
+            "",
+        )
+
+    finished = handle_canvas_judge_finish(
+        {"source_session_id": source, "preview_session_id": key, "answer": answer}
+    )
+    if not finished.get("ok"):
+        return _err(rid, -32000, "; ".join(finished.get("errors", ["canvas.judge failed"])))
+    return _ok(rid, {**finished, "preview_session_id": key})
 # <<< gis-canvas >>>

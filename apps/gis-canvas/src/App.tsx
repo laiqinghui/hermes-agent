@@ -32,7 +32,6 @@ import { listSessions, fetchTranscript, type SessionRow } from './lib/sessions'
 import { transcriptToTurns } from './lib/transcript'
 import { packTranscript } from './lib/transcript-pack'
 import { buildJudgePrompt } from './lib/judge'
-import { parseVerdict } from './lib/verdict'
 
 // reasoning.delta carries the model's real between-step reasoning (gpt-5.5 et al.);
 // reasoning.available is only the final answer for such models. Both feed the star.
@@ -175,21 +174,11 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const derived = useMemo(() => deriveActivity(activity), [activity])
   const { messages, trace, isBusy } = derived
 
-  // The judging turn has finished: read its answers, remember the verdict so
-  // this foreign session is never judged again (declines included).
-  useEffect(() => {
-    if (!opened?.previewSessionId || opened.verdict || isBusy) return
-    const last = derived.turns.at(-1)
-    if (!last || last.isBusy) return
-    const v = parseVerdict(last.answers)
-    setOpened(f => f && { ...f, verdict: v.verdict, reason: v.reason })
-    void client.request('canvas.preview_set', {
-      source_session_id: opened.row.id,
-      preview_session_id: opened.previewSessionId,
-      verdict: v.verdict,
-      reason: v.reason,
-    }).catch(() => {})
-  }, [opened, derived.turns, isBusy, client])
+  // NOTE: the verdict is decided SERVER-SIDE by canvas.judge, which runs the
+  // turn to completion and only then reads the answer and the authored doc.
+  // Do not reintroduce a client-side watcher here: the SPA sees one global
+  // event stream with no session correlation, so it cannot tell whose turn
+  // ended — the earlier attempt cached "declined" before the turn had begun.
 
   // Keep the cognition plane mounted for the whole ACTIVE turn — from first
   // activity until the agent's final answer — not just while a tool is running.
@@ -288,15 +277,24 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
           return
         }
 
-        // Never judged: spend exactly one turn, then remember the outcome.
+        // Never judged: one server-side call that creates the preview session,
+        // runs the turn to completion, decides the verdict from what the agent
+        // said AND whether a doc landed, and caches it. Returns the STORED
+        // session key — the id the canvas store and session.resume both use.
         setOpened(f => f && { ...f, judging: true })
-        const created = await client.request<{ session_id: string }>('session.create', { cols: 96 })
-        await bindSessions(bffUrl, [created.session_id])
-        await client.request('prompt.submit', {
-          session_id: created.session_id,
+        const judged = await client.request<{
+          preview_session_id: string
+          record: { verdict: 'rendered' | 'declined'; reason: string }
+          doc: CanvasDoc | null
+        }>('canvas.judge', {
+          source_session_id: row.id,
           text: buildJudgePrompt(row, packTranscript(rows)),
         })
-        setOpened(f => f && { ...f, previewSessionId: created.session_id, judging: false })
+        await bindSessions(bffUrl, [judged.preview_session_id])
+        if (judged.doc) setDoc(judged.doc)
+        setOpened(f => f && { ...f, judging: false,
+          previewSessionId: judged.preview_session_id,
+          verdict: judged.record.verdict, reason: judged.record.reason })
       } catch (err) {
         setOpened(f => f && { ...f, judging: false })
         log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -311,26 +309,22 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     if (!opened) return
     const current = opened
     try {
-      const rows = await fetchTranscript(bffUrl, current.row.id).catch(() => [])
       let pid = current.previewSessionId
       try {
         if (!pid) throw new Error('no preview session')
         await client.request('session.resume', { session_id: pid })
       } catch {
-        // The cached preview session is gone — rebuild one and re-seed it.
-        const created = await client.request<{ session_id: string }>('session.create', { cols: 96 })
-        pid = created.session_id
-        await bindSessions(bffUrl, [pid])
-        await client.request('prompt.submit', {
-          session_id: pid,
-          text: buildJudgePrompt(current.row, packTranscript(rows)),
-        })
-        await client.request('canvas.preview_set', {
-          source_session_id: current.row.id,
-          preview_session_id: pid,
-          verdict: current.verdict ?? 'rendered',
-          reason: current.reason ?? '',
-        }).catch(() => {})
+        // The cached preview session is gone (pruned, deleted). Rebuild it the
+        // same way it was made in the first place — one server-side judge run,
+        // which re-seeds the transcript and re-caches the verdict.
+        const rows = await fetchTranscript(bffUrl, current.row.id).catch(() => [])
+        const judged = await client.request<{ preview_session_id: string; doc: CanvasDoc | null }>(
+          'canvas.judge', {
+            source_session_id: current.row.id,
+            text: buildJudgePrompt(current.row, packTranscript(rows)),
+          })
+        pid = judged.preview_session_id
+        if (judged.doc) setDoc(judged.doc)
       }
       sessionIdRef.current = pid!
       canvasKeyRef.current = pid!

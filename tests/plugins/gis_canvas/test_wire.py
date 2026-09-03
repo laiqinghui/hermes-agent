@@ -126,3 +126,34 @@ def test_preview_set_rejects_an_unknown_verdict(plugin):
         "source_session_id": "tg1", "preview_session_id": "p1", "verdict": "maybe",
     })
     assert out["ok"] is False and "verdict" in out["errors"][0]
+
+
+def test_judge_finish_records_a_rendered_verdict_when_a_doc_exists(plugin):
+    plugin.preview_index.reset_index_for_tests()
+    _render(plugin, "preview-key")  # the judging turn authored a canvas
+    out = plugin.wire.handle_canvas_judge_finish({
+        "source_session_id": "tg1", "preview_session_id": "preview-key",
+        "answer": "I have laid out the tracks.",
+    })
+    assert out["ok"] is True
+    assert out["record"]["verdict"] == "rendered"
+    assert out["record"]["preview_session_id"] == "preview-key"
+    assert out["doc"]["rev"] == 1
+    # Cached, so reopening never re-spends a turn.
+    assert plugin.wire.handle_canvas_preview_get({"source_session_id": "tg1"})["record"]["verdict"] == "rendered"
+
+
+def test_judge_finish_declines_when_the_turn_authored_nothing(plugin):
+    plugin.preview_index.reset_index_for_tests()
+    out = plugin.wire.handle_canvas_judge_finish({
+        "source_session_id": "tg2", "preview_session_id": "empty-key",
+        "answer": "NO CANVAS: this was a debugging session.",
+    })
+    assert out["record"]["verdict"] == "declined"
+    assert out["record"]["reason"] == "this was a debugging session."
+    assert out["doc"] is None
+
+
+def test_judge_finish_requires_both_ids(plugin):
+    out = plugin.wire.handle_canvas_judge_finish({"source_session_id": "tg1"})
+    assert out["ok"] is False
