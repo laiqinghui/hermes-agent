@@ -45,12 +45,20 @@ def _init(app_module) -> APIRouter:
             )
 
     @router.get("/sessions")
-    async def list_sessions(request: Request, limit: int = 100, offset: int = 0):
+    async def list_sessions(
+        request: Request, limit: int = 100, offset: int = 0, min_messages: int = 1
+    ):
+        # min_messages defaults to 1: the picker exists to find a session worth
+        # reopening, and one with no messages never is. Filtering server-side
+        # keeps paging honest — dropping rows here would leave ragged pages.
         principal = _principal(request)
         if not principal:
             return JSONResponse({"error": "not authenticated"}, status_code=401)
         try:
-            r = await _get("/api/sessions", {"limit": limit, "offset": offset})
+            r = await _get(
+                "/api/sessions",
+                {"limit": limit, "offset": offset, "min_messages": min_messages},
+            )
         except httpx.HTTPError as exc:
             return JSONResponse({"error": f"gateway unreachable: {exc}"}, status_code=502)
         if r.status_code != 200:

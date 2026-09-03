@@ -81,3 +81,24 @@ def test_gateway_failure_surfaces_as_502_not_500():
         respx.get(f"{GW}/api/sessions").mock(return_value=httpx.Response(500, text="boom"))
         r = _authed().get("/sessions")
     assert r.status_code == 502
+
+
+def test_sessions_asks_the_gateway_to_drop_empty_sessions():
+    # The picker exists to find a session worth reopening; a session with no
+    # messages never is. The gateway filters server-side so paging stays honest
+    # (filtering client-side would leave short, ragged pages).
+    payload = {"sessions": [], "total": 0}
+    with respx.mock:
+        route = respx.get(f"{GW}/api/sessions").mock(return_value=httpx.Response(200, json=payload))
+        r = _authed().get("/sessions")
+    assert r.status_code == 200
+    assert route.calls[0].request.url.params["min_messages"] == "1"
+
+
+def test_sessions_min_messages_is_caller_overridable():
+    payload = {"sessions": [], "total": 0}
+    with respx.mock:
+        route = respx.get(f"{GW}/api/sessions").mock(return_value=httpx.Response(200, json=payload))
+        r = _authed().get("/sessions?min_messages=0")
+    assert r.status_code == 200
+    assert route.calls[0].request.url.params["min_messages"] == "0"
