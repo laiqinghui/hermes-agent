@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import type { SessionRow } from '../lib/sessions'
+import { groupSessions, type GroupedRow } from '../lib/session-tree'
 
 function label(row: SessionRow): string {
   return row.title?.trim() || row.preview?.trim() || row.id
@@ -54,10 +55,15 @@ export function SessionPicker({
     onRename(id, draft.trim())
   }
   const cancelRename = () => { cancelled.current = true; setEditing(null) }
-  const filtered = useMemo(() => {
+  // Grouping applies only to the unfiltered list. While searching, an indented
+  // row whose parent was filtered out is more confusing than a plain one, so
+  // matches render flat.
+  const visible = useMemo<GroupedRow[]>(() => {
     const needle = q.trim().toLowerCase()
-    if (!needle) return rows
-    return rows.filter(r => `${r.title} ${r.preview}`.toLowerCase().includes(needle))
+    if (!needle) return groupSessions(rows)
+    return rows
+      .filter(r => `${r.title} ${r.preview}`.toLowerCase().includes(needle))
+      .map(row => ({ row, child: false }))
   }, [rows, q])
 
   if (!open) return null
@@ -84,19 +90,19 @@ export function SessionPicker({
         <div className="min-h-0 flex-1 overflow-auto">
           {busy ? (
             <p className="px-4 py-6 text-center font-sans text-[12.5px] text-tertiary">Loading sessions…</p>
-          ) : !filtered.length ? (
+          ) : !visible.length ? (
             <p className="px-4 py-6 text-center font-sans text-[12.5px] text-tertiary">
               No sessions{q ? ' match that search' : ' yet'}.
             </p>
           ) : (
-            filtered.map(row => {
+            visible.map(({ row, child }) => {
               const hasCanvas = canvasKeys.has(row.id)
               return (
                 <button
                   key={row.id}
                   data-testid={`session-row-${row.id}`}
                   onClick={() => onOpenSession(row, hasCanvas)}
-                  className="group flex w-full items-center gap-3 border-b border-hairline/40 px-4 py-2.5 text-left hover:bg-surface"
+                  className={`group flex w-full items-center gap-3 border-b border-hairline/40 py-2.5 pr-4 text-left hover:bg-surface ${child ? 'pl-10' : 'pl-4'}`}
                 >
                   <span className="min-w-0 flex-1">
                     {editing === row.id ? (
@@ -118,6 +124,10 @@ export function SessionPicker({
                       <span className="block truncate font-sans text-[12.5px] text-primary">{label(row)}</span>
                     )}
                     <span className="mt-0.5 block font-mono text-[10.5px] text-tertiary">
+                      {child && (
+                        <span data-testid={`child-${row.id}`} aria-label="Branched from the session above"
+                          className="mr-1 text-tertiary">└</span>
+                      )}
                       {row.source} · {row.message_count} msg · {ago(row.last_active)}
                     </span>
                   </span>
