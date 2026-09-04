@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { SessionRow } from '../lib/sessions'
 
 function label(row: SessionRow): string {
@@ -21,6 +21,7 @@ function ago(ts: number): string {
  * escapes them as text here; never move them into dangerouslySetInnerHTML. */
 export function SessionPicker({
   open, rows, canvasKeys, busy, onOpenSession, onClose,
+  currentId, onRename, onArchive, onDelete,
 }: {
   open: boolean
   rows: SessionRow[]
@@ -28,8 +29,31 @@ export function SessionPicker({
   busy: boolean
   onOpenSession: (row: SessionRow, hasCanvas: boolean) => void
   onClose: () => void
+  /** Stored key of the loaded session — it may be renamed but not removed. */
+  currentId?: string
+  onRename: (id: string, title: string) => void
+  onArchive: (id: string) => void
+  onDelete: (id: string) => void
 }) {
   const [q, setQ] = useState('')
+  const [editing, setEditing] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [confirming, setConfirming] = useState<SessionRow | null>(null)
+  // Escape also blurs, so without this flag the blur handler would commit the
+  // very edit Escape just cancelled.
+  const cancelled = useRef(false)
+
+  const beginRename = (row: SessionRow) => {
+    cancelled.current = false
+    setDraft(row.title ?? '')
+    setEditing(row.id)
+  }
+  const commitRename = (id: string) => {
+    if (cancelled.current || editing !== id) return
+    setEditing(null)
+    onRename(id, draft.trim())
+  }
+  const cancelRename = () => { cancelled.current = true; setEditing(null) }
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase()
     if (!needle) return rows
@@ -75,10 +99,53 @@ export function SessionPicker({
                   className="flex w-full items-center gap-3 border-b border-hairline/40 px-4 py-2.5 text-left hover:bg-surface"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-sans text-[12.5px] text-primary">{label(row)}</span>
+                    {editing === row.id ? (
+                      <input
+                        data-testid={`rename-input-${row.id}`}
+                        autoFocus
+                        value={draft}
+                        onChange={e => setDraft(e.target.value)}
+                        onClick={e => e.stopPropagation()}
+                        onKeyDown={e => {
+                          e.stopPropagation()
+                          if (e.key === 'Enter') commitRename(row.id)
+                          if (e.key === 'Escape') cancelRename()
+                        }}
+                        onBlur={() => commitRename(row.id)}
+                        className="w-full rounded-gc-sm border border-hairline bg-surface px-1.5 py-0.5 font-sans text-[12.5px] text-primary"
+                      />
+                    ) : (
+                      <span className="block truncate font-sans text-[12.5px] text-primary">{label(row)}</span>
+                    )}
                     <span className="mt-0.5 block font-mono text-[10.5px] text-tertiary">
                       {row.source} · {row.message_count} msg · {ago(row.last_active)}
                     </span>
+                  </span>
+
+                  {row.id === currentId && (
+                    <span data-testid={`current-${row.id}`}
+                      className="shrink-0 font-mono text-[10px] text-accent">● current</span>
+                  )}
+                  {/* Every action stops propagation: the row itself is a button
+                      that opens the session. */}
+                  <span className="flex shrink-0 items-center gap-1">
+                    <button data-testid={`rename-${row.id}`} title="Rename"
+                      onClick={e => { e.stopPropagation(); beginRename(row) }}
+                      className="rounded-gc-sm border border-hairline px-1.5 py-0.5 font-mono text-[10px] text-tertiary hover:text-primary">
+                      Rename
+                    </button>
+                    <button data-testid={`archive-${row.id}`} disabled={row.id === currentId}
+                      title={row.id === currentId ? 'You cannot archive the session you are in' : 'Archive'}
+                      onClick={e => { e.stopPropagation(); onArchive(row.id) }}
+                      className="rounded-gc-sm border border-hairline px-1.5 py-0.5 font-mono text-[10px] text-tertiary hover:text-primary disabled:opacity-40">
+                      Archive
+                    </button>
+                    <button data-testid={`delete-${row.id}`} disabled={row.id === currentId}
+                      title={row.id === currentId ? 'You cannot delete the session you are in' : 'Delete permanently'}
+                      onClick={e => { e.stopPropagation(); setConfirming(row) }}
+                      className="rounded-gc-sm border border-hairline px-1.5 py-0.5 font-mono text-[10px] text-negative hover:text-primary disabled:opacity-40">
+                      Delete…
+                    </button>
                   </span>
                   <span
                     data-testid={`session-badge-${row.id}`}
@@ -93,6 +160,29 @@ export function SessionPicker({
             })
           )}
         </div>
+
+        {confirming && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-canvas/80 p-6">
+            <div className="gc-hud w-[min(420px,90vw)] rounded-gc-md p-4">
+              {/* label() output is a title authored on another surface — React
+                  renders it as text; never move it into innerHTML. */}
+              <p className="font-sans text-[12.5px] text-primary">
+                Delete “{label(confirming)}” permanently? This cannot be undone.
+              </p>
+              <div className="mt-3 flex justify-end gap-2">
+                <button data-testid="cancel-delete" onClick={() => setConfirming(null)}
+                  className="rounded-gc-sm border border-hairline px-2.5 py-1.5 font-sans text-[11.5px] text-secondary hover:text-primary">
+                  Cancel
+                </button>
+                <button data-testid="confirm-delete"
+                  onClick={() => { const r = confirming; setConfirming(null); onDelete(r.id) }}
+                  className="rounded-gc-sm border border-negative/50 px-2.5 py-1.5 font-sans text-[11.5px] text-negative hover:text-primary">
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

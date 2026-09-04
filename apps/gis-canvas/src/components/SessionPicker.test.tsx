@@ -11,14 +11,16 @@ const rows: SessionRow[] = [
 function setup(over = {}) {
   const onOpenSession = vi.fn(); const onClose = vi.fn()
   render(<SessionPicker open rows={rows} canvasKeys={new Set(['own1'])} busy={false}
-    onOpenSession={onOpenSession} onClose={onClose} {...over} />)
+    onOpenSession={onOpenSession} onClose={onClose}
+    onRename={() => {}} onArchive={() => {}} onDelete={() => {}} {...over} />)
   return { onOpenSession, onClose }
 }
 
 describe('SessionPicker', () => {
   it('renders nothing when closed', () => {
     render(<SessionPicker open={false} rows={rows} canvasKeys={new Set()} busy={false}
-      onOpenSession={() => {}} onClose={() => {}} />)
+      onOpenSession={() => {}} onClose={() => {}}
+      onRename={() => {}} onArchive={() => {}} onDelete={() => {}} />)
     expect(screen.queryByTestId('session-picker')).toBeNull()
   })
 
@@ -57,7 +59,8 @@ describe('SessionPicker', () => {
   it('renders a hostile title as text, never as markup', () => {
     const hostile: SessionRow[] = [{ ...rows[0], id: 'x', title: '<img src=x onerror=alert(1)>' }]
     render(<SessionPicker open rows={hostile} canvasKeys={new Set()} busy={false}
-      onOpenSession={() => {}} onClose={() => {}} />)
+      onOpenSession={() => {}} onClose={() => {}}
+      onRename={() => {}} onArchive={() => {}} onDelete={() => {}} />)
     const row = screen.getByTestId('session-row-x')
     expect(row.querySelector('img')).toBeNull()
     expect(row).toHaveTextContent('<img src=x onerror=alert(1)>')
@@ -65,13 +68,92 @@ describe('SessionPicker', () => {
 
   it('shows a loading state while rows are being fetched', () => {
     render(<SessionPicker open rows={[]} canvasKeys={new Set()} busy
-      onOpenSession={() => {}} onClose={() => {}} />)
+      onOpenSession={() => {}} onClose={() => {}}
+      onRename={() => {}} onArchive={() => {}} onDelete={() => {}} />)
     expect(screen.getByTestId('session-picker')).toHaveTextContent('Loading sessions')
   })
 
   it('shows an empty state when there are no sessions', () => {
     render(<SessionPicker open rows={[]} canvasKeys={new Set()} busy={false}
-      onOpenSession={() => {}} onClose={() => {}} />)
+      onOpenSession={() => {}} onClose={() => {}}
+      onRename={() => {}} onArchive={() => {}} onDelete={() => {}} />)
     expect(screen.getByTestId('session-picker')).toHaveTextContent('No sessions')
+  })
+})
+
+function setupManage(over = {}) {
+  const onRename = vi.fn(); const onArchive = vi.fn(); const onDelete = vi.fn()
+  render(<SessionPicker open rows={rows} canvasKeys={new Set(['own1'])} busy={false}
+    onOpenSession={() => {}} onClose={() => {}}
+    onRename={onRename} onArchive={onArchive} onDelete={onDelete} {...over} />)
+  return { onRename, onArchive, onDelete }
+}
+
+describe('SessionPicker management', () => {
+  it('renames inline on Enter', () => {
+    const { onRename } = setupManage()
+    fireEvent.click(screen.getByTestId('rename-own1'))
+    const input = screen.getByTestId('rename-input-own1')
+    fireEvent.change(input, { target: { value: 'Renamed' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onRename).toHaveBeenCalledWith('own1', 'Renamed')
+  })
+
+  it('Escape cancels the rename even though it also blurs the input', () => {
+    const { onRename } = setupManage()
+    fireEvent.click(screen.getByTestId('rename-own1'))
+    const input = screen.getByTestId('rename-input-own1')
+    fireEvent.change(input, { target: { value: 'Discarded' } })
+    fireEvent.keyDown(input, { key: 'Escape' })
+    fireEvent.blur(input)
+    expect(onRename).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('rename-input-own1')).toBeNull()
+  })
+
+  it('commits on blur when the edit was not cancelled', () => {
+    const { onRename } = setupManage()
+    fireEvent.click(screen.getByTestId('rename-own1'))
+    const input = screen.getByTestId('rename-input-own1')
+    fireEvent.change(input, { target: { value: 'Committed' } })
+    fireEvent.blur(input)
+    expect(onRename).toHaveBeenCalledWith('own1', 'Committed')
+  })
+
+  it('archives in one click, no confirmation', () => {
+    const { onArchive } = setupManage()
+    fireEvent.click(screen.getByTestId('archive-tg1'))
+    expect(onArchive).toHaveBeenCalledWith('tg1')
+  })
+
+  it('requires confirmation before deleting, and cancelling does nothing', () => {
+    const { onDelete } = setupManage()
+    fireEvent.click(screen.getByTestId('delete-tg1'))
+    expect(onDelete).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('cancel-delete'))
+    expect(onDelete).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('delete-tg1'))
+    fireEvent.click(screen.getByTestId('confirm-delete'))
+    expect(onDelete).toHaveBeenCalledWith('tg1')
+  })
+
+  it('marks the current session and forbids removing it', () => {
+    setupManage({ currentId: 'own1' })
+    expect(screen.getByTestId('current-own1')).toBeInTheDocument()
+    expect(screen.getByTestId('archive-own1')).toBeDisabled()
+    expect(screen.getByTestId('delete-own1')).toBeDisabled()
+    // Renaming what you are looking at is fine.
+    expect(screen.getByTestId('rename-own1')).not.toBeDisabled()
+    // Other rows are unaffected.
+    expect(screen.getByTestId('delete-tg1')).not.toBeDisabled()
+  })
+
+  it('renders a hostile title as text in the delete confirmation', () => {
+    const hostile: SessionRow[] = [{ ...rows[0], id: 'x', title: '<img src=x onerror=alert(1)>' }]
+    render(<SessionPicker open rows={hostile} canvasKeys={new Set()} busy={false}
+      onOpenSession={() => {}} onClose={() => {}}
+      onRename={() => {}} onArchive={() => {}} onDelete={() => {}} />)
+    fireEvent.click(screen.getByTestId('delete-x'))
+    const dialog = screen.getByTestId('confirm-delete').closest('div')!
+    expect(dialog.querySelector('img')).toBeNull()
   })
 })
