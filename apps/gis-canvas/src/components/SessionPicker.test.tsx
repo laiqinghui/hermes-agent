@@ -157,3 +157,27 @@ describe('SessionPicker management', () => {
     expect(dialog.querySelector('img')).toBeNull()
   })
 })
+
+describe('SessionPicker row action affordance', () => {
+  it('gives every action an accessible name, not just a glyph', () => {
+    setupManage()
+    expect(screen.getByTestId('rename-own1')).toHaveAccessibleName(/rename/i)
+    expect(screen.getByTestId('archive-own1')).toHaveAccessibleName(/archive/i)
+    expect(screen.getByTestId('delete-own1')).toHaveAccessibleName(/delete/i)
+  })
+
+  it('keeps the actions quiet until the row is hovered or focused', () => {
+    setupManage()
+    const actions = screen.getByTestId('row-actions-own1')
+    // Revealed on hover AND focus-within: hover alone would strand keyboard users.
+    expect(actions.className).toContain('opacity-0')
+    expect(actions.className).toContain('group-hover:opacity-100')
+    expect(actions.className).toContain('group-focus-within:opacity-100')
+  })
+
+  it('leaves the actions focusable while hidden, so they stay reachable by keyboard', () => {
+    setupManage()
+    // opacity-0, never display:none — a hidden-by-display button cannot be tabbed to.
+    expect(screen.getByTestId('row-actions-own1').className).not.toContain('hidden')
+  })
+})

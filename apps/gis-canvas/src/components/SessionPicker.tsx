@@ -96,7 +96,7 @@ export function SessionPicker({
                   key={row.id}
                   data-testid={`session-row-${row.id}`}
                   onClick={() => onOpenSession(row, hasCanvas)}
-                  className="flex w-full items-center gap-3 border-b border-hairline/40 px-4 py-2.5 text-left hover:bg-surface"
+                  className="group flex w-full items-center gap-3 border-b border-hairline/40 px-4 py-2.5 text-left hover:bg-surface"
                 >
                   <span className="min-w-0 flex-1">
                     {editing === row.id ? (
@@ -126,25 +126,36 @@ export function SessionPicker({
                     <span data-testid={`current-${row.id}`}
                       className="shrink-0 font-mono text-[10px] text-accent">● current</span>
                   )}
-                  {/* Every action stops propagation: the row itself is a button
-                      that opens the session. */}
-                  <span className="flex shrink-0 items-center gap-1">
-                    <button data-testid={`rename-${row.id}`} title="Rename"
+                  {/* Icon buttons, quiet until the row is hovered or focused, so
+                      the Canvas/Transcript badge stays the row's only persistent
+                      chip. Revealed on focus-within as well as hover — hover
+                      alone would strand keyboard users. They are dimmed, never
+                      display:none, so they remain focusable and tabbable.
+                      Every action stops propagation: the row itself is a button
+                      that opens the session. The glyph never carries the meaning
+                      on its own; aria-label and title both spell it out. */}
+                  <span
+                    data-testid={`row-actions-${row.id}`}
+                    className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                  >
+                    <button data-testid={`rename-${row.id}`} aria-label="Rename session" title="Rename"
                       onClick={e => { e.stopPropagation(); beginRename(row) }}
-                      className="rounded-gc-sm border border-hairline px-1.5 py-0.5 font-mono text-[10px] text-tertiary hover:text-primary">
-                      Rename
+                      className="rounded-gc-sm px-1.5 py-1 text-[12px] leading-none text-tertiary hover:bg-surface hover:text-primary">
+                      ✎
                     </button>
                     <button data-testid={`archive-${row.id}`} disabled={row.id === currentId}
+                      aria-label="Archive session"
                       title={row.id === currentId ? 'You cannot archive the session you are in' : 'Archive'}
                       onClick={e => { e.stopPropagation(); onArchive(row.id) }}
-                      className="rounded-gc-sm border border-hairline px-1.5 py-0.5 font-mono text-[10px] text-tertiary hover:text-primary disabled:opacity-40">
-                      Archive
+                      className="rounded-gc-sm px-1.5 py-1 text-[12px] leading-none text-tertiary hover:bg-surface hover:text-primary disabled:opacity-30 disabled:hover:bg-transparent">
+                      ⊟
                     </button>
                     <button data-testid={`delete-${row.id}`} disabled={row.id === currentId}
+                      aria-label="Delete session permanently"
                       title={row.id === currentId ? 'You cannot delete the session you are in' : 'Delete permanently'}
                       onClick={e => { e.stopPropagation(); setConfirming(row) }}
-                      className="rounded-gc-sm border border-hairline px-1.5 py-0.5 font-mono text-[10px] text-negative hover:text-primary disabled:opacity-40">
-                      Delete…
+                      className="rounded-gc-sm px-1.5 py-1 text-[12px] leading-none text-tertiary hover:bg-surface hover:text-negative disabled:opacity-30 disabled:hover:bg-transparent">
+                      ✕
                     </button>
                   </span>
                   <span
