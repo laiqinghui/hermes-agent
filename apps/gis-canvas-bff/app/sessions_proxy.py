@@ -1,9 +1,11 @@
-"""Read-only session browsing for Thoughts Canvas.
+"""Session browsing and management for Thoughts Canvas.
 
-Proxies two gateway endpoints so the SPA can list sessions and read a
-transcript. Everything here is READ-ONLY by design: browsing must never mutate
-someone's conversation, so no resume/branch/delete endpoint may be added to
-this module.
+Proxies the gateway's session endpoints. The invariant is about BROWSING, not
+about this module: reading a session must never change it, so the GET routes
+below are side-effect free and no resume/branch call may be added to them.
+
+The PATCH and DELETE routes are explicit, user-initiated management actions
+(rename, archive, delete) and are deliberately separate from the read path.
 """
 from __future__ import annotations
 
@@ -80,5 +82,51 @@ def _init(app_module) -> APIRouter:
         if r.status_code != 200:
             return JSONResponse({"error": "gateway error"}, status_code=502)
         return r.json()
+
+    # ── Management (explicit user actions, not part of the read path) ──────────
+
+    async def _send(method: str, path: str, json_body: dict | None = None):
+        async with app_module.get_http_client() as client:
+            return await client.request(
+                method,
+                f"{settings.gateway_url}{path}",
+                json=json_body,
+                headers={"X-Hermes-Session-Token": settings.gateway_token},
+            )
+
+    def _relay(r: httpx.Response):
+        """Map a gateway response onto ours: 404 stays 404 (the session is gone,
+        which the caller must distinguish), anything else non-200 is a 502."""
+        if r.status_code == 404:
+            return JSONResponse({"error": "session not found"}, status_code=404)
+        if r.status_code != 200:
+            return JSONResponse({"error": "gateway error"}, status_code=502)
+        return r.json()
+
+    @router.patch("/sessions/{session_id}")
+    async def update_session(request: Request, session_id: str):
+        if not _principal(request):
+            return JSONResponse({"error": "not authenticated"}, status_code=401)
+        body = await request.json()
+        # Forward ONLY the fields being changed: sending title=None would clear
+        # the title, so an archive request must not carry one.
+        patch = {k: body[k] for k in ("title", "archived") if k in body}
+        if not patch:
+            return JSONResponse({"error": "title or archived is required"}, status_code=400)
+        try:
+            r = await _send("PATCH", f"/api/sessions/{session_id}", patch)
+        except httpx.HTTPError as exc:
+            return JSONResponse({"error": f"gateway unreachable: {exc}"}, status_code=502)
+        return _relay(r)
+
+    @router.delete("/sessions/{session_id}")
+    async def delete_session(request: Request, session_id: str):
+        if not _principal(request):
+            return JSONResponse({"error": "not authenticated"}, status_code=401)
+        try:
+            r = await _send("DELETE", f"/api/sessions/{session_id}")
+        except httpx.HTTPError as exc:
+            return JSONResponse({"error": f"gateway unreachable: {exc}"}, status_code=502)
+        return _relay(r)
 
     return router

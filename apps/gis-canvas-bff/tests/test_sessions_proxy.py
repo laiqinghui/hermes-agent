@@ -1,3 +1,4 @@
+import json
 import os
 
 import httpx
@@ -102,3 +103,65 @@ def test_sessions_min_messages_is_caller_overridable():
         r = _authed().get("/sessions?min_messages=0")
     assert r.status_code == 200
     assert route.calls[0].request.url.params["min_messages"] == "0"
+
+
+def test_rename_401_when_not_authenticated():
+    r = TestClient(bff.app).patch("/sessions/abc", json={"title": "New name"})
+    assert r.status_code == 401
+
+
+def test_delete_401_when_not_authenticated():
+    r = TestClient(bff.app).delete("/sessions/abc")
+    assert r.status_code == 401
+
+
+def test_rename_proxies_the_title():
+    with respx.mock:
+        route = respx.patch(f"{GW}/api/sessions/abc").mock(
+            return_value=httpx.Response(200, json={"ok": True, "title": "New name"}))
+        r = _authed().patch("/sessions/abc", json={"title": "New name"})
+    assert r.status_code == 200
+    assert json.loads(route.calls[0].request.content)["title"] == "New name"
+
+
+def test_archive_proxies_the_flag_without_touching_the_title():
+    with respx.mock:
+        route = respx.patch(f"{GW}/api/sessions/abc").mock(
+            return_value=httpx.Response(200, json={"ok": True}))
+        r = _authed().patch("/sessions/abc", json={"archived": True})
+    assert r.status_code == 200
+    body = json.loads(route.calls[0].request.content)
+    assert body["archived"] is True
+    # Sending title=None would CLEAR the title — only send what is being changed.
+    assert "title" not in body
+
+
+def test_rename_can_clear_a_title_with_an_empty_string():
+    with respx.mock:
+        route = respx.patch(f"{GW}/api/sessions/abc").mock(
+            return_value=httpx.Response(200, json={"ok": True}))
+        r = _authed().patch("/sessions/abc", json={"title": ""})
+    assert r.status_code == 200
+    assert json.loads(route.calls[0].request.content)["title"] == ""
+
+
+def test_delete_proxies_and_returns_the_gateway_body():
+    with respx.mock:
+        respx.delete(f"{GW}/api/sessions/abc").mock(
+            return_value=httpx.Response(200, json={"ok": True}))
+        r = _authed().delete("/sessions/abc")
+    assert r.status_code == 200 and r.json()["ok"] is True
+
+
+def test_mutations_surface_a_missing_session_as_404():
+    with respx.mock:
+        respx.patch(f"{GW}/api/sessions/gone").mock(return_value=httpx.Response(404, json={}))
+        r = _authed().patch("/sessions/gone", json={"title": "x"})
+    assert r.status_code == 404
+
+
+def test_mutations_surface_a_gateway_failure_as_502():
+    with respx.mock:
+        respx.delete(f"{GW}/api/sessions/abc").mock(return_value=httpx.Response(500, text="boom"))
+        r = _authed().delete("/sessions/abc")
+    assert r.status_code == 502
