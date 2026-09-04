@@ -28,7 +28,9 @@ import { useLayoutStore } from './lib/use-layout-store'
 import { WindowStateProvider } from './components/WindowStateProvider'
 import { useWindowStateStore } from './lib/use-window-state'
 import { SessionPicker } from './components/SessionPicker'
-import { listSessions, fetchTranscript, type SessionRow } from './lib/sessions'
+import {
+  listSessions, fetchTranscript, renameSession, setArchived, deleteSession, type SessionRow,
+} from './lib/sessions'
 import { transcriptToTurns } from './lib/transcript'
 import { packTranscript } from './lib/transcript-pack'
 import { buildJudgePrompt } from './lib/judge'
@@ -64,6 +66,10 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const [sessionRows, setSessionRows] = useState<SessionRow[]>([])
   const [canvasKeys, setCanvasKeys] = useState<Set<string>>(new Set())
   const [pickerBusy, setPickerBusy] = useState(false)
+  // The loaded session's title when it did not come from the picker (a fresh
+  // session the agent later named). Kept OUT of `opened`: setting that would
+  // make canBranch true on a session with no turns, and Branch would fail 4008.
+  const [currentTitle, setCurrentTitle] = useState<string | undefined>()
   // A session opened from the picker. `turns` is its REPLAYED history — the
   // activity log only holds this browser connection's events, so without a
   // replay any reopened session shows an empty dock. `readOnly` is a SEPARATE
@@ -223,16 +229,66 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
 
   // Opening the picker refetches both lists: sessions from the BFF, stored
   // canvas keys from the plugin, so Canvas/Transcript marks are never stale.
+  // Session management. Each action performs the request, then refetches so the
+  // rows and Canvas/Transcript badges match the server rather than an optimistic
+  // guess. Failures surface in the activity log — never silently.
+  const refreshSessions = () =>
+    Promise.all([
+      listSessions(bffUrl),
+      client.request<{ keys: string[] }>('canvas.list', {}).catch(() => ({ keys: [] as string[] })),
+    ]).then(([rowsNow, stored]) => {
+      setSessionRows(rowsNow)
+      setCanvasKeys(new Set(stored.keys ?? []))
+      // A fresh session has no title until the agent assigns one, and we are
+      // never told when that happens. Adopt it from the list we just fetched.
+      const key = canvasKeyRef.current
+      const mine = key ? rowsNow.find(s => s.id === key) : undefined
+      if (mine?.title) setCurrentTitle(mine.title)
+    })
+
   const openPicker = () => {
     setPickerOpen(true)
     setPickerBusy(true)
-    void Promise.all([
-      listSessions(bffUrl),
-      client.request<{ keys: string[] }>('canvas.list', {}).catch(() => ({ keys: [] as string[] })),
-    ]).then(([rows, stored]) => {
-      setSessionRows(rows)
-      setCanvasKeys(new Set(stored.keys ?? []))
-    }).finally(() => setPickerBusy(false))
+    void refreshSessions().finally(() => setPickerBusy(false))
+  }
+
+  const handleRename = (id: string, title: string) => {
+    void (async () => {
+      try {
+        await renameSession(bffUrl, id, title)
+        // Update the loaded session's title now, not on the next picker open.
+        setOpened(o => (o && o.row.id === id ? { ...o, row: { ...o.row, title } } : o))
+        if (canvasKeyRef.current === id) setCurrentTitle(title)
+        await refreshSessions()
+      } catch (err) {
+        log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      }
+    })()
+  }
+
+  const handleArchive = (id: string) => {
+    void (async () => {
+      try {
+        // NOT canvas.forget: archiving is reversible, so the canvas must survive.
+        await setArchived(bffUrl, id, true)
+        await refreshSessions()
+      } catch (err) {
+        log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      }
+    })()
+  }
+
+  const handleDelete = (id: string) => {
+    void (async () => {
+      try {
+        await deleteSession(bffUrl, id)
+        // Only after the delete SUCCEEDS — a failed delete forgets nothing.
+        await client.request('canvas.forget', { session_id: id }).catch(() => {})
+        await refreshSessions()
+      } catch (err) {
+        log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      }
+    })()
   }
 
   // Own session: fetch the stored doc, resume so it can be continued (resume
@@ -403,7 +459,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         onBranch={branchSession}
         canBranch={!isBusy && (opened !== null || derived.turns.length > 0)} />
       <main className="relative min-h-0 flex-1 overflow-auto gc-canvas-grid-bg p-4">
-        <CanvasHeader rev={mergedDoc?.rev} isBusy={isBusy} />
+        <CanvasHeader rev={mergedDoc?.rev} isBusy={isBusy} title={opened?.row.title || currentTitle} />
         {opened?.judging && (
           <p data-testid="verdict-judging" className="px-1 pb-2 font-sans text-[12.5px] text-tertiary">
             Reading {opened.row.source} session — deciding whether it is worth rendering…
@@ -464,6 +520,10 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
         busy={pickerBusy}
         onOpenSession={(row, hasCanvas) => (hasCanvas ? openOwnSession(row) : openForeignSession(row))}
         onClose={() => setPickerOpen(false)}
+        currentId={canvasKeyRef.current ?? undefined}
+        onRename={handleRename}
+        onArchive={handleArchive}
+        onDelete={handleDelete}
       />
     </div>
   )

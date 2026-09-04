@@ -3,12 +3,15 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import App from './App'
 import type { GatewayLike } from './lib/gateway'
 import { authMe } from './lib/auth'
-import { listSessions, fetchTranscript } from './lib/sessions'
+import { listSessions, fetchTranscript, setArchived, deleteSession } from './lib/sessions'
 
 vi.mock('./lib/sessions', async (orig) => ({
   ...(await orig<typeof import('./lib/sessions')>()),
   listSessions: vi.fn().mockResolvedValue([]),
   fetchTranscript: vi.fn().mockResolvedValue([]),
+  renameSession: vi.fn().mockResolvedValue(undefined),
+  setArchived: vi.fn().mockResolvedValue(undefined),
+  deleteSession: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('./lib/auth', async (orig) => ({
@@ -342,4 +345,28 @@ test('opening another session does not carry the previous session activity into 
   // Its replayed history must show, and the previous session's turns must not.
   expect(await screen.findByText('the parent question')).toBeInTheDocument()
   expect(screen.queryByText('a prompt from the OTHER session')).toBeNull()
+})
+
+test('deleting a session forgets its canvas, but archiving does not', async () => {
+  vi.mocked(listSessions).mockResolvedValue([
+    { id: 'other', source: 'tui', title: 'Other', preview: '', message_count: 5, started_at: 1, last_active: 2 },
+  ])
+  const client = makeFakeClient({ 'canvas.list': { keys: [] }, 'canvas.forget': { ok: true } })
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x/api/ws?token=t" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  fireEvent.click(screen.getByTestId('open-sessions'))
+  fireEvent.click(await screen.findByTestId('archive-other'))
+  await waitFor(() => expect(vi.mocked(setArchived)).toHaveBeenCalledWith('http://bff', 'other', true))
+  // Archiving is reversible — the canvas must survive it.
+  expect(client.requests.some(r => r.method === 'canvas.forget')).toBe(false)
+
+  fireEvent.click(await screen.findByTestId('delete-other'))
+  fireEvent.click(await screen.findByTestId('confirm-delete'))
+  await waitFor(() => expect(vi.mocked(deleteSession)).toHaveBeenCalledWith('http://bff', 'other'))
+  await waitFor(() => {
+    const forget = client.requests.find(r => r.method === 'canvas.forget')
+    expect((forget?.params as { session_id: string } | undefined)?.session_id).toBe('other')
+  })
 })
