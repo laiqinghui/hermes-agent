@@ -165,3 +165,21 @@ def test_mutations_surface_a_gateway_failure_as_502():
         respx.delete(f"{GW}/api/sessions/abc").mock(return_value=httpx.Response(500, text="boom"))
         r = _authed().delete("/sessions/abc")
     assert r.status_code == 502
+
+
+def test_cors_preflight_allows_the_mutating_methods():
+    """The browser preflights PATCH/DELETE (they are not "simple" requests).
+
+    With allow_methods=["GET","POST"] the preflight 400s and the real request is
+    never sent — the rename silently reverts with nothing in the server log but
+    a rejected OPTIONS. TestClient/respx never exercise preflight, so only this
+    test catches it.
+    """
+    c = TestClient(bff.app)
+    for method in ("GET", "POST", "PATCH", "DELETE"):
+        r = c.options("/sessions/abc", headers={
+            "Origin": "http://localhost:5174",
+            "Access-Control-Request-Method": method,
+        })
+        assert r.status_code == 200, f"{method} preflight rejected: {r.status_code}"
+        assert method in r.headers.get("access-control-allow-methods", "")

@@ -30,7 +30,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.spa_origin],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    # PATCH/DELETE are needed for session management (rename, archive, delete).
+    # They are not "simple" requests, so the browser preflights them; omitting a
+    # method here makes the preflight 400 and the real request is never sent —
+    # a silent no-op that looks like the action failing for no reason.
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 
