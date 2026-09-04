@@ -181,3 +181,53 @@ describe('SessionPicker row action affordance', () => {
     expect(screen.getByTestId('row-actions-own1').className).not.toContain('hidden')
   })
 })
+
+const familyRows: SessionRow[] = [
+  { id: 'kid', parent_session_id: 'root', source: 'tui', title: 'branch #2', preview: '', message_count: 9, started_at: 3, last_active: 9 },
+  { id: 'root', parent_session_id: null, source: 'tui', title: 'Gap analysis', preview: '', message_count: 20, started_at: 1, last_active: 5 },
+  { id: 'solo', parent_session_id: null, source: 'cli', title: 'Unrelated', preview: '', message_count: 4, started_at: 2, last_active: 4 },
+]
+
+function setupFamily(over = {}) {
+  render(<SessionPicker open rows={familyRows} canvasKeys={new Set()} busy={false}
+    onOpenSession={() => {}} onClose={() => {}}
+    onRename={() => {}} onArchive={() => {}} onDelete={() => {}} {...over} />)
+}
+
+describe('SessionPicker branch nesting', () => {
+  it('marks a forked session as a child and leaves roots unmarked', () => {
+    setupFamily()
+    expect(screen.getByTestId('child-kid')).toBeInTheDocument()
+    expect(screen.queryByTestId('child-root')).toBeNull()
+    expect(screen.queryByTestId('child-solo')).toBeNull()
+  })
+
+  it('places the child directly after its root', () => {
+    setupFamily()
+    const ids = screen.getAllByTestId(/^session-row-/).map(el => el.getAttribute('data-testid'))
+    expect(ids).toEqual(['session-row-root', 'session-row-kid', 'session-row-solo'])
+  })
+
+  it('drops the nesting while searching', () => {
+    setupFamily()
+    fireEvent.change(screen.getByTestId('session-search'), { target: { value: 'branch' } })
+    expect(screen.getByTestId('session-row-kid')).toBeInTheDocument()
+    // A match whose parent was filtered out must not render as an orphaned indent.
+    expect(screen.queryByTestId('child-kid')).toBeNull()
+  })
+
+  it('still shows every session once when grouped', () => {
+    setupFamily()
+    expect(screen.getAllByTestId(/^session-row-/)).toHaveLength(familyRows.length)
+  })
+
+  it('leaves a child row fully actionable', () => {
+    const onOpenSession = vi.fn()
+    setupFamily({ onOpenSession })
+    expect(screen.getByTestId('rename-kid')).toBeInTheDocument()
+    expect(screen.getByTestId('archive-kid')).toBeInTheDocument()
+    expect(screen.getByTestId('delete-kid')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('session-row-kid'))
+    expect(onOpenSession).toHaveBeenCalledWith(familyRows[0], false)
+  })
+})
