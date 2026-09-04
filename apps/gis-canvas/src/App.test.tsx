@@ -312,3 +312,34 @@ test('branching forks into the new session, carrying its canvas and history', as
     expect((last?.params as { session_id: string }).session_id).toBe('rt-branch')
   })
 })
+
+test('opening another session does not carry the previous session activity into its dock', async () => {
+  vi.mocked(listSessions).mockResolvedValue([
+    { id: 'own1', source: 'tui', title: 'Parent', preview: '', message_count: 42, started_at: 1, last_active: 2 },
+  ])
+  vi.mocked(fetchTranscript).mockResolvedValue([msg('user', 'the parent question')])
+  const client = makeFakeClient({
+    'canvas.list': { keys: ['own1'] },
+    'canvas.get': { doc: null },
+    'session.resume': { session_id: 'rt-own1', session_key: 'own1' },
+  })
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x/api/ws?token=t" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  // Work in the bootstrap session first — this lands in the connection-wide
+  // activity log, which is NOT scoped to a session.
+  fireEvent.click(await screen.findByTestId('command-dock'))
+  const input = await screen.findByTestId('agent-input')
+  fireEvent.change(input, { target: { value: 'a prompt from the OTHER session' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(await screen.findByText('a prompt from the OTHER session')).toBeInTheDocument()
+
+  // Now switch to a different session.
+  fireEvent.click(screen.getByTestId('open-sessions'))
+  fireEvent.click(await screen.findByTestId('session-row-own1'))
+
+  // Its replayed history must show, and the previous session's turns must not.
+  expect(await screen.findByText('the parent question')).toBeInTheDocument()
+  expect(screen.queryByText('a prompt from the OTHER session')).toBeNull()
+})

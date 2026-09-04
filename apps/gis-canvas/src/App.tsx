@@ -82,6 +82,13 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const log = (item: Omit<ActivityItem, 'id'>) =>
     setActivity(prev => [...prev.slice(-199), { id: nextId.current++, ...item }])
 
+  // The activity log is CONNECTION-scoped, not session-scoped: gateway events
+  // carry no session id, so every turn from every session visited in this tab
+  // lands in one list. Switching sessions must therefore clear it, or the new
+  // session's dock shows the previous session's turns appended to its replayed
+  // history — which reads as one session having inherited another's work.
+  const startSession = () => setActivity([])
+
   useEffect(() => { void authMe(bffUrl).then(setAuth).catch(() => setAuth({ authenticated: false })) }, [bffUrl])
 
   useEffect(() => {
@@ -232,6 +239,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   // MUTATES — correct for our own session, forbidden for foreign ones), bind.
   const openOwnSession = (row: SessionRow) => {
     setPickerOpen(false)
+    startSession()
     void (async () => {
       try {
         const resumed = await client.request<{ session_id: string; session_key?: string }>(
@@ -261,6 +269,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const branchSession = () => {
     const sid = sessionIdRef.current
     if (!sid) return
+    startSession()
     void (async () => {
       try {
         const b = await client.request<{
@@ -303,6 +312,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   // (cached in the plugin's preview index), and Continue here promotes it.
   const openForeignSession = (row: SessionRow) => {
     setPickerOpen(false)
+    startSession()
     void (async () => {
       try {
         const rows = await fetchTranscript(bffUrl, row.id)
