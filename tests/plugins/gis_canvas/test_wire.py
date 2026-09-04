@@ -190,3 +190,40 @@ def test_branch_doc_is_fine_when_the_parent_has_no_canvas(plugin):
 def test_branch_doc_requires_both_keys(plugin):
     assert plugin.wire.handle_canvas_branch_doc({"from_key": "parent"})["ok"] is False
     assert plugin.wire.handle_canvas_branch_doc({"to_key": "child"})["ok"] is False
+
+
+def test_forget_removes_the_stored_canvas(plugin):
+    _render(plugin, "doomed")
+    assert plugin.wire.handle_canvas_get({"session_id": "doomed"})["doc"] is not None
+    out = plugin.wire.handle_canvas_forget({"session_id": "doomed"})
+    assert out["ok"] is True and out["forgot"] is True
+    assert plugin.wire.handle_canvas_get({"session_id": "doomed"})["doc"] is None
+    assert "doomed" not in plugin.wire.handle_canvas_list({})["keys"]
+
+
+def test_forget_drops_a_preview_record_keyed_by_that_session(plugin):
+    plugin.preview_index.reset_index_for_tests()
+    plugin.wire.handle_canvas_preview_set({
+        "source_session_id": "doomed", "preview_session_id": "p1", "verdict": "rendered"})
+    plugin.wire.handle_canvas_forget({"session_id": "doomed"})
+    assert plugin.wire.handle_canvas_preview_get({"source_session_id": "doomed"})["record"] is None
+
+
+def test_forget_drops_a_preview_record_pointing_at_that_session(plugin):
+    # The deleted session was the PREVIEW created for some other foreign session.
+    # Leaving the record behind would strand it: cached, but pointing at nothing.
+    plugin.preview_index.reset_index_for_tests()
+    plugin.wire.handle_canvas_preview_set({
+        "source_session_id": "foreign", "preview_session_id": "doomed", "verdict": "rendered"})
+    plugin.wire.handle_canvas_forget({"session_id": "doomed"})
+    assert plugin.wire.handle_canvas_preview_get({"source_session_id": "foreign"})["record"] is None
+
+
+def test_forget_is_a_no_op_for_an_unknown_session(plugin):
+    plugin.preview_index.reset_index_for_tests()
+    out = plugin.wire.handle_canvas_forget({"session_id": "never-existed"})
+    assert out["ok"] is True and out["forgot"] is False
+
+
+def test_forget_requires_a_session_id(plugin):
+    assert plugin.wire.handle_canvas_forget({})["ok"] is False

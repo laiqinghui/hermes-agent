@@ -48,6 +48,22 @@ class PreviewIndex:
         return stored
 
 
+    def drop(self, session_id: str) -> bool:
+        """Remove every record that mentions this session — the one keyed by it,
+        and any whose preview_session_id points at it (a stranded pointer is
+        worse than no record: it is cached, and points at nothing)."""
+        with self._lock:
+            data = self._read()
+            keep = {
+                k: v for k, v in data.items()
+                if k != session_id and v.get("preview_session_id") != session_id
+            }
+            if len(keep) == len(data):
+                return False
+            self._path.write_text(json.dumps(keep, ensure_ascii=False))
+            return True
+
+
 _index: PreviewIndex | None = None
 
 

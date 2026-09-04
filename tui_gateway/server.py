@@ -13976,4 +13976,14 @@ def _(rid, params: dict) -> dict:
         "parent": result.get("parent") or parent_key,
         "doc": copied.get("doc"),
     })
+@method("canvas.forget")
+def _(rid, params: dict) -> dict:
+    try:
+        from hermes_plugins.gis_canvas.wire import handle_canvas_forget
+    except Exception as exc:  # plugin absent/disabled — fail soft
+        return _err(rid, -32601, f"gis-canvas plugin unavailable: {exc}")
+    result = handle_canvas_forget(params or {})
+    if not result.get("ok"):
+        return _err(rid, -32000, "; ".join(result.get("errors", ["canvas.forget failed"])))
+    return _ok(rid, result)
 # <<< gis-canvas >>>

@@ -128,3 +128,21 @@ def handle_canvas_branch_doc(params: dict) -> dict:
     if doc is None:
         return {"ok": True, "doc": None}
     return {"ok": True, "doc": store.put(to_key, doc)}
+
+
+def handle_canvas_forget(params: dict) -> dict:
+    """Inbound canvas.forget: drop a deleted session's canvas doc and any
+    preview records that mention it.
+
+    Called ONLY after a permanent delete succeeds. Archiving must never reach
+    here — archiving is reversible, so the canvas has to survive it, or
+    restoring the session would silently come back without its picture.
+    """
+    session_id = str((params or {}).get("session_id") or "")
+    if not session_id:
+        return {"ok": False, "errors": ["session_id is required"]}
+    store = get_store()
+    had_doc = store.get(session_id) is not None
+    store.reset(session_id)
+    dropped = get_preview_index().drop(session_id)
+    return {"ok": True, "forgot": bool(had_doc or dropped)}
