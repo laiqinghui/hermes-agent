@@ -4,6 +4,9 @@
 export interface SessionRow {
   id: string
   source: string
+  /** Set when this session was forked from another (see canvas.branch). The API
+   * returns it; grouping in the picker resolves families from it. */
+  parent_session_id?: string | null
   title: string
   preview: string
   message_count: number
