@@ -45,3 +45,32 @@ export async function fetchTranscript(bffUrl: string, id: string): Promise<Messa
   const body = (await r.json()) as { messages?: MessageRow[] }
   return body.messages ?? []
 }
+
+/** Session management. Unlike listSessions these THROW on failure: they are
+ * deliberate user actions, and a silently swallowed delete would be a lie. */
+async function mutate(url: string, init: RequestInit, what: string): Promise<void> {
+  const r = await fetch(url, { credentials: 'include', ...init })
+  if (!r.ok) throw new Error(`Could not ${what} (${r.status})`)
+}
+
+export async function renameSession(bffUrl: string, id: string, title: string): Promise<void> {
+  await mutate(`${bffUrl}/sessions/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  }, 'rename this session')
+}
+
+export async function setArchived(bffUrl: string, id: string, archived: boolean): Promise<void> {
+  // Send ONLY `archived`: a title of null would clear the session's title.
+  await mutate(`${bffUrl}/sessions/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ archived }),
+  }, 'archive this session')
+}
+
+export async function deleteSession(bffUrl: string, id: string): Promise<void> {
+  await mutate(`${bffUrl}/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' },
+    'delete this session')
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { listSessions, fetchTranscript } from './sessions'
+import { listSessions, fetchTranscript, renameSession, setArchived, deleteSession } from './sessions'
 
 const BFF = 'http://localhost:9109'
 
@@ -42,5 +42,45 @@ describe('fetchTranscript', () => {
   it('throws on a failed fetch so the caller can surface it', async () => {
     stubFetch(502, { error: 'gateway error' })
     await expect(fetchTranscript(BFF, 'a')).rejects.toThrow(/transcript/i)
+  })
+})
+
+describe('session mutations', () => {
+  it('renames via PATCH with the title', async () => {
+    const spy = stubFetch(200, { ok: true })
+    await renameSession(BFF, 'abc', 'New name')
+    expect(spy).toHaveBeenCalledWith(`${BFF}/sessions/abc`, expect.objectContaining({
+      method: 'PATCH',
+      credentials: 'include',
+      body: JSON.stringify({ title: 'New name' }),
+    }))
+  })
+
+  it('archives via PATCH without sending a title', async () => {
+    const spy = stubFetch(200, { ok: true })
+    await setArchived(BFF, 'abc', true)
+    // A title of null/undefined would CLEAR the title server-side.
+    expect(spy.mock.calls[0][1].body).toBe(JSON.stringify({ archived: true }))
+  })
+
+  it('deletes via DELETE', async () => {
+    const spy = stubFetch(200, { ok: true })
+    await deleteSession(BFF, 'abc')
+    expect(spy).toHaveBeenCalledWith(`${BFF}/sessions/abc`, expect.objectContaining({
+      method: 'DELETE', credentials: 'include',
+    }))
+  })
+
+  it('throws on failure so the caller can surface it', async () => {
+    stubFetch(502, { error: 'gateway error' })
+    await expect(deleteSession(BFF, 'abc')).rejects.toThrow(/delete/i)
+    stubFetch(404, { error: 'session not found' })
+    await expect(renameSession(BFF, 'abc', 'x')).rejects.toThrow(/rename/i)
+  })
+
+  it('encodes the id in the path', async () => {
+    const spy = stubFetch(200, { ok: true })
+    await deleteSession(BFF, 'a/b c')
+    expect(spy.mock.calls[0][0]).toBe(`${BFF}/sessions/a%2Fb%20c`)
   })
 })
