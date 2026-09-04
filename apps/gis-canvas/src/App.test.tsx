@@ -3,6 +3,16 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import App from './App'
 import type { GatewayLike } from './lib/gateway'
 import { authMe } from './lib/auth'
+import { listSessions, fetchTranscript, setArchived, deleteSession } from './lib/sessions'
+
+vi.mock('./lib/sessions', async (orig) => ({
+  ...(await orig<typeof import('./lib/sessions')>()),
+  listSessions: vi.fn().mockResolvedValue([]),
+  fetchTranscript: vi.fn().mockResolvedValue([]),
+  renameSession: vi.fn().mockResolvedValue(undefined),
+  setArchived: vi.fn().mockResolvedValue(undefined),
+  deleteSession: vi.fn().mockResolvedValue(undefined),
+}))
 
 vi.mock('./lib/auth', async (orig) => ({
   ...(await orig<typeof import('./lib/auth')>()),
@@ -25,7 +35,7 @@ vi.mock('./lib/auth', async (orig) => ({
  * once armed, a later connect() opens synchronously instead of waiting on
  * a resolver that will never come.
  */
-function makeFakeClient() {
+function makeFakeClient(responses: Record<string, unknown> = {}) {
   let state: 'idle' | 'connecting' | 'open' = 'idle'
   const openResolvers: Array<() => void> = []
   let armed = false
@@ -53,6 +63,7 @@ function makeFakeClient() {
         sessionCreateCalls++
         return { session_id: 's1' } as unknown as T
       }
+      if (method in responses) return responses[method] as T
       return {} as T
     },
     on() {
@@ -184,4 +195,178 @@ test('keeps the cognition plane mounted across the gap between tools, until the 
   // the agent's final answer ends the turn → plane unmounts
   act(() => client.emit({ type: 'message.complete', payload: { text: 'Done.' } }))
   await waitFor(() => expect(screen.queryByTestId('cognition-plane')).toBeNull())
+})
+
+const msg = (role: string, content: string) =>
+  ({ role, content, tool_calls: null, tool_name: null, reasoning: null, reasoning_content: null, timestamp: 1 })
+
+test('reopening a session with a stored canvas replays its transcript into the dock', async () => {
+  vi.mocked(listSessions).mockResolvedValueOnce([
+    { id: 'own1', source: 'tui', title: 'Shadow fleet', preview: '', message_count: 7, started_at: 1, last_active: 2 },
+  ])
+  vi.mocked(fetchTranscript).mockResolvedValueOnce([
+    msg('user', 'find the AIS gaps'),
+    msg('assistant', 'four suspect vessels found'),
+  ])
+  const client = makeFakeClient({
+    'canvas.list': { keys: ['own1'] },
+    'canvas.get': { doc: { canvasVersion: 1, rev: 3, layout: { type: 'grid', cols: 12 }, components: [] } },
+  })
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x/api/ws?token=t" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  fireEvent.click(screen.getByTestId('open-sessions'))
+  fireEvent.click(await screen.findByTestId('session-row-own1'))
+
+  // The activity log only holds THIS connection's events, so a reopened
+  // session's history must be replayed or the dock is empty.
+  fireEvent.click(await screen.findByTestId('command-dock'))
+  expect(await screen.findByText('find the AIS gaps')).toBeInTheDocument()
+})
+
+test('a resumed own session keeps its composer (replay is not read-only)', async () => {
+  vi.mocked(listSessions).mockResolvedValueOnce([
+    { id: 'own1', source: 'tui', title: 'Shadow fleet', preview: '', message_count: 7, started_at: 1, last_active: 2 },
+  ])
+  vi.mocked(fetchTranscript).mockResolvedValueOnce([msg('user', 'find the AIS gaps')])
+  const client = makeFakeClient({
+    'canvas.list': { keys: ['own1'] },
+    'canvas.get': { doc: null },
+  })
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x/api/ws?token=t" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  fireEvent.click(screen.getByTestId('open-sessions'))
+  fireEvent.click(await screen.findByTestId('session-row-own1'))
+  fireEvent.click(await screen.findByTestId('command-dock'))
+
+  expect(await screen.findByTestId('agent-input')).toBeInTheDocument()
+  expect(screen.queryByTestId('continue-here')).toBeNull()
+})
+
+test('reopening a session addresses it by RUNTIME sid, not the stored key', async () => {
+  vi.mocked(listSessions).mockResolvedValueOnce([
+    { id: 'own1', source: 'tui', title: 'Shadow fleet', preview: '', message_count: 7, started_at: 1, last_active: 2 },
+  ])
+  vi.mocked(fetchTranscript).mockResolvedValueOnce([msg('user', 'earlier question')])
+  const client = makeFakeClient({
+    'canvas.list': { keys: ['own1'] },
+    'canvas.get': { doc: null },
+    // The gateway keys live sessions by runtime sid and returns both ids.
+    'session.resume': { session_id: 'rt-99', session_key: 'own1' },
+  })
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x/api/ws?token=t" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  fireEvent.click(screen.getByTestId('open-sessions'))
+  fireEvent.click(await screen.findByTestId('session-row-own1'))
+  fireEvent.click(await screen.findByTestId('command-dock'))
+
+  const input = await screen.findByTestId('agent-input')
+  fireEvent.change(input, { target: { value: 'follow-up' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+
+  await waitFor(() => {
+    const submit = client.requests.find(r => r.method === 'prompt.submit')
+    // The stored key here would be 4001 "session not found".
+    expect((submit?.params as { session_id: string } | undefined)?.session_id).toBe('rt-99')
+  })
+})
+
+test('branching forks into the new session, carrying its canvas and history', async () => {
+  vi.mocked(fetchTranscript).mockResolvedValue([
+    msg('user', 'the original question'),
+    msg('assistant', 'the original answer'),
+  ])
+  const client = makeFakeClient({
+    'canvas.branch': {
+      session_id: 'rt-branch',
+      stored_session_id: '20260903_090000_abcdef',
+      title: 'Shadow fleet (2)',
+      parent: 'parent-key',
+      doc: { canvasVersion: 1, rev: 1, layout: { type: 'grid', cols: 12 }, components: [] },
+    },
+  })
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x/api/ws?token=t" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  // Give the session a turn so there is something to branch.
+  fireEvent.click(await screen.findByTestId('command-dock'))
+  const input = await screen.findByTestId('agent-input')
+  fireEvent.change(input, { target: { value: 'first prompt' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+
+  fireEvent.click(await screen.findByTestId('branch-session'))
+
+  await waitFor(() => {
+    expect(client.requests.some(r => r.method === 'canvas.branch')).toBe(true)
+  })
+  // The fork's inherited conversation is visible, not an apparently empty session.
+  expect(await screen.findByText('the original question')).toBeInTheDocument()
+  // Later prompts address the BRANCH by its runtime sid.
+  fireEvent.change(input, { target: { value: 'second prompt' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+  await waitFor(() => {
+    const last = [...client.requests].reverse().find(r => r.method === 'prompt.submit')
+    expect((last?.params as { session_id: string }).session_id).toBe('rt-branch')
+  })
+})
+
+test('opening another session does not carry the previous session activity into its dock', async () => {
+  vi.mocked(listSessions).mockResolvedValue([
+    { id: 'own1', source: 'tui', title: 'Parent', preview: '', message_count: 42, started_at: 1, last_active: 2 },
+  ])
+  vi.mocked(fetchTranscript).mockResolvedValue([msg('user', 'the parent question')])
+  const client = makeFakeClient({
+    'canvas.list': { keys: ['own1'] },
+    'canvas.get': { doc: null },
+    'session.resume': { session_id: 'rt-own1', session_key: 'own1' },
+  })
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x/api/ws?token=t" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  // Work in the bootstrap session first — this lands in the connection-wide
+  // activity log, which is NOT scoped to a session.
+  fireEvent.click(await screen.findByTestId('command-dock'))
+  const input = await screen.findByTestId('agent-input')
+  fireEvent.change(input, { target: { value: 'a prompt from the OTHER session' } })
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(await screen.findByText('a prompt from the OTHER session')).toBeInTheDocument()
+
+  // Now switch to a different session.
+  fireEvent.click(screen.getByTestId('open-sessions'))
+  fireEvent.click(await screen.findByTestId('session-row-own1'))
+
+  // Its replayed history must show, and the previous session's turns must not.
+  expect(await screen.findByText('the parent question')).toBeInTheDocument()
+  expect(screen.queryByText('a prompt from the OTHER session')).toBeNull()
+})
+
+test('deleting a session forgets its canvas, but archiving does not', async () => {
+  vi.mocked(listSessions).mockResolvedValue([
+    { id: 'other', source: 'tui', title: 'Other', preview: '', message_count: 5, started_at: 1, last_active: 2 },
+  ])
+  const client = makeFakeClient({ 'canvas.list': { keys: [] }, 'canvas.forget': { ok: true } })
+  render(<App client={client as unknown as GatewayLike} wsUrl="ws://x/api/ws?token=t" />)
+  client.openNow()
+  await waitFor(() => expect(screen.getByTestId('agent-status')).toHaveAttribute('data-connected', 'true'))
+
+  fireEvent.click(screen.getByTestId('open-sessions'))
+  fireEvent.click(await screen.findByTestId('archive-other'))
+  await waitFor(() => expect(vi.mocked(setArchived)).toHaveBeenCalledWith('http://bff', 'other', true))
+  // Archiving is reversible — the canvas must survive it.
+  expect(client.requests.some(r => r.method === 'canvas.forget')).toBe(false)
+
+  fireEvent.click(await screen.findByTestId('delete-other'))
+  fireEvent.click(await screen.findByTestId('confirm-delete'))
+  await waitFor(() => expect(vi.mocked(deleteSession)).toHaveBeenCalledWith('http://bff', 'other'))
+  await waitFor(() => {
+    const forget = client.requests.find(r => r.method === 'canvas.forget')
+    expect((forget?.params as { session_id: string } | undefined)?.session_id).toBe('other')
+  })
 })

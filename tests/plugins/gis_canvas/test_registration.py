@@ -52,3 +52,15 @@ def test_tool_descriptions_teach_esri(plugin):
     d = plugin.tools_canvas.RENDER_VIEW_SCHEMA["description"]
     for kw in ("esri:map", "esri:legend", "esri:feature-table", "layers", "mock://", "FeatureServer"):
         assert kw in d
+
+
+def test_gateway_fenced_block_declares_the_canvas_rpcs():
+    server = PLUGIN_DIR.parents[1] / "tui_gateway" / "server.py"
+    text = server.read_text(encoding="utf-8")
+    start = text.index("# >>> gis-canvas")
+    end = text.index("# <<< gis-canvas >>>")
+    block = text[start:end]
+    for m in ("canvas.interaction", "canvas.data_fetch", "canvas.get", "canvas.list",
+              "canvas.preview_get", "canvas.preview_set", "canvas.judge", "canvas.branch",
+              "canvas.forget"):
+        assert f'@method("{m}")' in block, f"{m} missing from the fenced gis-canvas block"

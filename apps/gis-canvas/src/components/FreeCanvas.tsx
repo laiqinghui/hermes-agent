@@ -113,8 +113,12 @@ export function FreeCanvas({ doc }: { doc: CanvasDoc }) {
 
   const ordered = [...doc.components].sort((a, b) => rectOf(a.id).z - rectOf(b.id).z)
 
+  // `isolate` gives the canvas its own stacking context, so the z-indexes it
+  // uses internally (window order, snap guides, the minimized taskbar) are
+  // ranked only against each other. Without it they compete globally and
+  // paint over the dock, the agent panel and the session picker.
   return (
-    <div ref={boxRef} data-testid="free-canvas" className="relative w-full min-h-[80vh] overflow-hidden">
+    <div ref={boxRef} data-testid="free-canvas" className="relative isolate w-full min-h-[80vh] overflow-hidden">
       {ordered.map(node => (
         <Window
           key={node.id}

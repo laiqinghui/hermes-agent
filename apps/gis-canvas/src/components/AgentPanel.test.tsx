@@ -46,4 +46,25 @@ describe('AgentPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /^approve$/i }))
     expect(onRespond).toHaveBeenCalledWith('once')
   })
+
+  it('read-only mode replaces the composer with Continue here', () => {
+    const onContinue = vi.fn()
+    render(<AgentPanel open onClose={() => {}} turns={[]} errors={[]} connected
+      onSend={() => {}} readOnly onContinue={onContinue} />)
+    expect(screen.queryByTestId('agent-input')).toBeNull()
+    fireEvent.click(screen.getByTestId('continue-here'))
+    expect(onContinue).toHaveBeenCalled()
+  })
+
+  it('keeps the composer when not read-only', () => {
+    render(<AgentPanel open onClose={() => {}} turns={[]} errors={[]} connected onSend={() => {}} />)
+    expect(screen.getByTestId('agent-input')).toBeInTheDocument()
+    expect(screen.queryByTestId('continue-here')).toBeNull()
+  })
+
+  it('states plainly when the transcript recorded no reasoning', () => {
+    render(<AgentPanel open onClose={() => {}} turns={[]} errors={[]} connected
+      onSend={() => {}} readOnly onContinue={() => {}} noReasoningNote />)
+    expect(screen.getByTestId('no-reasoning-note')).toHaveTextContent(/did not record/i)
+  })
 })

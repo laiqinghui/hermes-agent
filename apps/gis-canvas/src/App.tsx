@@ -9,13 +9,14 @@ import { CanvasHeader } from './components/CanvasHeader'
 import { CognitionPlane } from './components/CognitionPlane'
 import { useTheme } from './lib/use-theme'
 import { useOverlayShortcut } from './lib/use-overlay-shortcut'
-import { deriveActivity, activityItemFromEvent, type ActivityItem } from './lib/activity'
+import { deriveActivity, activityItemFromEvent, type ActivityItem, type Turn } from './lib/activity'
 import { approvalFromEvent, type PendingApproval, type ApprovalChoice } from './lib/approval'
 import { createGatewayClient, resolveWsUrl, type GatewayLike } from './lib/gateway'
 import { useCanvasDoc } from './lib/use-canvas-doc'
 import { mergeOverrides, type Overrides } from './lib/merge'
 import { fetchDataPage } from './lib/data-plane'
 import type { CanvasActions } from './lib/handlers'
+import type { CanvasDoc } from './lib/types'
 import { resolveBffUrl, authMe, loginUrl, bindSessions, logout, type AuthState } from './lib/auth'
 import { SelectionProvider } from './components/SelectionContext'
 import { TimeExtentProvider } from './components/TimeExtentContext'
@@ -26,6 +27,13 @@ import { LayoutProvider } from './components/LayoutProvider'
 import { useLayoutStore } from './lib/use-layout-store'
 import { WindowStateProvider } from './components/WindowStateProvider'
 import { useWindowStateStore } from './lib/use-window-state'
+import { SessionPicker } from './components/SessionPicker'
+import {
+  listSessions, fetchTranscript, renameSession, setArchived, deleteSession, type SessionRow,
+} from './lib/sessions'
+import { transcriptToTurns } from './lib/transcript'
+import { packTranscript } from './lib/transcript-pack'
+import { buildJudgePrompt } from './lib/judge'
 
 // reasoning.delta carries the model's real between-step reasoning (gpt-5.5 et al.);
 // reasoning.available is only the final answer for such models. Both feed the star.
@@ -41,7 +49,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
     () => injectedClient ?? createGatewayClient(),
     [injectedClient]
   )
-  const { doc, errors } = useCanvasDoc(client)
+  const { doc, errors, setDoc } = useCanvasDoc(client)
   const [connected, setConnected] = useState(false)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const sessionIdRef = useRef<string | null>(null)
@@ -54,10 +62,38 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const layout = useLayoutStore()
   const windows = useWindowStateStore()
   const [overlayOpen, setOverlayOpen] = useOverlayShortcut()
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [sessionRows, setSessionRows] = useState<SessionRow[]>([])
+  const [canvasKeys, setCanvasKeys] = useState<Set<string>>(new Set())
+  const [pickerBusy, setPickerBusy] = useState(false)
+  // The loaded session's title when it did not come from the picker (a fresh
+  // session the agent later named). Kept OUT of `opened`: setting that would
+  // make canBranch true on a session with no turns, and Branch would fail 4008.
+  const [currentTitle, setCurrentTitle] = useState<string | undefined>()
+  // A session opened from the picker. `turns` is its REPLAYED history — the
+  // activity log only holds this browser connection's events, so without a
+  // replay any reopened session shows an empty dock. `readOnly` is a SEPARATE
+  // concern: only a session we did not resume (a foreign one) locks the composer.
+  const [opened, setOpened] = useState<{
+    row: SessionRow
+    turns: Turn[]
+    readOnly: boolean
+    previewSessionId?: string
+    verdict?: 'rendered' | 'declined'
+    reason?: string
+    judging?: boolean
+  } | null>(null)
   const [approval, setApproval] = useState<PendingApproval | null>(null)
 
   const log = (item: Omit<ActivityItem, 'id'>) =>
     setActivity(prev => [...prev.slice(-199), { id: nextId.current++, ...item }])
+
+  // The activity log is CONNECTION-scoped, not session-scoped: gateway events
+  // carry no session id, so every turn from every session visited in this tab
+  // lands in one list. Switching sessions must therefore clear it, or the new
+  // session's dock shows the previous session's turns appended to its replayed
+  // history — which reads as one session having inherited another's work.
+  const startSession = () => setActivity([])
 
   useEffect(() => { void authMe(bffUrl).then(setAuth).catch(() => setAuth({ authenticated: false })) }, [bffUrl])
 
@@ -151,6 +187,12 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   const derived = useMemo(() => deriveActivity(activity), [activity])
   const { messages, trace, isBusy } = derived
 
+  // NOTE: the verdict is decided SERVER-SIDE by canvas.judge, which runs the
+  // turn to completion and only then reads the answer and the authored doc.
+  // Do not reintroduce a client-side watcher here: the SPA sees one global
+  // event stream with no session correlation, so it cannot tell whose turn
+  // ended — the earlier attempt cached "declined" before the turn had begun.
+
   // Keep the cognition plane mounted for the whole ACTIVE turn — from first
   // activity until the agent's final answer — not just while a tool is running.
   // `isBusy` alone drops between every tool (the gap after one completes, before
@@ -185,14 +227,249 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
   // overrides AND restores every shaded or minimized window.
   const handleResetLayout = () => { layout.reset(); windows.reset() }
 
+  // Opening the picker refetches both lists: sessions from the BFF, stored
+  // canvas keys from the plugin, so Canvas/Transcript marks are never stale.
+  // Session management. Each action performs the request, then refetches so the
+  // rows and Canvas/Transcript badges match the server rather than an optimistic
+  // guess. Failures surface in the activity log — never silently.
+  const refreshSessions = () =>
+    Promise.all([
+      listSessions(bffUrl),
+      client.request<{ keys: string[] }>('canvas.list', {}).catch(() => ({ keys: [] as string[] })),
+    ]).then(([rowsNow, stored]) => {
+      setSessionRows(rowsNow)
+      setCanvasKeys(new Set(stored.keys ?? []))
+      // A fresh session has no title until the agent assigns one, and we are
+      // never told when that happens. Adopt it from the list we just fetched.
+      const key = canvasKeyRef.current
+      const mine = key ? rowsNow.find(s => s.id === key) : undefined
+      if (mine?.title) setCurrentTitle(mine.title)
+    })
+
+  const openPicker = () => {
+    setPickerOpen(true)
+    setPickerBusy(true)
+    void refreshSessions().finally(() => setPickerBusy(false))
+  }
+
+  const handleRename = (id: string, title: string) => {
+    void (async () => {
+      try {
+        await renameSession(bffUrl, id, title)
+        // Update the loaded session's title now, not on the next picker open.
+        setOpened(o => (o && o.row.id === id ? { ...o, row: { ...o.row, title } } : o))
+        if (canvasKeyRef.current === id) setCurrentTitle(title)
+        await refreshSessions()
+      } catch (err) {
+        log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      }
+    })()
+  }
+
+  const handleArchive = (id: string) => {
+    void (async () => {
+      try {
+        // NOT canvas.forget: archiving is reversible, so the canvas must survive.
+        await setArchived(bffUrl, id, true)
+        await refreshSessions()
+      } catch (err) {
+        log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      }
+    })()
+  }
+
+  const handleDelete = (id: string) => {
+    void (async () => {
+      try {
+        await deleteSession(bffUrl, id)
+        // Only after the delete SUCCEEDS — a failed delete forgets nothing.
+        await client.request('canvas.forget', { session_id: id }).catch(() => {})
+        await refreshSessions()
+      } catch (err) {
+        log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      }
+    })()
+  }
+
+  // Own session: fetch the stored doc, resume so it can be continued (resume
+  // MUTATES — correct for our own session, forbidden for foreign ones), bind.
+  const openOwnSession = (row: SessionRow) => {
+    setPickerOpen(false)
+    startSession()
+    void (async () => {
+      try {
+        const resumed = await client.request<{ session_id: string; session_key?: string }>(
+          'session.resume', { session_id: row.id })
+        const got = await client.request<{ doc: CanvasDoc | null }>('canvas.get', { session_id: row.id })
+        // Two DIFFERENT ids: the gateway keys live sessions by runtime sid, while
+        // the canvas store and sessions.id use the stored key. Mixing them makes
+        // every later prompt fail with 4001 "session not found".
+        sessionIdRef.current = resumed.session_id ?? row.id
+        canvasKeyRef.current = resumed.session_key ?? row.id
+        await bindSessions(bffUrl, [...new Set([row.id, resumed.session_id].filter(Boolean))] as string[])
+        if (got.doc) setDoc(got.doc)
+        // Replay the history too — resuming does not backfill this connection's
+        // activity log, so the dock would otherwise be empty.
+        const rows = await fetchTranscript(bffUrl, row.id).catch(() => [])
+        setOpened({ row, turns: transcriptToTurns(rows), readOnly: false })
+        log({ kind: 'system', text: `opened session ${row.id}` })
+      } catch (err) {
+        log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      }
+    })()
+  }
+
+  // Fork the loaded session. session.branch copies the whole conversation and
+  // leaves the parent alone; canvas.branch additionally carries the canvas
+  // across and hands back the STORED key the canvas store needs.
+  const branchSession = () => {
+    const sid = sessionIdRef.current
+    if (!sid) return
+    startSession()
+    void (async () => {
+      try {
+        const b = await client.request<{
+          session_id: string
+          stored_session_id: string
+          title: string
+          parent: string
+          doc: CanvasDoc | null
+        }>('canvas.branch', { session_id: sid })
+        sessionIdRef.current = b.session_id
+        canvasKeyRef.current = b.stored_session_id
+        await bindSessions(bffUrl, [b.stored_session_id, b.session_id])
+        if (b.doc) setDoc(b.doc)
+        // A branch has no picker row; synthesise one so the single `opened`
+        // replay path shows the inherited conversation.
+        const rows = await fetchTranscript(bffUrl, b.stored_session_id).catch(() => [])
+        const turns = transcriptToTurns(rows)
+        setOpened({
+          row: {
+            id: b.stored_session_id,
+            source: 'dashboard',
+            title: b.title,
+            preview: '',
+            message_count: turns.length,
+            started_at: Date.now() / 1000,
+            last_active: Date.now() / 1000,
+          },
+          turns,
+          readOnly: false,
+        })
+        log({ kind: 'system', text: `branched into ${b.title || b.stored_session_id}` })
+      } catch (err) {
+        log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      }
+    })()
+  }
+
+  // Foreign session: READ-ONLY on the original. Never resume, never branch.
+  // The judgement runs in a separate preview session, once per foreign session
+  // (cached in the plugin's preview index), and Continue here promotes it.
+  const openForeignSession = (row: SessionRow) => {
+    setPickerOpen(false)
+    startSession()
+    void (async () => {
+      try {
+        const rows = await fetchTranscript(bffUrl, row.id)
+        setOpened({ row, turns: transcriptToTurns(rows), readOnly: true })
+        setOverlayOpen(true)
+
+        const cached = await client
+          .request<{ record: { preview_session_id: string; verdict: 'rendered' | 'declined'; reason: string } | null }>(
+            'canvas.preview_get', { source_session_id: row.id })
+          .catch(() => ({ record: null }))
+
+        if (cached.record) {
+          const got = await client
+            .request<{ doc: CanvasDoc | null }>('canvas.get', { session_id: cached.record.preview_session_id })
+            .catch(() => ({ doc: null }))
+          if (got.doc) setDoc(got.doc)
+          setOpened(f => f && { ...f, previewSessionId: cached.record!.preview_session_id,
+            verdict: cached.record!.verdict, reason: cached.record!.reason })
+          return
+        }
+
+        // Never judged: one server-side call that creates the preview session,
+        // runs the turn to completion, decides the verdict from what the agent
+        // said AND whether a doc landed, and caches it. Returns the STORED
+        // session key — the id the canvas store and session.resume both use.
+        setOpened(f => f && { ...f, judging: true })
+        const judged = await client.request<{
+          preview_session_id: string
+          record: { verdict: 'rendered' | 'declined'; reason: string }
+          doc: CanvasDoc | null
+        }>('canvas.judge', {
+          source_session_id: row.id,
+          text: buildJudgePrompt(row, packTranscript(rows)),
+        })
+        await bindSessions(bffUrl, [judged.preview_session_id])
+        if (judged.doc) setDoc(judged.doc)
+        setOpened(f => f && { ...f, judging: false,
+          previewSessionId: judged.preview_session_id,
+          verdict: judged.record.verdict, reason: judged.record.reason })
+      } catch (err) {
+        setOpened(f => f && { ...f, judging: false })
+        log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      }
+    })()
+  }
+
+  // Promote the preview session to a live one the user can type into. The
+  // transcript and rendered canvas are already in it, which is the inheritance
+  // "Continue here" promises. The ORIGINAL foreign session stays untouched.
+  const continueHere = async () => {
+    if (!opened) return
+    const current = opened
+    try {
+      let pid = current.previewSessionId
+      try {
+        if (!pid) throw new Error('no preview session')
+        await client.request('session.resume', { session_id: pid })
+      } catch {
+        // The cached preview session is gone (pruned, deleted). Rebuild it the
+        // same way it was made in the first place — one server-side judge run,
+        // which re-seeds the transcript and re-caches the verdict.
+        const rows = await fetchTranscript(bffUrl, current.row.id).catch(() => [])
+        const judged = await client.request<{ preview_session_id: string; doc: CanvasDoc | null }>(
+          'canvas.judge', {
+            source_session_id: current.row.id,
+            text: buildJudgePrompt(current.row, packTranscript(rows)),
+          })
+        pid = judged.preview_session_id
+        if (judged.doc) setDoc(judged.doc)
+      }
+      sessionIdRef.current = pid!
+      canvasKeyRef.current = pid!
+      await bindSessions(bffUrl, [pid!])
+      setOpened(null) // leaves read-only mode; the composer returns
+      log({ kind: 'system', text: `continuing from ${current.row.id} in session ${pid}` })
+    } catch (err) {
+      log({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
   return (
     <div className="flex h-screen flex-col bg-canvas font-sans text-primary">
       <TopBar theme={theme} onToggleTheme={toggleTheme} connected={connected} isBusy={isBusy}
         onLogout={handleLogout} onResetLayout={handleResetLayout}
         canReset={!layout.isEmpty || !windows.isEmpty}
-        onFocusMap={windows.toggleFocus} canFocus={windows.canFocus} isFocused={windows.isFocused} />
+        onFocusMap={windows.toggleFocus} canFocus={windows.canFocus} isFocused={windows.isFocused}
+        onOpenSessions={openPicker}
+        onBranch={branchSession}
+        canBranch={!isBusy && (opened !== null || derived.turns.length > 0)} />
       <main className="relative min-h-0 flex-1 overflow-auto gc-canvas-grid-bg p-4">
-        <CanvasHeader rev={mergedDoc?.rev} isBusy={isBusy} />
+        <CanvasHeader rev={mergedDoc?.rev} isBusy={isBusy} title={opened?.row.title || currentTitle} />
+        {opened?.judging && (
+          <p data-testid="verdict-judging" className="px-1 pb-2 font-sans text-[12.5px] text-tertiary">
+            Reading {opened.row.source} session — deciding whether it is worth rendering…
+          </p>
+        )}
+        {opened?.verdict === 'declined' && (
+          <p data-testid="verdict-declined" className="px-1 pb-2 font-sans text-[12.5px] text-tertiary">
+            No canvas for this session — {opened.reason || 'the agent judged it not worth rendering'}.
+          </p>
+        )}
         {mergedDoc ? (
           <SelectionProvider nodesBySource={nodesBySource} onMirror={mirrorSelection}>
             <TimeExtentProvider>
@@ -211,7 +488,7 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
           </SelectionProvider>
         ) : !isBusy ? (
           <div className="flex h-full items-center justify-center text-sm text-tertiary">
-            No canvas yet — ask the agent to compose the situation picture from your data.
+            No canvas yet — start a new session or peek into any Agent Session to visualize their thoughts.
           </div>
         ) : null}
         <CognitionPlane turn={turnActive ? lastTurn : undefined} />
@@ -225,13 +502,28 @@ export default function App({ client: injectedClient, wsUrl: injectedUrl }: AppP
       <AgentPanel
         open={overlayOpen}
         onClose={() => setOverlayOpen(false)}
-        turns={derived.turns}
+        turns={opened ? [...opened.turns, ...derived.turns] : derived.turns}
+        readOnly={!!opened?.readOnly}
+        noReasoningNote={!!opened && opened.turns.length > 0 && opened.turns.every(t => !t.reasoning.length)}
+        onContinue={() => { void continueHere() }}
         timeline={derived.timeline}
         errors={errors}
         connected={connected}
         onSend={send}
         approval={approval}
         onRespond={respondApproval}
+      />
+      <SessionPicker
+        open={pickerOpen}
+        rows={sessionRows}
+        canvasKeys={canvasKeys}
+        busy={pickerBusy}
+        onOpenSession={(row, hasCanvas) => (hasCanvas ? openOwnSession(row) : openForeignSession(row))}
+        onClose={() => setPickerOpen(false)}
+        currentId={canvasKeyRef.current ?? undefined}
+        onRename={handleRename}
+        onArchive={handleArchive}
+        onDelete={handleDelete}
       />
     </div>
   )

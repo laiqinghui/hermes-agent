@@ -10,7 +10,10 @@ export function TopBar({
   canReset,
   onFocusMap,
   canFocus,
-  isFocused
+  isFocused,
+  onOpenSessions,
+  onBranch,
+  canBranch
 }: {
   theme: ThemeMode
   onToggleTheme: () => void
@@ -22,6 +25,9 @@ export function TopBar({
   onFocusMap: () => void
   canFocus: boolean
   isFocused: boolean
+  onOpenSessions: () => void
+  onBranch: () => void
+  canBranch: boolean
 }) {
   const statusLabel = isBusy ? 'COMPOSING' : connected ? 'AGENT · LIVE' : 'CONNECTING…'
   const statusColor = isBusy ? 'text-accent' : connected ? 'text-positive' : 'text-tertiary'
@@ -41,6 +47,24 @@ export function TopBar({
       </div>
 
       <div className="flex items-center gap-2.5">
+        {canBranch && (
+          <button
+            data-testid="branch-session"
+            onClick={onBranch}
+            title="Fork this session into a new one, leaving the original untouched"
+            className="rounded-gc-sm border border-hairline bg-surface px-2.5 py-1.5 font-sans text-[11.5px] text-secondary hover:text-primary"
+          >
+            ⑂ Branch
+          </button>
+        )}
+        <button
+          data-testid="open-sessions"
+          onClick={onOpenSessions}
+          title="Browse Hermes sessions"
+          className="rounded-gc-sm border border-hairline bg-surface px-2.5 py-1.5 font-sans text-[11.5px] text-secondary hover:text-primary"
+        >
+          ▤ Sessions
+        </button>
         {canFocus && (
           <button
             data-testid="focus-map"

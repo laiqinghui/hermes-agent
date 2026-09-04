@@ -178,3 +178,13 @@ describe('FreeCanvas minimize', () => {
     expect(screen.queryByTestId('window-taskbar')).toBeNull()
   })
 })
+
+describe('FreeCanvas layering', () => {
+  it('isolates its internal z-indexes from the app overlays', () => {
+    render(<Harness doc={doc} />)
+    // The canvas stacks windows, snap guides and the minimized-window taskbar
+    // against each other. Without a stacking context those z-indexes compete
+    // GLOBALLY and paint over the dock, the agent panel and the session picker.
+    expect(screen.getByTestId('free-canvas').className).toContain('isolate')
+  })
+})

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { renderMarkdown } from '../lib/markdown'
 import type { Turn } from '../lib/activity'
 import { TraceStep } from './TraceStep'
 import { deriveHeading } from '../lib/derive-heading'
@@ -22,7 +23,7 @@ function ThinkingRow({ text }: { text: string }) {
         <span aria-hidden className="text-tertiary">{open ? '▾' : '▸'}</span>
       </button>
       {open ? (
-        <div className="whitespace-pre-wrap px-3 pb-2.5 font-sans text-[12px] leading-relaxed text-secondary">{text}</div>
+        <div className="px-3 pb-2.5 font-sans text-[12px] leading-relaxed text-secondary">{renderMarkdown(text)}</div>
       ) : null}
     </div>
   )
@@ -61,7 +62,7 @@ export function TurnView({ turn }: { turn: Turn }) {
             H
           </span>
           <div className="max-w-[86%] rounded-[3px_12px_12px_12px] border border-hairline bg-surface px-3 py-2 font-sans text-[12.5px] leading-relaxed text-primary">
-            {a}
+            {renderMarkdown(a)}
           </div>
         </div>
       ))}

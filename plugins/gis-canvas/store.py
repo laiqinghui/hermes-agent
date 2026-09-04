@@ -44,6 +44,17 @@ class CanvasStore:
         except (OSError, json.JSONDecodeError):
             return None
 
+    def list(self) -> list[str]:
+        """Stored canvas keys, sorted. Skips ``_``-prefixed files so index
+        sidecars living in this same directory (e.g. the preview index) are
+        never mistaken for canvases."""
+        try:
+            return sorted(
+                p.stem for p in self._dir.glob("*.json") if not p.name.startswith("_")
+            )
+        except OSError:
+            return []
+
     def put(self, key: str, doc: dict) -> dict:
         with self._lock:
             current = self.get(key)

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from .broker import get_broker
 from .interaction import apply_interaction
+from .judge import verdict_from
+from .preview_index import get_preview_index
 from .tools_canvas import get_store
 
 
@@ -27,6 +29,21 @@ def handle_canvas_interaction(params: dict) -> dict:
     return {"ok": True, "rev": stored.get("rev")}
 
 
+def handle_canvas_get(params: dict) -> dict:
+    """Inbound canvas.get: return the stored doc for a session, or None. Purely
+    read-only — the session browser opens past canvases through this."""
+    session_id = str((params or {}).get("session_id") or "")
+    if not session_id:
+        return {"ok": False, "errors": ["session_id is required"]}
+    return {"ok": True, "doc": get_store().get(session_id)}
+
+
+def handle_canvas_list(params: dict) -> dict:
+    """Inbound canvas.list: the stored canvas keys, so the session picker can
+    mark which sessions already have a canvas."""
+    return {"ok": True, "keys": get_store().list()}
+
+
 def handle_canvas_data_fetch(params: dict) -> dict:
     """Inbound canvas.data_fetch: serve a page of rows from the broker cache by
     handle. Bulk rows travel on this data plane only — never the agent context."""
@@ -41,3 +58,91 @@ def handle_canvas_data_fetch(params: dict) -> dict:
         filter=p.get("filter"),
         fields=p.get("fields"),
     )
+
+
+def handle_canvas_preview_get(params: dict) -> dict:
+    """Inbound canvas.preview_get: the cached preview record for a foreign
+    session, or None when it has never been judged."""
+    source = str((params or {}).get("source_session_id") or "")
+    if not source:
+        return {"ok": False, "errors": ["source_session_id is required"]}
+    return {"ok": True, "record": get_preview_index().get(source)}
+
+
+def handle_canvas_preview_set(params: dict) -> dict:
+    """Inbound canvas.preview_set: remember the preview session and the render
+    verdict for a foreign session, so it is judged once and never again."""
+    p = params or {}
+    source = str(p.get("source_session_id") or "")
+    preview = str(p.get("preview_session_id") or "")
+    verdict = str(p.get("verdict") or "")
+    if not source or not preview:
+        return {"ok": False, "errors": ["source_session_id and preview_session_id are required"]}
+    if verdict not in ("rendered", "declined"):
+        return {"ok": False, "errors": ["verdict must be 'rendered' or 'declined'"]}
+    record = get_preview_index().put(source, {
+        "preview_session_id": preview,
+        "verdict": verdict,
+        "reason": str(p.get("reason") or ""),
+    })
+    return {"ok": True, "record": record}
+
+
+def handle_canvas_judge_finish(params: dict) -> dict:
+    """Finalise a judging turn: derive the verdict from what the agent said AND
+    whether a canvas actually landed in the store, then cache it so this foreign
+    session is never judged again. Called by the gateway's canvas.judge once the
+    turn has genuinely finished — the client cannot observe turn boundaries."""
+    p = params or {}
+    source = str(p.get("source_session_id") or "")
+    preview = str(p.get("preview_session_id") or "")
+    if not source or not preview:
+        return {"ok": False, "errors": ["source_session_id and preview_session_id are required"]}
+    doc = get_store().get(preview)
+    verdict, reason = verdict_from(str(p.get("answer") or ""), doc)
+    record = get_preview_index().put(source, {
+        "preview_session_id": preview,
+        "verdict": verdict,
+        "reason": reason,
+    })
+    return {"ok": True, "record": record, "doc": doc}
+
+
+def handle_canvas_branch_doc(params: dict) -> dict:
+    """Inbound (from canvas.branch): copy a canvas doc onto a branch's key.
+
+    The parent's doc is READ ONLY — the branch gets its own file, stamped as
+    its own rev 1 by CanvasStore.put. That separation is what lets a branch
+    diverge without ever altering the session it came from.
+
+    A parent with no canvas is normal (a conversation-only session), not an
+    error: nothing is written and the caller gets None.
+    """
+    p = params or {}
+    from_key = str(p.get("from_key") or "")
+    to_key = str(p.get("to_key") or "")
+    if not from_key or not to_key:
+        return {"ok": False, "errors": ["from_key and to_key are required"]}
+    store = get_store()
+    doc = store.get(from_key)
+    if doc is None:
+        return {"ok": True, "doc": None}
+    return {"ok": True, "doc": store.put(to_key, doc)}
+
+
+def handle_canvas_forget(params: dict) -> dict:
+    """Inbound canvas.forget: drop a deleted session's canvas doc and any
+    preview records that mention it.
+
+    Called ONLY after a permanent delete succeeds. Archiving must never reach
+    here — archiving is reversible, so the canvas has to survive it, or
+    restoring the session would silently come back without its picture.
+    """
+    session_id = str((params or {}).get("session_id") or "")
+    if not session_id:
+        return {"ok": False, "errors": ["session_id is required"]}
+    store = get_store()
+    had_doc = store.get(session_id) is not None
+    store.reset(session_id)
+    dropped = get_preview_index().drop(session_id)
+    return {"ok": True, "forgot": bool(had_doc or dropped)}

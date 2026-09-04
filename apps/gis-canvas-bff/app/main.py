@@ -30,7 +30,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.spa_origin],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    # PATCH/DELETE are needed for session management (rename, archive, delete).
+    # They are not "simple" requests, so the browser preflights them; omitting a
+    # method here makes the preflight 400 and the real request is never sent —
+    # a silent no-op that looks like the action failing for no reason.
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -245,3 +249,11 @@ async def a2a_message(request: Request):
 
     return StreamingResponse(_stream(), status_code=upstream.status_code,
                              media_type="application/x-ndjson")
+
+
+# ── Read-only session browsing ────────────────────────────────────────────────
+import sys as _sys  # noqa: E402
+
+from .sessions_proxy import _init as _init_sessions_proxy  # noqa: E402
+
+app.include_router(_init_sessions_proxy(_sys.modules[__name__]))

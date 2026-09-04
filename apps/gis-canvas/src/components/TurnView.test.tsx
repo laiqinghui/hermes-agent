@@ -43,3 +43,26 @@ describe('TurnView', () => {
     expect(html.indexOf('Thinking')).toBeLessThan(html.indexOf('Data Query'))
   })
 })
+
+test('renders markdown in an agent answer instead of literal asterisks', () => {
+  const turn: Turn = {
+    id: 0, prompt: 'q', reasoning: [], trace: [], items: [],
+    answers: ['Found **four** suspect vessels.'], isBusy: false,
+  }
+  const { container } = render(<TurnView turn={turn} />)
+  expect(container.querySelector('strong')).toHaveTextContent('four')
+  expect(container.textContent).not.toContain('**')
+})
+
+test('renders markdown in the expanded reasoning body', () => {
+  const turn: Turn = {
+    id: 0, prompt: 'q',
+    reasoning: [{ id: 1, text: '**Plan**\n\nFirst discover the dataset.' }],
+    trace: [],
+    items: [{ kind: 'reasoning', id: 1, text: '**Plan**\n\nFirst discover the dataset.' }],
+    answers: [], isBusy: false,
+  }
+  const { container } = render(<TurnView turn={turn} />)
+  fireEvent.click(screen.getByRole('button', { name: /thinking/i }))
+  expect(container.querySelector('strong')).toHaveTextContent('Plan')
+})

@@ -17,7 +17,10 @@ export function AgentPanel({
   connected,
   onSend,
   approval = null,
-  onRespond
+  onRespond,
+  readOnly = false,
+  onContinue,
+  noReasoningNote = false
 }: {
   open: boolean
   onClose: () => void
@@ -28,6 +31,12 @@ export function AgentPanel({
   onSend: (text: string) => void
   approval?: PendingApproval | null
   onRespond?: (choice: ApprovalChoice) => void
+  /** Replaying a session from another surface: nothing may be sent into it. */
+  readOnly?: boolean
+  onContinue?: () => void
+  /** The replayed transcript yielded turns but no reasoning at all — say so
+   * rather than showing a silently empty thinking section. */
+  noReasoningNote?: boolean
 }) {
   const [text, setText] = useState('')
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -110,6 +119,27 @@ export function AgentPanel({
           </div>
         ) : null}
 
+        {noReasoningNote && (
+          <p data-testid="no-reasoning-note" className="shrink-0 px-4 py-2 font-sans text-[11.5px] text-tertiary">
+            This session's provider did not record reasoning — tool calls and answers only.
+          </p>
+        )}
+
+        {readOnly ? (
+          <div className="flex shrink-0 items-center gap-2 border-t border-hairline px-4 py-3">
+            <span className="min-w-0 flex-1 font-sans text-[11.5px] text-tertiary">
+              Read-only — this session belongs to another surface.
+            </span>
+            <button
+              data-testid="continue-here"
+              onClick={onContinue}
+              className="shrink-0 rounded-gc-sm border border-accent/50 bg-surface px-2.5 py-1.5 font-sans text-[11.5px] text-accent hover:text-primary"
+            >
+              Continue here
+            </button>
+          </div>
+        ) : (
+          <>
         <div className="flex flex-wrap gap-1.5 px-4 pb-2.5">
           {SUGGESTED_PROMPTS.map(p => (
             <button
@@ -125,6 +155,7 @@ export function AgentPanel({
         <div className="flex shrink-0 gap-2 border-t border-hairline px-4 py-3">
           <input
             ref={inputRef}
+            data-testid="agent-input"
             className="min-w-0 flex-1 rounded-gc-sm border border-hairline bg-surface px-2.5 py-2 font-sans text-[12.5px] text-primary outline-none focus:ring-2 focus:ring-accent"
             value={text}
             placeholder="Ask the agent to compose the situation picture…"
@@ -139,6 +170,8 @@ export function AgentPanel({
             Send
           </button>
         </div>
+          </>
+        )}
       </div>
     </>
   )

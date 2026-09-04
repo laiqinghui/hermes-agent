@@ -8588,3 +8588,53 @@ def test_get_usage_clamps_post_compression_sentinel():
     usage = server._get_usage(agent)
     assert "context_used" not in usage
     assert "context_percent" not in usage
+
+
+def test_branch_message_fields_carries_tool_calls_and_reasoning():
+    """A branch must copy the FULL message, not just role+content.
+
+    session.branch used to pass only role and content to append_message, so
+    every branch silently flattened its transcript: tool calls, tool results
+    and reasoning were dropped, and each successive branch lost more. The
+    canvas replay made this visible (only the prompt and the final answer
+    survived), but it degraded TUI /branch just as badly.
+    """
+    msg = {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{"id": "call_1", "function": {"name": "data_query", "arguments": "{}"}}],
+        "reasoning": "thinking about the gaps",
+        "timestamp": 1788346326.965,
+    }
+    fields = server._branch_message_fields(msg)
+    assert fields["role"] == "assistant"
+    assert fields["tool_calls"] == msg["tool_calls"]
+    assert fields["reasoning"] == "thinking about the gaps"
+    # Timestamps too, or a branch's derived step durations collapse to zero.
+    assert fields["timestamp"] == 1788346326.965
+
+
+def test_branch_message_fields_maps_a_tool_row():
+    # History entries are OpenAI-shaped: a tool row names its tool in `name`,
+    # while the DB column is `tool_name`.
+    fields = server._branch_message_fields(
+        {"role": "tool", "name": "skill_view", "tool_call_id": "call_1", "content": "ok"}
+    )
+    assert fields["tool_name"] == "skill_view"
+    assert fields["tool_call_id"] == "call_1"
+    assert fields["content"] == "ok"
+
+
+def test_branch_message_fields_omits_absent_keys_and_defaults_role():
+    fields = server._branch_message_fields({"content": "hi"})
+    assert fields["role"] == "user"
+    assert fields["content"] == "hi"
+    # Absent metadata must not be passed as None — append_message has its own
+    # defaults and an explicit None would overwrite them.
+    for key in ("tool_calls", "tool_name", "tool_call_id", "reasoning", "timestamp"):
+        assert key not in fields
+
+
+def test_branch_message_fields_does_not_treat_an_assistant_name_as_a_tool():
+    fields = server._branch_message_fields({"role": "assistant", "name": "Hermes", "content": "hi"})
+    assert "tool_name" not in fields

@@ -177,6 +177,8 @@ _DETAIL_MODES = frozenset({"hidden", "collapsed", "expanded"})
 # response writes are safe.
 _LONG_HANDLERS = frozenset(
     {
+        # gis-canvas: runs a whole agent turn to completion (see canvas.judge).
+        "canvas.judge",
         "billing.step_up",
         "browser.manage",
         "cli.exec",
@@ -7746,6 +7748,38 @@ def _(rid, params: dict) -> dict:
         return _ok(rid, {"closed": _close_session_by_id(sid, end_reason="tui_close")})
 
 
+# Metadata a branch must carry so its transcript is a faithful copy rather than
+# a flattened one. Passing only role+content dropped tool calls, tool results and
+# reasoning, so a branch replayed as just "prompt -> final answer" and each
+# successive branch lost more. Absent keys are OMITTED, never passed as None:
+# append_message has its own defaults and an explicit None would overwrite them.
+_BRANCH_COPIED_FIELDS = (
+    "tool_calls",
+    "tool_call_id",
+    "reasoning",
+    "reasoning_content",
+    "reasoning_details",
+    "token_count",
+    "finish_reason",
+    "timestamp",
+)
+
+
+def _branch_message_fields(msg: dict) -> dict:
+    """append_message kwargs for one history entry being copied into a branch."""
+    fields = {"role": msg.get("role", "user"), "content": msg.get("content")}
+    # History entries are OpenAI-shaped: a tool row names its tool in `name`,
+    # while the DB column is `tool_name`. Only a tool row's `name` means a tool.
+    tool_name = msg.get("tool_name") or (msg.get("name") if msg.get("role") == "tool" else None)
+    if tool_name:
+        fields["tool_name"] = tool_name
+    for key in _BRANCH_COPIED_FIELDS:
+        value = msg.get(key)
+        if value is not None:
+            fields[key] = value
+    return fields
+
+
 @method("session.branch")
 def _(rid, params: dict) -> dict:
     session, err = _sess(params, rid)
@@ -7789,11 +7823,7 @@ def _(rid, params: dict) -> dict:
             cwd=_session_cwd(session),
         )
         for msg in history:
-            db.append_message(
-                session_id=new_key,
-                role=msg.get("role", "user"),
-                content=msg.get("content"),
-            )
+            db.append_message(session_id=new_key, **_branch_message_fields(msg))
         db.set_session_title(new_key, title)
     except Exception as e:
         if lease is not None:
@@ -13799,5 +13829,161 @@ def _(rid, params: dict) -> dict:
     result = handle_canvas_data_fetch(params or {})
     if not result.get("ok"):
         return _err(rid, -32000, "; ".join(result.get("errors", ["canvas.data_fetch failed"])))
+    return _ok(rid, result)
+@method("canvas.get")
+def _(rid, params: dict) -> dict:
+    try:
+        from hermes_plugins.gis_canvas.wire import handle_canvas_get
+    except Exception as exc:  # plugin absent/disabled — fail soft
+        return _err(rid, -32601, f"gis-canvas plugin unavailable: {exc}")
+    result = handle_canvas_get(params or {})
+    if not result.get("ok"):
+        return _err(rid, -32000, "; ".join(result.get("errors", ["canvas.get failed"])))
+    return _ok(rid, result)
+@method("canvas.list")
+def _(rid, params: dict) -> dict:
+    try:
+        from hermes_plugins.gis_canvas.wire import handle_canvas_list
+    except Exception as exc:  # plugin absent/disabled — fail soft
+        return _err(rid, -32601, f"gis-canvas plugin unavailable: {exc}")
+    result = handle_canvas_list(params or {})
+    if not result.get("ok"):
+        return _err(rid, -32000, "; ".join(result.get("errors", ["canvas.list failed"])))
+    return _ok(rid, result)
+@method("canvas.preview_get")
+def _(rid, params: dict) -> dict:
+    try:
+        from hermes_plugins.gis_canvas.wire import handle_canvas_preview_get
+    except Exception as exc:  # plugin absent/disabled — fail soft
+        return _err(rid, -32601, f"gis-canvas plugin unavailable: {exc}")
+    result = handle_canvas_preview_get(params or {})
+    if not result.get("ok"):
+        return _err(rid, -32000, "; ".join(result.get("errors", ["canvas.preview_get failed"])))
+    return _ok(rid, result)
+@method("canvas.preview_set")
+def _(rid, params: dict) -> dict:
+    try:
+        from hermes_plugins.gis_canvas.wire import handle_canvas_preview_set
+    except Exception as exc:  # plugin absent/disabled — fail soft
+        return _err(rid, -32601, f"gis-canvas plugin unavailable: {exc}")
+    result = handle_canvas_preview_set(params or {})
+    if not result.get("ok"):
+        return _err(rid, -32000, "; ".join(result.get("errors", ["canvas.preview_set failed"])))
+    return _ok(rid, result)
+# canvas.judge runs the "is this session worth a canvas?" turn to COMPLETION and
+# returns the verdict. It lives here rather than in the client because only the
+# gateway can observe turn boundaries: the SPA sees one global event stream with
+# no session correlation, so it cannot tell whose turn just ended (an earlier
+# client-side attempt cached a wrong "declined" before the turn had even begun).
+# Registered in _LONG_HANDLERS — it blocks for as long as the turn takes.
+_CANVAS_JUDGE_TIMEOUT_S = 900
+
+
+@method("canvas.judge")
+def _(rid, params: dict) -> dict:
+    try:
+        from hermes_plugins.gis_canvas.wire import handle_canvas_judge_finish
+    except Exception as exc:  # plugin absent/disabled — fail soft
+        return _err(rid, -32601, f"gis-canvas plugin unavailable: {exc}")
+    p = params or {}
+    source = str(p.get("source_session_id") or "")
+    text = str(p.get("text") or "")
+    if not source or not text:
+        return _err(rid, -32602, "source_session_id and text are required")
+
+    created = _methods["session.create"](rid, {"cols": int(p.get("cols", 96))})
+    result = (created or {}).get("result") or {}
+    sid = result.get("session_id")
+    key = result.get("stored_session_id") or sid
+    if not sid:
+        return _err(rid, -32000, "canvas.judge: could not create a preview session")
+
+    # Reuse prompt.submit wholesale (it owns every busy/queue/interrupt edge
+    # case). It sets running=True synchronously before spawning its thread, so
+    # by the time it returns there is no start race to lose.
+    submitted = _methods["prompt.submit"](rid, {"session_id": sid, "text": text})
+    if (submitted or {}).get("error"):
+        return _err(rid, -32000, f"canvas.judge: prompt.submit failed: {submitted['error']}")
+
+    with _sessions_lock:
+        session = _sessions.get(sid)
+    if session is None:
+        return _err(rid, -32000, "canvas.judge: preview session vanished")
+
+    deadline = time.time() + _CANVAS_JUDGE_TIMEOUT_S
+    while session.get("running") and time.time() < deadline:
+        time.sleep(0.25)
+    if session.get("running"):
+        return _err(rid, -32000, f"canvas.judge: turn did not finish within {_CANVAS_JUDGE_TIMEOUT_S}s")
+
+    with session["history_lock"]:
+        answer = next(
+            (
+                str(m.get("content") or "")
+                for m in reversed(list(session.get("history", [])))
+                if m.get("role") == "assistant" and str(m.get("content") or "").strip()
+            ),
+            "",
+        )
+
+    finished = handle_canvas_judge_finish(
+        {"source_session_id": source, "preview_session_id": key, "answer": answer}
+    )
+    if not finished.get("ok"):
+        return _err(rid, -32000, "; ".join(finished.get("errors", ["canvas.judge failed"])))
+    return _ok(rid, {**finished, "preview_session_id": key})
+# canvas.branch forks the loaded session. session.branch does the real work
+# (full history copy, parent link, fresh agent, parent left untouched) but
+# returns only the runtime sid — the canvas store is keyed by the STORED key,
+# which is only reachable in-process. This delegate bridges that and carries the
+# parent's canvas across. NOT a _LONG_HANDLERS entry: it runs no agent turn.
+@method("canvas.branch")
+def _(rid, params: dict) -> dict:
+    try:
+        from hermes_plugins.gis_canvas.wire import handle_canvas_branch_doc
+    except Exception as exc:  # plugin absent/disabled — fail soft
+        return _err(rid, -32601, f"gis-canvas plugin unavailable: {exc}")
+    p = params or {}
+    sid = str(p.get("session_id") or "")
+    if not sid:
+        return _err(rid, -32602, "session_id is required")
+
+    with _sessions_lock:
+        parent = _sessions.get(sid)
+    parent_key = parent.get("session_key") if parent else None
+    if not parent_key:
+        return _err(rid, 4001, "canvas.branch: session not found")
+
+    branched = _methods["session.branch"](rid, {"session_id": sid})
+    if (branched or {}).get("error"):
+        return branched  # 4008 "nothing to branch" and friends pass straight through
+    result = (branched or {}).get("result") or {}
+    new_sid = result.get("session_id")
+    if not new_sid:
+        return _err(rid, -32000, "canvas.branch: branch returned no session id")
+
+    with _sessions_lock:
+        child = _sessions.get(new_sid)
+    new_key = (child or {}).get("session_key") or new_sid
+
+    copied = handle_canvas_branch_doc({"from_key": parent_key, "to_key": new_key})
+    if not copied.get("ok"):
+        return _err(rid, -32000, "; ".join(copied.get("errors", ["canvas.branch failed"])))
+    return _ok(rid, {
+        "session_id": new_sid,
+        "stored_session_id": new_key,
+        "title": result.get("title") or "",
+        "parent": result.get("parent") or parent_key,
+        "doc": copied.get("doc"),
+    })
+@method("canvas.forget")
+def _(rid, params: dict) -> dict:
+    try:
+        from hermes_plugins.gis_canvas.wire import handle_canvas_forget
+    except Exception as exc:  # plugin absent/disabled — fail soft
+        return _err(rid, -32601, f"gis-canvas plugin unavailable: {exc}")
+    result = handle_canvas_forget(params or {})
+    if not result.get("ok"):
+        return _err(rid, -32000, "; ".join(result.get("errors", ["canvas.forget failed"])))
     return _ok(rid, result)
 # <<< gis-canvas >>>

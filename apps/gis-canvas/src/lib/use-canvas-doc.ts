@@ -6,7 +6,13 @@ export interface CanvasEventSource {
   on(type: string, handler: (event: { type?: string; payload?: unknown }) => void): unknown
 }
 
-export function useCanvasDoc(client: CanvasEventSource): { doc: CanvasDoc | null; errors: string[] } {
+export function useCanvasDoc(client: CanvasEventSource): {
+  doc: CanvasDoc | null
+  errors: string[]
+  /** Install a doc the app fetched itself (reopening a stored canvas). Live
+   * agent renders still arrive through the tool.complete subscription below. */
+  setDoc: (doc: CanvasDoc | null) => void
+} {
   const [doc, setDoc] = useState<CanvasDoc | null>(null)
   const [errors, setErrors] = useState<string[]>([])
 
@@ -29,5 +35,5 @@ export function useCanvasDoc(client: CanvasEventSource): { doc: CanvasDoc | null
     }
   }, [client])
 
-  return { doc, errors }
+  return { doc, errors, setDoc }
 }

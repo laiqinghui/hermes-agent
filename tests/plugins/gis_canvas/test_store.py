@@ -71,3 +71,20 @@ def test_resolve_session_key_falls_back_to_task_id(plugin):
 
 def test_resolve_session_key_default_when_empty(plugin):
     assert plugin.store.resolve_session_key({"session_id": "", "task_id": ""}) == "default"
+
+
+def test_list_returns_stored_keys(plugin, tmp_path):
+    store = plugin.store.CanvasStore(base_dir=str(tmp_path))
+    assert store.list() == []
+    store.put("sess1", _doc())
+    store.put("sess2", _doc())
+    assert store.list() == ["sess1", "sess2"]
+
+
+def test_list_skips_index_files_and_non_json(plugin, tmp_path):
+    store = plugin.store.CanvasStore(base_dir=str(tmp_path))
+    store.put("sess1", _doc())
+    # The preview index (Task 8) lives in this same directory and is NOT a canvas.
+    (tmp_path / "_previews.json").write_text("{}")
+    (tmp_path / "notes.txt").write_text("x")
+    assert store.list() == ["sess1"]
